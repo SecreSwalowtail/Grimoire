@@ -19,6 +19,9 @@ import { Colors, Fonts } from '@/constants/theme';
 import { entryPrice, getCollection, getOwnedPricesDaysAgo, type CollectionEntry } from '@/db/collection';
 import { formatEur } from '@/utils/format';
 
+// Cards per row, like a 9-pocket binder page.
+const COLUMNS = 3
+
 // Color filter chips: WUBRG + colorless ('C' = no colors).
 const COLOR_FILTERS = [
   { key: 'W', label: 'White', color: '#EFE6CC' },
@@ -170,10 +173,10 @@ export default function BinderScreen() {
       <View style={{ paddingTop: insets.top + 8 }}>{header}</View>
       <FlatList<CollectionEntry | null>
         style={styles.grid}
-        // An empty slot after an odd last card keeps it half-width instead of stretching.
-        data={visible.length % 2 ? [...visible, null] : visible}
-        keyExtractor={(e) => (e ? String(e.id) : 'spacer')}
-        numColumns={2}
+        // Empty slots fill the last row, so its cards keep the same width instead of stretching.
+        data={[...visible, ...Array<null>((COLUMNS - (visible.length % COLUMNS)) % COLUMNS).fill(null)]}
+        keyExtractor={(e, i) => (e ? String(e.id) : `spacer-${i}`)}
+        numColumns={COLUMNS}
         renderItem={({ item }) => (item ? <CardTile entry={item} /> : <View style={{ flex: 1 }} />)}
         ListEmptyComponent={
           !loaded ? null : entries.length === 0 ? (
@@ -361,8 +364,8 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
   },
   gridRow: {
-    gap: 14,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 18,
   },
   empty: {
     alignItems: 'center',
