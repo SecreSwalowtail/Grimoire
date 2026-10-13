@@ -1,4 +1,4 @@
-import { Link, useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect, useIsFocused } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
@@ -11,8 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TiltContext, TiltSensor } from '@/components/card-effects/tilt';
 import { CardTile } from '@/components/card-tile';
 import { SortMenu, type SortOption } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
@@ -35,6 +37,9 @@ type ColorKey = (typeof COLOR_FILTERS)[number]['key']
 
 export default function BinderScreen() {
   const db = useSQLiteContext()
+  const isFocused = useIsFocused()
+  const reducedMotion = useReducedMotion()
+  const tilt = { x: useSharedValue(0), y: useSharedValue(0) }
   const insets = useSafeAreaInsets()
   const [entries, setEntries] = useState<CollectionEntry[]>([])
   const [weekChange, setWeekChange] = useState<number | null>(null)
@@ -168,9 +173,12 @@ export default function BinderScreen() {
 
   return (
     <View style={styles.root}>
+      {/* One gravity sensor for all cards, only while this tab is visible (battery). */}
+      {isFocused && !reducedMotion && <TiltSensor tilt={tilt} />}
       <View pointerEvents="none" style={styles.glow} />
       {/* Header stays fixed; only the card grid below scrolls. */}
       <View style={{ paddingTop: insets.top + 8 }}>{header}</View>
+      <TiltContext value={tilt}>
       <FlatList<CollectionEntry | null>
         style={styles.grid}
         // Empty slots fill the last row, so its cards keep the same width instead of stretching.
@@ -200,6 +208,7 @@ export default function BinderScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       />
+      </TiltContext>
       <SortMenu
         visible={sortOpen}
         top={insets.top + 64}

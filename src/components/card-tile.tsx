@@ -1,35 +1,126 @@
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated, { css, cubicBezier, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
 
+import { HoloFoil } from '@/components/card-effects/holo-foil';
+import { useTilt } from '@/components/card-effects/tilt';
 import { Colors, Fonts, RarityColors } from '@/constants/theme';
 import { entryPrice, type CollectionEntry } from '@/db/collection';
 import { capitalize, formatEur } from '@/utils/format';
 
 // Magic cards are 63 × 88 mm.
 const CARD_RATIO = 63 / 88
+const MAX_TILT_DEG = 11.25
+const GLARE_TRAVEL = 44 // % of the glare layer the highlight moves at full tilt
+
+// Price tiers (EUR per copy), each adding to the one below:
+//  10+  gold light sweeps across the card now and then
+//  50+  faster sweep, gold edge and glow
+//  100+ brighter, faster sweep and a pulsing gold aura
+type Tier = 0 | 1 | 2 | 3
+const TIER_PRICES = [10, 50, 100]
+const tierFor = (price: number | null): Tier =>
+  price == null ? 0 : (TIER_PRICES.filter((p) => price >= p).length as Tier)
+const SHIMMER_DURATION = ['0s', '4.5s', '3s', '2.4s'] as const
+
+// Light sweep: crosses the card in the first 30% of the loop, then rests off-card and hidden.
+// translateX % is relative to the band's own width (45–55% of the card), so it has to travel
+// well past 100% to clear the right edge, including the extra width from the rotation.
+const SHIMMER = css.keyframes({
+  '0%': { opacity: 1, transform: [{ translateX: '-180%' }, { rotate: '18deg' }] },
+  '30%': { opacity: 1, transform: [{ translateX: '320%' }, { rotate: '18deg' }] },
+  '31%': { opacity: 0, transform: [{ translateX: '320%' }, { rotate: '18deg' }] },
+  '100%': { opacity: 0, transform: [{ translateX: '320%' }, { rotate: '18deg' }] },
+})
+
+// Aura breathing in and out (opacity only, so it's cheap).
+const PULSE = css.keyframes({
+  from: { opacity: 0.35 },
+  to: { opacity: 1 },
+})
 
 // One card in the 3-column Binder grid: full card image with quantity / foil badges,
 // name, and set code + price. Rarity is shown by the dot (and spoken by screen readers).
+// The card tilts in 3D with the phone, catches a moving glare, foils get a holographic layer,
+// and expensive cards shimmer.
 export function CardTile({ entry }: { entry: CollectionEntry }) {
+  const tilt = useTilt()
+  const reducedMotion = useReducedMotion()
   const price = entryPrice(entry)
   const foil = entry.finish !== 'nonfoil'
   const set = entry.set_code.toUpperCase()
+  const tier = tierFor(price)
+  const premium = tier >= 2
+
+  const tiltStyle = useAnimatedStyle(() => ({
+    transform: [
+      { perspective: 700 },
+      { rotateY: `${tilt.x.get() * MAX_TILT_DEG}deg` },
+      { rotateX: `${-tilt.y.get() * MAX_TILT_DEG}deg` },
+    ],
+  }))
+  // The glare moves against the tilt, like a light source fixed above the phone.
+  const glareStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: `${-tilt.x.get() * GLARE_TRAVEL}%` },
+      { translateY: `${-tilt.y.get() * GLARE_TRAVEL}%` },
+    ],
+  }))
+
   return (
     <View
       style={styles.tile}
       accessible
       accessibilityLabel={`${entry.name}, ${entry.quantity} ${entry.quantity === 1 ? 'copy' : 'copies'}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? formatEur(price) : 'no price'}`}
     >
-      <View style={styles.card}>
-        <Image source={{ uri: entry.image_uri ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-        {entry.quantity > 1 && <Text style={[styles.badge, styles.qty]}>×{entry.quantity}</Text>}
-        {foil && (
-          <View style={[styles.badge, styles.foil]}>
-            <SymbolView name={{ ios: 'sparkle', android: 'auto_awesome' }} size={11} tintColor={Colors.goldLight} />
-          </View>
+      <Animated.View style={[styles.cardShadow, premium && styles.premiumGlow, tiltStyle]}>
+        {tier === 3 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.aura,
+              !reducedMotion && {
+                animationName: PULSE,
+                animationDuration: '1.6s',
+                animationIterationCount: 'infinite',
+                animationDirection: 'alternate',
+                animationTimingFunction: cubicBezier(0.77, 0, 0.175, 1),
+              },
+            ]}
+          />
         )}
-      </View>
+        <View style={[styles.card, premium && styles.premiumEdge]}>
+          <Image source={{ uri: entry.image_uri ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+          {foil && entry.image_uri && <HoloFoil uri={entry.image_uri} />}
+          <Animated.View pointerEvents="none" style={[styles.glare, glareStyle]} />
+          {tier > 0 && !reducedMotion && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.shimmer,
+                tier === 3 && styles.shimmerBright,
+                {
+                  animationName: SHIMMER,
+                  animationDuration: SHIMMER_DURATION[tier],
+                  // Offset per card so the grid doesn't flash in sync.
+                  animationDelay: `${(entry.id % 7) * 0.45}s`,
+                  // During the delay, hold the first keyframe (off-card) instead of the static style.
+                  animationFillMode: 'backwards',
+                  animationIterationCount: 'infinite',
+                  animationTimingFunction: cubicBezier(0.77, 0, 0.175, 1),
+                },
+              ]}
+            />
+          )}
+          {entry.quantity > 1 && <Text style={[styles.badge, styles.qty]}>×{entry.quantity}</Text>}
+          {foil && (
+            <View style={[styles.badge, styles.foil]}>
+              <SymbolView name={{ ios: 'sparkle', android: 'auto_awesome' }} size={11} tintColor={Colors.goldLight} />
+            </View>
+          )}
+        </View>
+      </Animated.View>
       <Text style={styles.name} numberOfLines={2}>{entry.name}</Text>
       <View style={styles.meta}>
         <View style={styles.setRow}>
@@ -47,9 +138,48 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  // Shadow lives on a wrapper without overflow clipping, so it isn't cut off by the card's corners.
+  cardShadow: {
+    marginBottom: 8,
+    borderRadius: 6,
+    boxShadow: '0 6px 12px rgba(0,0,0,0.55)',
+  },
+  premiumGlow: {
+    boxShadow: '0 6px 12px rgba(0,0,0,0.55), 0 0 14px rgba(212,166,74,0.45)',
+  },
+  aura: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 6,
+    boxShadow: '0 0 22px 3px rgba(232,192,106,0.85)',
+  },
+  premiumEdge: {
+    borderWidth: 1,
+    borderColor: 'rgba(232,192,106,0.8)',
+  },
+  glare: {
+    position: 'absolute',
+    left: '-50%',
+    top: '-50%',
+    width: '200%',
+    height: '200%',
+    experimental_backgroundImage: 'radial-gradient(circle at 50% 35%, rgba(255,255,255,0.28), rgba(255,255,255,0) 35%)',
+  },
+  shimmer: {
+    position: 'absolute',
+    top: '-25%',
+    left: 0,
+    width: '45%',
+    height: '150%',
+    experimental_backgroundImage:
+      'linear-gradient(to right, rgba(255,226,160,0), rgba(255,226,160,0.55) 50%, rgba(255,226,160,0))',
+  },
+  shimmerBright: {
+    width: '55%',
+    experimental_backgroundImage:
+      'linear-gradient(to right, rgba(255,232,170,0), rgba(255,236,180,0.8) 50%, rgba(255,232,170,0))',
+  },
   card: {
     aspectRatio: CARD_RATIO,
-    marginBottom: 8,
     // Real cards have ~3 mm corners on 63 mm: about 5% of the width.
     borderRadius: 6,
     overflow: 'hidden',
