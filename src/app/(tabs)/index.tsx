@@ -1,7 +1,7 @@
 import { Link, useFocusEffect, useIsFocused } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -21,7 +21,9 @@ import { ManaSymbol } from '@/components/mana-symbol';
 import { SortMenu, type SortOption } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
 import { entryPrice, getCollection, getOwnedPricesDaysAgo, type CollectionEntry } from '@/db/collection';
+import { collectionVersion } from '@/db/version';
 import { formatEur } from '@/utils/format';
+import { JS_START, recordOnce, timed } from '@/utils/perf';
 
 // Cards per row, like a 9-pocket binder page.
 const COLUMNS = 3
@@ -67,9 +69,17 @@ export default function BinderScreen() {
     [],
   )
 
+  // The collection version this screen last loaded (see db/version.ts).
+  const loadedVersion = useRef(-1)
+
   const load = useCallback(async () => {
-    const [collection, weekAgo] = await Promise.all([getCollection(db), getOwnedPricesDaysAgo(db, 7)])
-    setEntries(collection)
+    const version = collectionVersion()
+    const [collection, weekAgo] = await timed(
+      'binder: load collection',
+      () => Promise.all([getCollection(db), getOwnedPricesDaysAgo(db, 7)]),
+      ([c]) => `${c.length} entries`,
+    )
+    setEntries((previous) => keepUnchanged(previous, collection))
     // Change only counts cards we have a week-old price for; null until a week of history exists.
     const old = new Map(weekAgo.map((p) => [p.card_id, p]))
     let change: number | null = null
@@ -83,11 +93,16 @@ export default function BinderScreen() {
     }
     setWeekChange(change)
     setLoaded(true)
+    loadedVersion.current = version
+    recordOnce('startup: binder has its cards', Date.now() - JS_START, 'from JS start')
   }, [db])
 
-  // Reload whenever the tab is shown, so cards scanned on the Scan tab appear.
+  // Reload when the tab is shown, but only if something changed meanwhile (cards scanned,
+  // added or edited elsewhere, or an owned card's price refreshed); coming back from a card
+  // without changes costs nothing.
   useFocusEffect(
     useCallback(() => {
+      if (loadedVersion.current === collectionVersion()) return
       load().catch((e) => console.warn('Failed to load binder', e))
     }, [load]),
   )
@@ -239,6 +254,20 @@ export default function BinderScreen() {
       />
     </View>
   )
+}
+
+// After a reload, entries that didn't change keep their old object, so their tiles don't
+// re-render; if nothing changed at all, the old list is kept as it is.
+function keepUnchanged(previous: CollectionEntry[], next: CollectionEntry[]) {
+  const old = new Map(previous.map((e) => [e.id, e]))
+  let same = previous.length === next.length
+  const merged = next.map((entry, i) => {
+    const before = old.get(entry.id)
+    const keep = before != null && (Object.keys(entry) as (keyof CollectionEntry)[]).every((k) => before[k] === entry[k])
+    if (!keep || previous[i] !== before) same = false
+    return keep ? before : entry
+  })
+  return same ? previous : merged
 }
 
 const styles = StyleSheet.create({

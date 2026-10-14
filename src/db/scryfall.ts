@@ -78,19 +78,16 @@ export type Ruling = { source: string; published_at: string; comment: string };
 
 export type CardIdentifier = { set: string; collector_number: string } | { name: string };
 
-// Serialise requests and keep a minimum gap between them, per rate-limit group.
-let queue: Promise<unknown> = Promise.resolve();
-const lastCall: Record<string, number> = {};
+// Space out request starts per rate-limit group (10/s, or 2/s for /cards/collection). Requests may
+// overlap: waiting for each to finish first made e.g. Card detail's rulings sit behind its
+// printings for no reason. Each call books the next free start time at once, so order is kept.
+const nextStart: Record<string, number> = {};
 function throttled<T>(group: 'collection' | 'default', fn: () => Promise<T>): Promise<T> {
   const gap = group === 'collection' ? 500 : 100;
-  const run = queue.then(async () => {
-    const wait = (lastCall[group] ?? 0) + gap - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastCall[group] = Date.now();
-    return fn();
-  });
-  queue = run.catch(() => undefined);
-  return run;
+  const start = Math.max(Date.now(), nextStart[group] ?? 0);
+  nextStart[group] = start + gap;
+  const wait = start - Date.now();
+  return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)).then(fn) : fn();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -140,23 +137,48 @@ export type SearchOptions = {
   order: SearchOrder;
   dir: 'asc' | 'desc';
   unique: 'cards' | 'prints'; // one row per card, or one per printing
+  page?: number; // 1 = first 175 results
 };
 
 export type SearchResult = { data: ScryfallCard[]; total_cards: number; has_more: boolean };
 
-// First page (up to 175 cards) of a search in Scryfall's syntax: https://scryfall.com/docs/syntax
+// One page (up to 175 cards; the first unless `options.page`) of a search in Scryfall's syntax:
+// https://scryfall.com/docs/syntax
 // Scryfall answers "no cards" with a 404; that comes back here as an empty result.
+// Results are kept for the session (the last 20 searches): Scryfall takes 1-3 s for a search it
+// hasn't seen lately, so going back to one shouldn't ask again.
+const searches = new Map<string, SearchResult>();
+const MAX_SEARCHES = 20;
+
 export async function searchCards(q: string, options: SearchOptions): Promise<SearchResult> {
   const params = { q, ...options };
   const query = Object.entries(params)
+    .filter(([, value]) => value != null)
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join('&');
+  const kept = searches.get(query);
+  if (kept) return kept;
+  let result: SearchResult;
   try {
-    return await throttled('default', () => request<SearchResult>(`/cards/search?${query}`));
+    result = await throttled('default', () => request<SearchResult>(`/cards/search?${query}`));
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return { data: [], total_cards: 0, has_more: false };
-    throw e;
+    if (!(e instanceof Error && e.message.startsWith('Scryfall 404'))) throw e;
+    result = { data: [], total_cards: 0, has_more: false };
   }
+  // Only first pages (all Market asks for): later pages are bulk reads, e.g. the test-data tool.
+  if ((options.page ?? 1) > 1) return result;
+  searches.set(query, result);
+  if (searches.size > MAX_SEARCHES) searches.delete(searches.keys().next().value!);
+  return result;
+}
+
+// Up to 20 card names starting with (or containing) the text, for suggestions while typing.
+// Fast (~0.2 s), unlike a full search.
+export async function autocomplete(text: string) {
+  const res = await throttled('default', () =>
+    request<{ data: string[] }>(`/cards/autocomplete?q=${encodeURIComponent(text)}`),
+  );
+  return res.data;
 }
 
 // Cards already fetched this session, by id, so Card detail opens at once from a list.

@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +18,8 @@ import { FilterSheet } from '@/components/market/filter-sheet';
 import { MarketRow, MarketTile } from '@/components/market/market-row';
 import { DEFAULT_SORT, sortSummary, SortSheet, type MarketSort } from '@/components/market/sort-sheet';
 import { Colors, Fonts } from '@/constants/theme';
-import { searchCards, type ScryfallCard, type SearchOptions } from '@/db/scryfall';
+import { autocomplete, searchCards, type ScryfallCard, type SearchOptions } from '@/db/scryfall';
+import { timed } from '@/utils/perf';
 import {
   activeFilterCount,
   DEFAULT_FILTERS,
@@ -31,12 +34,18 @@ const COLUMNS = 3
 
 type ResultView = 'list' | 'grid'
 
+// Suggestions show after typing pauses this long, from this many letters.
+const SUGGEST_AFTER = 200
+const SUGGEST_FROM = 2
+const MAX_SUGGESTIONS = 8
+
 // What to ask Scryfall: the trending list while the search box is empty (always by popularity,
 // so the Sort setting only applies to searches), else the search box text in the chosen order.
-function searchRequest(submitted: string, sort: MarketSort): { query: string; options: SearchOptions } {
+// `exact`: a name picked from the suggestions, searched as that exact card (fast, ~0.2 s).
+function searchRequest(submitted: string, sort: MarketSort, exact: boolean): { query: string; options: SearchOptions } {
   if (!submitted) return { query: trendingQuery(), options: { order: 'edhrec', dir: 'asc', unique: 'cards' } }
   return {
-    query: textQuery(submitted),
+    query: exact ? `!"${submitted.replace(/"/g, '')}"` : textQuery(submitted),
     options: { order: sort.by, dir: sort.desc ? 'desc' : 'asc', unique: sort.groupPrintings ? 'cards' : 'prints' },
   }
 }
@@ -48,6 +57,9 @@ export default function MarketScreen() {
   const insets = useSafeAreaInsets()
   const [text, setText] = useState('')
   const [submitted, setSubmitted] = useState('')
+  const [exact, setExact] = useState(false)
+  // Card names for what's being typed, tagged with the text they're for.
+  const [suggestions, setSuggestions] = useState<{ key: string; names: string[] } | null>(null)
   const [focused, setFocused] = useState(false)
   const [sort, setSort] = useState<MarketSort>(DEFAULT_SORT)
   const [filters, setFilters] = useState<MarketFilters>(DEFAULT_FILTERS)
@@ -59,13 +71,14 @@ export default function MarketScreen() {
   // has moved on from it, a new search is loading.
   const [search, setSearch] = useState<{ key: string; cards: ScryfallCard[]; total: number | null; error: string | null } | null>(null)
   const trending = submitted === ''
-  const searchKey = JSON.stringify(searchRequest(submitted, sort))
+  const searchKey = JSON.stringify(searchRequest(submitted, sort, exact))
 
   // Keyed on the serialized request, so it only re-runs when the request really changes.
   useEffect(() => {
     let cancelled = false
     const { query, options } = JSON.parse(searchKey) as ReturnType<typeof searchRequest>
-    searchCards(query, options)
+    const label = query === trendingQuery() ? 'market: trending' : 'market: search'
+    timed(label, () => searchCards(query, options), (r) => `${r.data.length} cards`)
       .then((result) => {
         if (!cancelled) setSearch({ key: searchKey, cards: result.data, total: result.total_cards, error: null })
       })
@@ -78,6 +91,31 @@ export default function MarketScreen() {
       cancelled = true
     }
   }, [searchKey])
+
+  // While typing something new, suggest card names (a full search only runs on Enter: Scryfall
+  // takes 1-3 s for a search it hasn't seen lately).
+  const typed = text.trim()
+  const suggesting = focused && typed.length >= SUGGEST_FROM && typed !== submitted
+  useEffect(() => {
+    if (!suggesting) return
+    const timer = setTimeout(() => {
+      autocomplete(typed)
+        .then((names) => setSuggestions({ key: typed, names }))
+        .catch(() => setSuggestions({ key: typed, names: [] }))
+    }, SUGGEST_AFTER)
+    return () => clearTimeout(timer)
+  }, [typed, suggesting])
+
+  const searchAll = () => {
+    setExact(false)
+    setSubmitted(typed)
+  }
+  const pickName = (name: string) => {
+    Keyboard.dismiss()
+    setText(name)
+    setExact(true)
+    setSubmitted(name)
+  }
 
   const loading = search?.key !== searchKey
   const results = !loading ? search?.cards ?? [] : []
@@ -110,7 +148,7 @@ export default function MarketScreen() {
             // Clearing the box goes back to the trending list.
             if (!value.trim()) setSubmitted('')
           }}
-          onSubmitEditing={() => setSubmitted(text.trim())}
+          onSubmitEditing={searchAll}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder="Name, type or rules text"
@@ -211,7 +249,20 @@ export default function MarketScreen() {
       <View pointerEvents="none" style={styles.glow} />
       {/* Header stays fixed; only the results scroll. */}
       <View style={{ paddingTop: insets.top + 8 }}>{header}</View>
-      {view === 'list' ? (
+      {suggesting ? (
+        <ScrollView contentContainerStyle={styles.suggestContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          {(suggestions?.names ?? []).slice(0, MAX_SUGGESTIONS).map((name) => (
+            <TouchableOpacity key={name} style={styles.suggestion} onPress={() => pickName(name)} accessibilityRole="button">
+              <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={16} tintColor={Colors.textMuted} />
+              <Text style={styles.suggestionText} numberOfLines={1}>{name}</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.searchAll} onPress={searchAll} accessibilityRole="button">
+            <Text style={styles.searchAllTitle} numberOfLines={1}>Search all cards for “{typed}”</Text>
+            <Text style={styles.searchAllText}>Names, types, rules text and collector numbers</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      ) : view === 'list' ? (
         <FlatList
           key="list"
           data={loading ? [] : results}
@@ -253,6 +304,45 @@ export default function MarketScreen() {
 }
 
 const styles = StyleSheet.create({
+  suggestContent: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 120,
+  },
+  suggestion: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(237,230,214,0.07)',
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: Fonts.semiBold,
+    color: Colors.text,
+  },
+  searchAll: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(212,166,74,0.35)',
+    backgroundColor: 'rgba(212,166,74,0.06)',
+  },
+  searchAllTitle: {
+    fontSize: 15,
+    fontFamily: Fonts.extraBold,
+    color: Colors.goldLight,
+  },
+  searchAllText: {
+    marginTop: 2,
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    color: Colors.textSecondary,
+  },
   root: {
     flex: 1,
     backgroundColor: Colors.background,

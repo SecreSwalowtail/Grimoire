@@ -6,14 +6,16 @@ import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'r
 import { PrimaryButton, Segmented, Sheet } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
 import { upsertCard } from '@/db/cards';
-import { cardImage, type ScryfallCard } from '@/db/scryfall';
+import type { ScryfallCard } from '@/db/scryfall';
 import { copyRule, deckFit, shortName } from '@/rules/formats';
 import {
+  cardInfoOf,
+  cardUse,
   setDeckCardCount,
   useDeckStore,
   type Board,
-  type CardInfo,
   type Deck,
+  type DeckFormat,
   type DeckData,
 } from '@/utils/deck-store';
 import { formatEur } from '@/utils/format';
@@ -29,17 +31,6 @@ const BOARDS: { value: Board; label: string }[] = [
 ]
 
 const IN_BOARD: Record<Board, string> = { main: 'In this deck', side: 'In the sideboard', maybe: 'On the maybe list' }
-
-export function cardInfoOf(card: ScryfallCard): CardInfo {
-  return {
-    name: card.name,
-    typeLine: card.type_line ?? null,
-    cmc: card.cmc ?? null,
-    priceEur: card.prices.eur == null ? null : Number(card.prices.eur),
-    priceEurFoil: card.prices.eur_foil == null ? null : Number(card.prices.eur_foil),
-    image: cardImage(card),
-  }
-}
 
 // Copies of this card (any printing) in one part of a deck, per printing id.
 function copiesIn(data: DeckData, deckId: string, board: Board, name: string) {
@@ -72,8 +63,20 @@ export function AddToDeckSheet({
   const [board, setBoard] = useState<Board>('main')
   const name = card.name
 
+  // Counted once per render: this sheet renders with the screen even while it's closed, and
+  // counting per deck went through every deck card for every deck (50 decks x 4,000 cards).
+  const use = cardUse(name, store)
+  const formatRules = new Map<DeckFormat, { fit: ReturnType<typeof deckFit>; rule: ReturnType<typeof copyRule> }>()
+  const rulesFor = (format: DeckFormat) => {
+    let found = formatRules.get(format)
+    if (!found) {
+      found = { fit: deckFit(card, format), rule: copyRule(card, format) }
+      formatRules.set(format, found)
+    }
+    return found
+  }
   const rows = store.decks
-    .map((deck) => ({ deck, fit: deckFit(card, deck.format), rule: copyRule(card, deck.format) }))
+    .map((deck) => ({ deck, ...rulesFor(deck.format), counts: use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 } }))
     .sort((a, b) => Number(b.fit.allowed) - Number(a.fit.allowed))
 
   const change = async (deck: Deck, by: number) => {
@@ -89,7 +92,7 @@ export function AddToDeckSheet({
     if (from) setDeckCardCount(deck.id, from.cardId, store.info[from.cardId], board, from.quantity - 1)
   }
 
-  const needed = copiesNeeded(store, name)
+  const needed = [...use.values()].reduce((sum, c) => sum + c.main + c.side, 0)
   const short = needed - owned
 
   return (
@@ -116,13 +119,11 @@ export function AddToDeckSheet({
           <Text style={styles.none}>You have no decks yet.</Text>
         ) : (
           <View style={styles.list}>
-            {rows.map(({ deck, fit, rule }, i) => {
+            {rows.map(({ deck, fit, rule, counts }, i) => {
               const folder = store.folders.find((f) => f.id === deck.folderId)
-              const n = copiesIn(store, deck.id, board, name).reduce((sum, c) => sum + c.quantity, 0)
+              const n = counts[board]
               // The copy limit covers the deck and its sideboard together.
-              const played = board === 'maybe'
-                ? n
-                : (['main', 'side'] as Board[]).reduce((sum, b) => sum + copiesIn(store, deck.id, b, name).reduce((s, c) => s + c.quantity, 0), 0)
+              const played = board === 'maybe' ? n : counts.main + counts.side
               const atMax = board !== 'maybe' && rule.max != null && played >= rule.max
               let note = rule.label
               let noteColor: string = Colors.textMuted

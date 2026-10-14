@@ -1,11 +1,11 @@
 import { useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AddToDeckSheet, cardInfoOf, copiesNeeded } from '@/components/card/add-to-deck-sheet';
+import { AddToDeckSheet, copiesNeeded } from '@/components/card/add-to-deck-sheet';
 import { TiltSensor } from '@/components/card-effects/tilt';
 import { CardTabs, CompactHeader, TOP_BAR, TopBar, type CardTab } from '@/components/card/card-chrome';
 import { CopySheet } from '@/components/card/copy-sheet';
@@ -21,8 +21,9 @@ import type { ScryfallCard } from '@/db/scryfall';
 import { printingLabel } from '@/rules/printings';
 import { mainFinish } from '@/utils/card-prices';
 import { useCard, useLocalCardData, useOracleData } from '@/utils/use-card-detail';
-import { cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store';
+import { cardInfoOf, cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store';
 import { capitalize } from '@/utils/format';
+import { record } from '@/utils/perf';
 
 // Card detail (design C1–C6): opened from a Binder card or a Market row with the printing's
 // Scryfall id. Overview / Prices / Printings / Rules are tabs on one screen; picking another
@@ -48,9 +49,18 @@ export default function CardScreen() {
   const reducedMotion = useReducedMotion()
 
   const { card, failed, missing, retry } = useCard(viewingId)
-  const { printings, rulings, loadMore, loadingMore } = useOracleData(card)
+  const { printings, rulings, loadMore, loadingMore } = useOracleData(card, tab === 'rules')
   const { copies, history, reloadCopies } = useLocalCardData(card)
   const store = useDeckStore()
+
+  // Performance pass: time from opening the screen to having the card to show.
+  const [openedAt] = useState(() => Date.now())
+  const timedOpen = useRef(false)
+  useEffect(() => {
+    if (!card || timedOpen.current) return
+    timedOpen.current = true
+    record('card detail: open → card ready', Date.now() - openedAt)
+  }, [card, openedAt])
 
   const openTab = (next: CardTab) => {
     setTab(next)

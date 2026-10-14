@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite'
 import { useSyncExternalStore } from 'react'
 
 import { getDecksAndFolders, saveDeckChanges, type DeckSnapshot } from '@/db/decks'
+import { cardImage, type ScryfallCard } from '@/db/scryfall'
 
 // Decks, folders and the cards in each deck, saved in the app's database (tables `deck_folders`,
 // `decks` and `deck_cards`). loadDeckStore() reads them once at launch; after that the screens
@@ -42,6 +43,17 @@ export type CardInfo = {
   priceEur: number | null
   priceEurFoil: number | null
   image: string | null
+}
+
+export function cardInfoOf(card: ScryfallCard): CardInfo {
+  return {
+    name: card.name,
+    typeLine: card.type_line ?? null,
+    cmc: card.cmc ?? null,
+    priceEur: card.prices.eur == null ? null : Number(card.prices.eur),
+    priceEurFoil: card.prices.eur_foil == null ? null : Number(card.prices.eur_foil),
+    image: cardImage(card),
+  }
 }
 
 // `info` isn't saved with the rest: it comes from the cards table.
@@ -263,6 +275,24 @@ export function deleteFolders(ids: string[], withDecks: boolean): Undo {
     }
     set({ ...state, folders, decks, cards: [...state.cards, ...removedCards] })
   }
+}
+
+// Test data for the performance pass (utils/dev-seed.ts): adds many folders, decks and cards in
+// one change.
+export function addTestDecks(add: { folders: Folder[]; decks: Deck[]; cards: DeckCard[]; info: Record<string, CardInfo> }) {
+  set({
+    folders: [...state.folders, ...add.folders],
+    decks: [...state.decks, ...add.decks],
+    cards: [...state.cards, ...add.cards],
+    info: { ...state.info, ...add.info },
+  })
+}
+
+// After the database was wiped (Developer tools → Clear database): empty, and nothing to save.
+export function resetDeckStore() {
+  state = { folders: [], decks: [], cards: [], info: {} }
+  saved = state
+  listeners.forEach((listener) => listener())
 }
 
 // Everything the deck numbers below read. Pass the snapshot from useDeckStore(), so a screen

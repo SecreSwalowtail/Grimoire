@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
@@ -121,9 +121,18 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 4;
   }
 
-  // if (version === 4) {
+  if (version === 4) {
+    await db.execAsync(`
+      -- The whole Scryfall card as JSON, so Card detail opens owned and recently seen cards from the
+      -- phone instead of waiting for Scryfall (and works offline).
+      ALTER TABLE cards ADD COLUMN data TEXT;
+    `);
+    version = 5;
+  }
+
+  // if (version === 5) {
   //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 5;
+  //   version = 6;
   // }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

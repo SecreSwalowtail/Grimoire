@@ -1,9 +1,10 @@
 import { useSQLiteContext } from 'expo-sqlite'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { upsertCard } from '@/db/cards'
+import { getSavedCard, upsertCard } from '@/db/cards'
 import { getCopiesOfCard, getPriceHistory, type CollectionEntry, type PricePoint } from '@/db/collection'
-import { cachedCard, getCard, getPrintings, getRulings, type Ruling, type ScryfallCard } from '@/db/scryfall'
+import { cachedCard, getCard, getPrintings, getRulings, rememberCard, type Ruling, type ScryfallCard } from '@/db/scryfall'
+import { timed } from '@/utils/perf'
 
 // Data for Card detail. Each piece is stored with the key it was loaded for (printing id, or the
 // card's oracle id / name), so switching printings never shows another printing's data, and no
@@ -11,8 +12,18 @@ import { cachedCard, getCard, getPrintings, getRulings, type Ruling, type Scryfa
 
 type Keyed<T> = { key: string; value: T }
 
-// One printing: from memory if a list already loaded it, else from Scryfall.
+// A saved card younger than this is shown without asking Scryfall: prices change once a day.
+const FRESH_FOR = 24 * 60 * 60 * 1000
+
+// Cards read back from the phone. They aren't saved again on opening: that would mark day-old
+// data as just refreshed, and it would never be fetched anew.
+const fromPhone = new WeakSet<ScryfallCard>()
+
+// One printing, from the quickest place that has it: memory (a list loaded it this session), the
+// phone (owned or opened before: shown at once, refreshed in the background when over a day
+// old), else Scryfall.
 export function useCard(id: string) {
+  const db = useSQLiteContext()
   const [loaded, setLoaded] = useState<Keyed<ScryfallCard | null> | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -21,17 +32,27 @@ export function useCard(id: string) {
   useEffect(() => {
     if (cachedCard(id)) return
     let live = true
-    getCard(id)
-      .then((value) => {
-        if (live) setLoaded({ key: id, value })
-      })
-      .catch(() => {
-        if (live) setFailed(id)
-      })
+    const load = async () => {
+      const saved = await timed('card detail: read saved card', () => getSavedCard(db, id).catch(() => null))
+      if (saved && live) {
+        fromPhone.add(saved.card)
+        rememberCard(saved.card)
+        setLoaded({ key: id, value: saved.card })
+      }
+      if (saved && Date.now() - saved.updatedAt < FRESH_FOR) return
+      try {
+        const fresh = await timed('card detail: fetch card', () => getCard(id))
+        // Keep the saved copy if Scryfall no longer knows the printing.
+        if (live && (fresh || !saved)) setLoaded({ key: id, value: fresh })
+      } catch {
+        if (live && !saved) setFailed(id)
+      }
+    }
+    load()
     return () => {
       live = false
     }
-  }, [id, attempt])
+  }, [db, id, attempt])
 
   return {
     card,
@@ -46,21 +67,32 @@ export function useCard(id: string) {
   }
 }
 
-// Every printing (first page, then more on demand) and the official rulings, per card.
-export function useOracleData(card: ScryfallCard | null) {
+// Every printing (first page, then more on demand) and the official rulings, per card. Both are
+// kept for the session, so reopening a card makes no requests. Rulings are asked for once the
+// printings are in (or right away on the Rules tab): nothing on the Overview needs them.
+type PrintingsState = { list: ScryfallCard[]; total: number; page: number; more: boolean }
+const printingsCache = new Map<string, PrintingsState>()
+const rulingsCache = new Map<string, Ruling[]>()
+
+export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
   const oracleId = card?.oracle_id ?? null
   const cardId = card?.id ?? null
-  const [printings, setPrintings] = useState<Keyed<{ list: ScryfallCard[]; total: number; page: number; more: boolean }> | null>(null)
+  const [printings, setPrintings] = useState<Keyed<PrintingsState> | null>(null)
   const [rulings, setRulings] = useState<Keyed<Ruling[]> | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const rulingsFor = useRef<string | null>(null)
 
+  const current = oracleId ? (printings?.key === oracleId ? printings.value : printingsCache.get(oracleId) ?? null) : null
+  const currentRulings = oracleId ? (rulings?.key === oracleId ? rulings.value : rulingsCache.get(oracleId) ?? null) : null
+
   useEffect(() => {
-    if (!oracleId) return
+    if (!oracleId || printingsCache.has(oracleId)) return
     let live = true
-    getPrintings(oracleId)
+    timed('card detail: fetch printings', () => getPrintings(oracleId), (r) => `${r.data.length} of ${r.total_cards}`)
       .then((res) => {
-        if (live) setPrintings({ key: oracleId, value: { list: res.data, total: res.total_cards, page: 1, more: res.has_more } })
+        const value = { list: res.data, total: res.total_cards, page: 1, more: res.has_more }
+        printingsCache.set(oracleId, value)
+        if (live) setPrintings({ key: oracleId, value })
       })
       .catch(() => undefined)
     return () => {
@@ -68,28 +100,29 @@ export function useOracleData(card: ScryfallCard | null) {
     }
   }, [oracleId])
 
-  // Rulings belong to the card, not the printing: load them once per card, for the first printing seen.
+  // Rulings belong to the card, not the printing: once per card, for the first printing seen.
+  const wantRulings = onRulesTab || current != null
   useEffect(() => {
-    if (!oracleId || !cardId || rulingsFor.current === oracleId) return
+    if (!oracleId || !cardId || !wantRulings || rulingsCache.has(oracleId) || rulingsFor.current === oracleId) return
     rulingsFor.current = oracleId
-    getRulings(cardId)
-      .then((value) => setRulings({ key: oracleId, value }))
+    timed('card detail: fetch rulings', () => getRulings(cardId))
+      .then((value) => {
+        rulingsCache.set(oracleId, value)
+        setRulings({ key: oracleId, value })
+      })
       .catch(() => {
         rulingsFor.current = null
       })
-  }, [oracleId, cardId])
-
-  const current = printings?.key === oracleId ? printings.value : null
+  }, [oracleId, cardId, wantRulings])
 
   const loadMore = async () => {
     if (!oracleId || !current?.more || loadingMore) return
     setLoadingMore(true)
     try {
       const res = await getPrintings(oracleId, current.page + 1)
-      setPrintings({
-        key: oracleId,
-        value: { list: [...current.list, ...res.data], total: res.total_cards, page: current.page + 1, more: res.has_more },
-      })
+      const value = { list: [...current.list, ...res.data], total: res.total_cards, page: current.page + 1, more: res.has_more }
+      printingsCache.set(oracleId, value)
+      setPrintings({ key: oracleId, value })
     } finally {
       setLoadingMore(false)
     }
@@ -97,14 +130,15 @@ export function useOracleData(card: ScryfallCard | null) {
 
   return {
     printings: current,
-    rulings: rulings?.key === oracleId ? rulings.value : null,
+    rulings: currentRulings,
     loadMore,
     loadingMore,
   }
 }
 
 // What's saved on the phone for a card: your copies of it (any printing), and the price history of
-// the printing on show. Opening a printing saves it, which records today's price for the chart.
+// the printing on show. Opening a printing fresh from Scryfall saves it, which records today's
+// price for the chart and lets it open from the phone next time.
 export function useLocalCardData(card: ScryfallCard | null) {
   const db = useSQLiteContext()
   const name = card?.name ?? null
@@ -133,7 +167,8 @@ export function useLocalCardData(card: ScryfallCard | null) {
   useEffect(() => {
     if (!card) return
     let live = true
-    upsertCard(db, card)
+    const save = fromPhone.has(card) ? Promise.resolve() : upsertCard(db, card)
+    save
       .then(() => getPriceHistory(db, card.id))
       .then((value) => {
         if (live) setHistory({ key: card.id, value })
