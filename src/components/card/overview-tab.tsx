@@ -1,12 +1,15 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { cubicBezier, useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HoloFoil } from '@/components/card-effects/holo-foil';
 import type { Tilt } from '@/components/card-effects/tilt';
 import type { CardTab } from '@/components/card/card-chrome';
+import type { ZoomFrom } from '@/components/card/card-zoom';
 import { CostRow, OracleText } from '@/components/card/oracle-text';
 import { ManaSymbol } from '@/components/mana-symbol';
 import { NavIcon } from '@/components/nav-icon';
@@ -29,6 +32,16 @@ const HERO_HEIGHT = 420
 // is the one card on screen. And how far the glare moves (same as the Binder).
 const MAX_TILT_DEG = 11.25 * 1.25
 const GLARE_TRAVEL = 63
+// How long to hold the card before it lifts out to full screen (card-zoom.tsx).
+const LONG_PRESS_MS = 350
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
+// As long as the hold: pressing in sinks the card until it lifts out. (Reanimated CSS transition;
+// outside StyleSheet.create, whose types don't know these properties.)
+const PRESS_TRANSITION = {
+  transitionProperty: 'transform',
+  transitionDuration: LONG_PRESS_MS,
+  transitionTimingFunction: cubicBezier(0.23, 1, 0.32, 1),
+} as const
 
 // The face on show: double-faced cards flip between faces; split, adventure and flip cards show
 // the whole card.
@@ -54,20 +67,34 @@ function stats(face: CardFace | ScryfallCard) {
 }
 
 // The card tilts in 3D with the phone and catches a moving glare, like the Binder cards; a
-// foil-only printing also gets the holographic layer. `tilt` stays flat when the sensor is off.
+// foil-only printing (or `foil`: a foil finish picked on the Prices tab) also gets the holographic
+// layer. `tilt` stays flat when the sensor is off. Tap: all printings. Hold: the card lifts out to
+// full screen (`onZoom`, with where it sits now); `hidden` while it's out there.
 export function CardHero({
   card,
   face,
   tilt,
+  foil,
+  hidden,
   onFlip,
   onOpenPrintings,
+  onZoom,
 }: {
   card: ScryfallCard
   face: number
   tilt: Tilt
+  foil?: boolean
+  hidden?: boolean
   onFlip: () => void
   onOpenPrintings: () => void
+  onZoom: (from: ZoomFrom) => void
 }) {
+  const frame = useRef<View>(null)
+  const [pressed, setPressed] = useState(false)
+  const zoom = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined)
+    frame.current?.measureInWindow((x, y, width, height) => onZoom({ x, y, width, height }))
+  }
   const tiltStyle = useAnimatedStyle(() => ({
     transform: [
       { perspective: 700 },
@@ -83,7 +110,7 @@ export function CardHero({
     ],
   }))
   const image = faceImage(card, face)
-  const foilOnly = !(card.finishes ?? ['nonfoil']).includes('nonfoil')
+  const holo = foil || !(card.finishes ?? ['nonfoil']).includes('nonfoil')
   const shown = shownFace(card, face)
   const flippable = FLIPPABLE.includes(card.layout ?? '') && (card.card_faces?.length ?? 0) > 1
   const rarity = RarityColors[card.rarity] ?? Colors.textMuted
@@ -94,22 +121,36 @@ export function CardHero({
   return (
     <View style={styles.hero}>
       <View>
-        <Pressable
-          style={styles.cardFrame}
+        {/* Sinks a little while held, so the hold reads as building up to something. */}
+        <AnimatedPressable
+          ref={frame}
+          style={[
+            styles.cardFrame,
+            { transform: [{ rotate: '-3deg' }, { scale: pressed ? 0.95 : 1 }], opacity: hidden ? 0 : 1 },
+            PRESS_TRANSITION,
+          ]}
           onPress={onOpenPrintings}
+          onLongPress={zoom}
+          delayLongPress={LONG_PRESS_MS}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
           accessibilityRole="button"
           accessibilityLabel={`${card.name}, ${card.set.toUpperCase()} number ${card.collector_number}. See all printings`}
+          accessibilityActions={[{ name: 'longpress', label: 'View full screen' }]}
+          onAccessibilityAction={(e) => {
+            if (e.nativeEvent.actionName === 'longpress') zoom()
+          }}
         >
           {/* The shadow stays on the still frame; only the card inside tilts. */}
           <Animated.View style={[styles.cardTilt, tiltStyle]}>
-            {foilOnly && image ? (
+            {holo && image ? (
               <HoloFoil uri={image} tilt={tilt} />
             ) : (
               <Image source={{ uri: image ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
             )}
             <Animated.View pointerEvents="none" style={[styles.glare, glareStyle]} />
           </Animated.View>
-        </Pressable>
+        </AnimatedPressable>
         {flippable && (
           <TouchableOpacity style={styles.flip} onPress={onFlip} accessibilityRole="button" accessibilityLabel="Show the other face">
             <SymbolView name={{ ios: 'arrow.triangle.2.circlepath', android: 'cached' }} size={18} tintColor={Colors.text} />
@@ -336,7 +377,6 @@ const styles = StyleSheet.create({
     width: 124,
     height: 174,
     borderRadius: 8,
-    transform: [{ rotate: '-3deg' }],
     boxShadow: '0 0 0 1px rgba(237,230,214,0.20), 0 22px 44px rgba(0,0,0,0.6)',
     backgroundColor: Colors.surface,
   },

@@ -3,13 +3,9 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { Tilt } from '@/components/card-effects/tilt';
-import { CardThumb } from '@/components/card/card-thumb';
 import { Colors, Fonts } from '@/constants/theme';
-import { cardThumb, type ScryfallCard } from '@/db/scryfall';
 
-// The parts of Card detail shared by all four tabs: the floating back button, the tab
-// row, and the small header the Prices, Printings and Rules tabs use.
+// The parts of Card detail shared by all four tabs: the floating back button and the tab row.
 
 export type CardTab = 'overview' | 'prices' | 'printings' | 'rules'
 
@@ -51,20 +47,6 @@ export function CardTabs({ tab, onChange }: { tab: CardTab; onChange: (tab: Card
           </TouchableOpacity>
         )
       })}
-    </View>
-  )
-}
-
-// Thumbnail, card name and one line about it. `foil`: a foil finish is picked (Prices tab), so the
-// thumbnail gets the holographic layer.
-export function CompactHeader({ card, subtitle, foil, tilt }: { card: ScryfallCard; subtitle: string; foil?: boolean; tilt: Tilt }) {
-  return (
-    <View style={styles.compact}>
-      <CardThumb uri={cardThumb(card)} foil={foil} tilt={tilt} style={styles.thumb} />
-      <View style={styles.compactText}>
-        <Text style={styles.compactName} numberOfLines={2} accessibilityRole="header">{card.name}</Text>
-        <Text style={styles.compactSub} numberOfLines={2}>{subtitle}</Text>
-      </View>
     </View>
   )
 }
@@ -119,31 +101,5 @@ const styles = StyleSheet.create({
   tabLabelOn: {
     fontFamily: Fonts.extraBold,
     color: Colors.text,
-  },
-  compact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  thumb: {
-    width: 44,
-    height: 62,
-    boxShadow: '0 0 0 1px rgba(237,230,214,0.18), 0 10px 22px rgba(0,0,0,0.5)',
-  },
-  compactText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  compactName: {
-    fontSize: 26,
-    lineHeight: 28,
-    fontFamily: Fonts.serif,
-    color: '#F5EEDD',
-  },
-  compactSub: {
-    marginTop: 5,
-    fontSize: 13,
-    fontFamily: Fonts.regular,
-    color: Colors.textSecondary,
   },
 })

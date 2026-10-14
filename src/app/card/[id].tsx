@@ -1,4 +1,6 @@
+import { BlurTargetView } from 'expo-blur';
 import { useIsFocused, useLocalSearchParams } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -7,22 +9,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddToDeckSheet, copiesNeeded } from '@/components/card/add-to-deck-sheet';
 import { TiltSensor } from '@/components/card-effects/tilt';
-import { CardTabs, CompactHeader, TOP_BAR, TopBar, type CardTab } from '@/components/card/card-chrome';
+import { CardTabs, TOP_BAR, TopBar, type CardTab } from '@/components/card/card-chrome';
+import { CardZoom, type ZoomFrom } from '@/components/card/card-zoom';
 import { CopySheet } from '@/components/card/copy-sheet';
 import { ACTIONS_HEIGHT, CardHero, HeroBackdrop, OverviewActions, OverviewTab } from '@/components/card/overview-tab';
 import { PricesTab } from '@/components/card/prices-tab';
 import { PrintingsTab } from '@/components/card/printings-tab';
-import { legalitySummary, RulesTab } from '@/components/card/rules-tab';
+import { RulesTab } from '@/components/card/rules-tab';
 import { NewSheet } from '@/components/decks/new-sheet';
 import { Colors, Fonts } from '@/constants/theme';
 import { upsertCard } from '@/db/cards';
 import type { CollectionEntry, Finish } from '@/db/collection';
 import type { ScryfallCard } from '@/db/scryfall';
-import { printingLabel } from '@/rules/printings';
 import { mainFinish } from '@/utils/card-prices';
 import { useCard, useLocalCardData, useOracleData } from '@/utils/use-card-detail';
 import { cardInfoOf, cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store';
-import { capitalize } from '@/utils/format';
 import { record } from '@/utils/perf';
 
 // Card detail (design C1–C6): opened from a Binder card or a Market row with the printing's
@@ -47,6 +48,12 @@ export default function CardScreen() {
   const [tilt] = useState(() => ({ x: tiltX, y: tiltY }))
   const isFocused = useIsFocused()
   const reducedMotion = useReducedMotion()
+  // The hero card held out to full screen (card-zoom.tsx), and whether it's on its way back.
+  const [zoom, setZoom] = useState<{ from: ZoomFrom; closing: boolean } | null>(null)
+  // The page the zoomed card blurs (Android needs it named; iOS blurs whatever is underneath).
+  const page = useRef<View>(null)
+  // Going back (swipe, Android's back button) puts the card down instead of leaving the screen.
+  usePreventRemove(zoom != null, () => setZoom((z) => z && { ...z, closing: true }))
 
   const { card, failed, missing, retry } = useCard(viewingId)
   const { printings, rulings, loadMore, loadingMore } = useOracleData(card, tab === 'rules')
@@ -108,13 +115,6 @@ export default function CardScreen() {
     null,
   )
 
-  const subtitle =
-    tab === 'prices'
-      ? `${card.set.toUpperCase()} · #${card.collector_number} · ${printingLabel(card)} · ${capitalize(card.rarity)}`
-      : tab === 'printings'
-        ? `${printings?.total ?? '…'} printings · you own ${owned} ${owned === 1 ? 'copy' : 'copies'}`
-        : legalitySummary(card)
-
   const pickPrinting = (printing: ScryfallCard) => {
     setViewingId(printing.id)
     setFace(0)
@@ -128,22 +128,29 @@ export default function CardScreen() {
 
   return (
     <View style={styles.root}>
+      <BlurTargetView ref={page} style={styles.page}>
       <ScrollView
         ref={scroll}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + TOP_BAR + (tab === 'overview' ? 0 : 8),
+            paddingTop: insets.top + TOP_BAR,
             paddingBottom: tab === 'overview' ? ACTIONS_HEIGHT + insets.bottom + 24 : insets.bottom + 40,
           },
         ]}
       >
-        {tab === 'overview' && <HeroBackdrop card={card} face={face} />}
-        {tab === 'overview' ? (
-          <CardHero card={card} face={face} tilt={tilt} onFlip={() => setFace(face === 0 ? 1 : 0)} onOpenPrintings={() => openTab('printings')} />
-        ) : (
-          <CompactHeader card={card} subtitle={subtitle} foil={headerFoil} tilt={tilt} />
-        )}
+        {/* Every tab shows the same hero; a foil finish picked on Prices makes the card holographic. */}
+        <HeroBackdrop card={card} face={face} />
+        <CardHero
+          card={card}
+          face={face}
+          tilt={tilt}
+          foil={headerFoil}
+          hidden={zoom != null}
+          onFlip={() => setFace(face === 0 ? 1 : 0)}
+          onOpenPrintings={() => openTab('printings')}
+          onZoom={(from) => setZoom({ from, closing: false })}
+        />
         <View style={styles.tabs}>
           <CardTabs tab={tab} onChange={openTab} />
         </View>
@@ -177,13 +184,26 @@ export default function CardScreen() {
         {tab === 'rules' && <RulesTab card={card} rulings={rulings} firstPrinting={firstPrinting} />}
       </ScrollView>
 
-      {tab !== 'overview' && <View pointerEvents="none" style={[styles.topFade, { height: insets.top + TOP_BAR + 4 }]} />}
-      {/* The sensor runs while something on screen moves with it: the Overview card, or a
-          holographic thumbnail (Prices with a foil finish, the copy sheet). */}
-      {isFocused && !reducedMotion && (tab === 'overview' || headerFoil || copySheet != null) && <TiltSensor tilt={tilt} />}
       <TopBar />
       {tab === 'overview' && (
         <OverviewActions onAddToDeck={() => setDeckSheet(true)} onAddCopy={() => setCopySheet({ entry: null })} />
+      )}
+      </BlurTargetView>
+
+      {/* The hero card tilts with the phone on every tab, and so does the held-out card. */}
+      {isFocused && !reducedMotion && <TiltSensor tilt={tilt} />}
+      {zoom && (
+        <CardZoom
+          card={card}
+          face={face}
+          foil={headerFoil || !(card.finishes ?? ['nonfoil']).includes('nonfoil')}
+          from={zoom.from}
+          closing={zoom.closing}
+          tilt={tilt}
+          blurTarget={page}
+          onClose={() => setZoom({ ...zoom, closing: true })}
+          onClosed={() => setZoom(null)}
+        />
       )}
 
       <CopySheet
@@ -230,18 +250,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  page: {
+    flex: 1,
+  },
   content: {
     paddingHorizontal: 20,
   },
   tabs: {
     marginTop: 22,
-  },
-  topFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    experimental_backgroundImage: 'linear-gradient(to bottom, rgba(14,13,11,0.92) 55%, rgba(14,13,11,0))',
   },
   center: {
     flex: 1,

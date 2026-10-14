@@ -34,13 +34,6 @@ const GAMES: Record<string, string> = { paper: 'Paper', arena: 'MTG Arena', mtgo
 const longDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
-// "Legal in 12 of 15 formats" (paper), for the screen's header.
-export function legalitySummary(card: ScryfallCard) {
-  const formats = formatsFor(card, PAPER_FORMATS)
-  const legal = formats.filter((f) => ['legal', 'restricted'].includes(card.legalities?.[f.key] ?? ''))
-  return `Legal in ${legal.length} of ${formats.length} formats`
-}
-
 export function RulesTab({ card, rulings, firstPrinting }: { card: ScryfallCard; rulings: Ruling[] | null; firstPrinting: ScryfallCard | null }) {
   const onArena = (card.games ?? []).includes('arena')
   const [mode, setMode] = useState<'paper' | 'arena'>('paper')
