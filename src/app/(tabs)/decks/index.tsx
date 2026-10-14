@@ -8,7 +8,8 @@ import { DeckRow, FolderCard } from '@/components/decks/deck-row';
 import { DEFAULT_DECK_SORT, DeckSortSheet, sortDecks, sortFolders, type DeckSort } from '@/components/decks/sort-sheet';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { Colors, Fonts } from '@/constants/theme';
-import { useDeckStore } from '@/utils/deck-store';
+import { deckValue, useDeckStore } from '@/utils/deck-store';
+import { formatEur } from '@/utils/format';
 
 const NEW_FOLDER = 'new-folder'
 
@@ -22,7 +23,8 @@ function pairs<T>(items: T[]) {
 // Decks: folders as a grid of cards, then the decks that aren't in a folder.
 export default function DecksScreen() {
   const insets = useSafeAreaInsets()
-  const { folders, decks } = useDeckStore()
+  const store = useDeckStore()
+  const { folders, decks } = store
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<DeckSort>(DEFAULT_DECK_SORT)
   const [sortOpen, setSortOpen] = useState(false)
@@ -32,9 +34,10 @@ export default function DecksScreen() {
   const loose = decks.filter((d) => d.folderId == null)
   const q = query.trim().toLowerCase()
   // In the chosen sort, pinned folders first.
-  const shownFolders = sortFolders(folders.filter((f) => !q || f.name.toLowerCase().includes(q)), decks, sort)
+  const shownFolders = sortFolders(folders.filter((f) => !q || f.name.toLowerCase().includes(q)), decks, sort, store)
   // While searching, decks inside folders match too.
-  const shownDecks = sortDecks(q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose, sort)
+  const shownDecks = sortDecks(q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose, sort, store)
+  const totalValue = formatEur(decks.reduce((sum, d) => sum + deckValue(d, store), 0))
   const count = (folderId: string) => decks.filter((d) => d.folderId === folderId).length
   // Grid tiles: folder ids, then the "New folder" card (hidden while searching).
   const tiles = [...shownFolders.map((f) => f.id), ...(q ? [] : [NEW_FOLDER])]
@@ -75,10 +78,10 @@ export default function DecksScreen() {
           </View>
         </View>
 
-        <View style={styles.summary} accessibilityLabel={`Value of all decks €0, ${decks.length} decks`}>
+        <View style={styles.summary} accessibilityLabel={`Value of all decks ${totalValue}, ${decks.length} decks`}>
           <View>
             <Text style={styles.sectionLabel}>Value of all decks</Text>
-            <Text style={styles.value}>€0</Text>
+            <Text style={styles.value}>{totalValue}</Text>
           </View>
           <View style={styles.counts}>
             <Text style={styles.deckCount}>{decks.length} {decks.length === 1 ? 'deck' : 'decks'}</Text>

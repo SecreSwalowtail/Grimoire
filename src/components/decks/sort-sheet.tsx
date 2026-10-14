@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls';
 import { SortPicker, type SortOption } from '@/components/sort-picker';
-import { deckManaValue, deckValue, type Deck, type Folder } from '@/utils/deck-store';
+import { deckManaValue, deckValue, type Deck, type DeckData, type Folder } from '@/utils/deck-store';
 
 export type DeckSortBy = 'name' | 'format' | 'value' | 'mana'
 // `by` null: no sort, decks and folders in your own order (as arranged in Manage decks).
@@ -22,7 +22,7 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 
 // Descending flips the comparison rather than the list, so ties keep your order either way.
 // Decks without an average mana value (no cards) go last in both directions.
-export function sortDecks(decks: Deck[], sort: DeckSort) {
+export function sortDecks(decks: Deck[], sort: DeckSort, data: DeckData) {
   const dir = sort.desc ? -1 : 1
   switch (sort.by) {
     case 'name':
@@ -30,11 +30,11 @@ export function sortDecks(decks: Deck[], sort: DeckSort) {
     case 'format':
       return [...decks].sort((a, b) => dir * (a.format.localeCompare(b.format) || byName(a, b)))
     case 'value':
-      return [...decks].sort((a, b) => dir * (deckValue(a) - deckValue(b)))
+      return [...decks].sort((a, b) => dir * (deckValue(a, data) - deckValue(b, data)))
     case 'mana':
       return [...decks].sort((a, b) => {
-        const x = deckManaValue(a)
-        const y = deckManaValue(b)
+        const x = deckManaValue(a, data)
+        const y = deckManaValue(b, data)
         if (x == null || y == null) return Number(x == null) - Number(y == null)
         return dir * (x - y)
       })
@@ -45,9 +45,9 @@ export function sortDecks(decks: Deck[], sort: DeckSort) {
 
 // Folders sort by name, or by value (their decks added up); format and mana keep your order.
 // Pinned folders always come first.
-export function sortFolders(folders: Folder[], decks: Deck[], sort: DeckSort) {
+export function sortFolders(folders: Folder[], decks: Deck[], sort: DeckSort, data: DeckData) {
   const dir = sort.desc ? -1 : 1
-  const value = (folder: Folder) => decks.reduce((sum, d) => sum + (d.folderId === folder.id ? deckValue(d) : 0), 0)
+  const value = (folder: Folder) => decks.reduce((sum, d) => sum + (d.folderId === folder.id ? deckValue(d, data) : 0), 0)
   const list = [...folders]
   if (sort.by === 'name') list.sort((a, b) => dir * byName(a, b))
   if (sort.by === 'value') list.sort((a, b) => dir * (value(a) - value(b)))

@@ -1,7 +1,8 @@
 import Svg, { Circle, G, Path } from 'react-native-svg';
 
-// Glyphs from the "Element Icon Set" design canvas, drawn on a 48-unit grid.
-export type GlyphKind = 'light' | 'water' | 'dark' | 'fire' | 'green' | 'none' | 'snow'
+// Glyphs from the "Element Icon Set" design canvas, drawn on a 48-unit grid, plus the tap and untap
+// arrows ({T}, {Q}) drawn to match.
+export type GlyphKind = 'light' | 'water' | 'dark' | 'fire' | 'green' | 'none' | 'snow' | 'tap' | 'untap'
 
 // The flame's inner core is cut out in the fire tile's own color.
 const FIRE_CORE = '#ea2261'
@@ -15,6 +16,9 @@ const LEAF_LEFT = 'M24 29 C24 21 18 16.5 9 16.5 C9 25 15 29 24 29 Z'
 const LEAF_RIGHT = 'M24 22 C24 13 30 8.5 39 8.5 C39 17.5 33 22 24 22 Z'
 const HEXAGON = 'M24 8 L38 16 L38 32 L24 40 L10 32 L10 16 Z'
 const SNOW_ARM = 'M24 7 V41 M19.5 11 L24 15 L28.5 11 M19.5 37 L24 33 L28.5 37'
+// Tap: an arrow that rises from the bottom left and turns right. Untap is the same arrow mirrored.
+const TAP_SHAFT = 'M13 38 V25 A10 10 0 0 1 23 15 H29'
+const TAP_HEAD = 'M28 6.5 L39 15 L28 23.5 Z'
 
 // `simple` is the design's 20px variant for small tiles: no dots or star, two swells instead of
 // three, no flame core, and thicker strokes, so the glyph stays readable at 9-15px.
@@ -57,6 +61,12 @@ export function ManaGlyph({ kind, color, size, simple }: { kind: GlyphKind; colo
           <Path d={HEXAGON} fill="none" stroke={color} strokeWidth={stroke} strokeLinejoin="round" />
           {!simple && <Circle cx={24} cy={24} r={3} fill={color} />}
         </>
+      )}
+      {(kind === 'tap' || kind === 'untap') && (
+        <G transform={kind === 'untap' ? 'translate(48 0) scale(-1 1)' : undefined}>
+          <Path d={TAP_SHAFT} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d={TAP_HEAD} fill={color} />
+        </G>
       )}
       {kind === 'snow' && (
         <G fill="none" stroke={color} strokeWidth={simple ? 4.5 : 3.4} strokeLinecap="round" strokeLinejoin="round">

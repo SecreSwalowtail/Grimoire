@@ -18,8 +18,9 @@ export const Colors = {
 
 // Mana symbol tiles from the "Element Icon Set" design canvas: tile and glyph color per kind.
 // light = W, water = U, dark = B, fire = R, green = G, none = C (colorless); snow, generic
-// numbers ("num") and the "2" of {2/W} share the neutral tile, which also gets a hairline border.
-export type ManaKind = 'light' | 'water' | 'dark' | 'fire' | 'green' | 'none' | 'snow' | 'num' | 'two'
+// numbers ("num"), the "2" of {2/W}, and the tap / untap symbols share the neutral tile, which also
+// gets a hairline border.
+export type ManaKind = 'light' | 'water' | 'dark' | 'fire' | 'green' | 'none' | 'snow' | 'tap' | 'untap' | 'num' | 'two'
 export const MANA_NEUTRAL = '#f6f9fc'
 export const MANA_NEUTRAL_BORDER = '#e3e8ee'
 export const ManaTokens: Record<ManaKind, { bg: string; fg: string }> = {
@@ -32,6 +33,8 @@ export const ManaTokens: Record<ManaKind, { bg: string; fg: string }> = {
   snow: { bg: MANA_NEUTRAL, fg: '#273951' },
   num: { bg: MANA_NEUTRAL, fg: '#273951' },
   two: { bg: MANA_NEUTRAL, fg: '#273951' },
+  tap: { bg: MANA_NEUTRAL, fg: '#273951' },
+  untap: { bg: MANA_NEUTRAL, fg: '#273951' },
 }
 
 // Rarity dots next to set codes.
@@ -47,6 +50,8 @@ export const RarityColors: Record<string, string> = {
 export const Fonts = {
   // Cormorant Garamond: screen titles and card names
   serifMedium: 'CormorantGaramond_500Medium',
+  // Flavor text on Card detail
+  serifItalic: 'CormorantGaramond_500Medium_Italic',
   serif: 'CormorantGaramond_600SemiBold',
   serifBold: 'CormorantGaramond_700Bold',
   // Manrope: everything else

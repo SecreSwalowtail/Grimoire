@@ -10,21 +10,71 @@ const HEADERS = {
   Accept: 'application/json',
 };
 
+export type ImageUris = { small?: string; normal?: string; large?: string; art_crop?: string };
+
+// One side of a double-faced card, or one half of a split / adventure / flip card.
+export type CardFace = {
+  name: string;
+  type_line?: string;
+  mana_cost?: string;
+  oracle_text?: string;
+  colors?: string[];
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
+  flavor_text?: string;
+  artist?: string;
+  watermark?: string;
+  printed_name?: string;
+  image_uris?: ImageUris;
+};
+
+// 'legal' | 'not_legal' | 'banned' | 'restricted', per format key ('standard', 'commander'…).
+export type Legality = 'legal' | 'not_legal' | 'banned' | 'restricted';
+
 export type ScryfallCard = {
   id: string;
+  oracle_id?: string;
   name: string;
+  printed_name?: string;
   set: string;
   set_name: string;
   collector_number: string;
   rarity: string;
   lang: string;
+  layout?: string;
+  released_at?: string;
   type_line?: string;
   mana_cost?: string;
+  cmc?: number;
+  oracle_text?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
   colors?: string[];
-  image_uris?: { normal?: string; small?: string };
-  card_faces?: { colors?: string[]; mana_cost?: string; image_uris?: { normal?: string; small?: string } }[];
-  prices: { eur: string | null; eur_foil: string | null; usd: string | null; usd_foil: string | null };
+  color_identity?: string[];
+  keywords?: string[];
+  legalities?: Record<string, Legality>;
+  games?: string[];
+  reserved?: boolean;
+  finishes?: string[];
+  frame_effects?: string[];
+  promo_types?: string[];
+  border_color?: string;
+  full_art?: boolean;
+  artist?: string;
+  flavor_text?: string;
+  watermark?: string;
+  image_uris?: ImageUris;
+  card_faces?: CardFace[];
+  prices: { eur: string | null; eur_foil: string | null; usd: string | null; usd_foil: string | null; usd_etched?: string | null; tix?: string | null };
+  purchase_uris?: { cardmarket?: string; tcgplayer?: string; cardhoarder?: string };
+  scryfall_uri?: string;
 };
+
+export type Ruling = { source: string; published_at: string; comment: string };
 
 export type CardIdentifier = { set: string; collector_number: string } | { name: string };
 
@@ -109,6 +159,48 @@ export async function searchCards(q: string, options: SearchOptions): Promise<Se
   }
 }
 
+// Cards already fetched this session, by id, so Card detail opens at once from a list.
+const cache = new Map<string, ScryfallCard>();
+
+export function rememberCard(card: ScryfallCard) {
+  cache.set(card.id, card);
+}
+
+export function cachedCard(id: string) {
+  return cache.get(id) ?? null;
+}
+
+// One printing by its Scryfall id. Returns null if Scryfall doesn't know it.
+export async function getCard(id: string) {
+  try {
+    const card = await throttled('default', () => request<ScryfallCard>(`/cards/${encodeURIComponent(id)}`));
+    rememberCard(card);
+    return card;
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return null;
+    throw e;
+  }
+}
+
+// Every printing of a card (newest first), up to 175 a page. `page` starts at 1.
+export async function getPrintings(oracleId: string, page = 1) {
+  const query = `q=${encodeURIComponent(`oracleid:${oracleId}`)}&unique=prints&order=released&dir=desc&include_extras=true&page=${page}`;
+  try {
+    const res = await throttled('default', () => request<SearchResult>(`/cards/search?${query}`));
+    res.data.forEach(rememberCard);
+    return res;
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return { data: [], total_cards: 0, has_more: false };
+    throw e;
+  }
+}
+
+// Official rulings (Wizards' and Scryfall's notes), oldest first.
+export async function getRulings(id: string) {
+  const res = await throttled('default', () => request<{ data: Ruling[] }>(`/cards/${encodeURIComponent(id)}/rulings`));
+  return res.data;
+}
+
 // Double-faced cards keep their image and colors on the faces instead of the card.
 export function cardImage(card: ScryfallCard) {
   return card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null;
@@ -122,6 +214,17 @@ export function cardThumb(card: ScryfallCard) {
 // "{2}{G}{W}". Double-faced cards only have it on the faces: the front's is used.
 export function cardManaCost(card: ScryfallCard) {
   return card.mana_cost ?? card.card_faces?.[0]?.mana_cost ?? '';
+}
+
+// The art alone (no frame), for the Card detail backdrop.
+export function cardArt(card: ScryfallCard, face = 0) {
+  return card.card_faces?.[face]?.image_uris?.art_crop ?? card.image_uris?.art_crop ?? null;
+}
+
+// The full card image of one face: double-faced cards have an image per face.
+export function faceImage(card: ScryfallCard, face = 0) {
+  const own = card.card_faces?.[face]?.image_uris;
+  return own?.large ?? own?.normal ?? card.image_uris?.large ?? card.image_uris?.normal ?? null;
 }
 
 export function cardColors(card: ScryfallCard) {

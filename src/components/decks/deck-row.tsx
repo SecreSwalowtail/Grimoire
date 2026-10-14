@@ -3,21 +3,39 @@ import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 
 import { DeckThumb, FolderFan, FolderIcon } from '@/components/decks/parts';
 import { Colors, Fonts } from '@/constants/theme';
-import { FOLDER_COLORS, withAlpha, type Deck, type Folder } from '@/utils/deck-store';
+import { formatEur } from '@/utils/format';
+import {
+  deckCardCount,
+  deckValue,
+  FOLDER_COLORS,
+  useDeckStore,
+  withAlpha,
+  type Deck,
+  type DeckData,
+  type Folder,
+} from '@/utils/deck-store';
 
-// Decks hold no cards yet, so every row shows an empty deck: no color pips, €0.
 // Rows aren't tappable until the deck screen (its card list) is designed.
 
-// One deck: fanned thumbnail, name, format, value, and the ⋮ options button when given.
+// "Pioneer · 60 cards", or "Pioneer · No cards yet".
+export function deckMeta(deck: Deck, data: DeckData) {
+  const n = deckCardCount(deck, data)
+  return `${deck.format} · ${n === 0 ? 'No cards yet' : `${n} ${n === 1 ? 'card' : 'cards'}`}`
+}
+
+// One deck: fanned thumbnail, name, format and card count, value, and the ⋮ options button when given.
 export function DeckRow({ deck, onOptions, last }: { deck: Deck; onOptions?: () => void; last?: boolean }) {
+  const data = useDeckStore()
+  const meta = deckMeta(deck, data)
+  const value = formatEur(deckValue(deck, data))
   return (
     <View style={[styles.row, !last && styles.rule]}>
       <DeckThumb />
-      <View style={styles.text} accessible accessibilityLabel={`${deck.name}, ${deck.format}, no cards yet`}>
+      <View style={styles.text} accessible accessibilityLabel={`${deck.name}, ${meta}, ${value}`}>
         <Text style={styles.name} numberOfLines={1}>{deck.name}</Text>
-        <Text style={styles.meta} numberOfLines={1}>{deck.format} · No cards yet</Text>
+        <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
       </View>
-      <Text style={styles.value}>€0</Text>
+      <Text style={styles.value}>{value}</Text>
       {onOptions && (
         <TouchableOpacity
           style={styles.options}

@@ -1,5 +1,5 @@
 import { Canvas, Fill, Image, Shader, Skia, useImage, type SkSize } from '@shopify/react-native-skia';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
 
 import type { Tilt } from '@/components/card-effects/tilt';
@@ -24,6 +24,10 @@ half4 main(float2 pos) {
 // Draws the card image with the holographic layer blended on top (color dodge, as on real foils).
 // It is the foil card's only image (no <Image> underneath), so the picture is downloaded once.
 // Skia redraws only when the tilt changes; pass FLAT for off-screen cards so they never redraw.
+//
+// The size comes from the wrapper's onLayout, not the Canvas's `onSize`: onSize measures the view
+// on every frame, which fails (and logs a Reanimated "LayoutMetrics" warning per card per frame)
+// while the screen is hidden, e.g. the Binder behind Card detail.
 export function HoloFoil({ uri, tilt }: { uri: string; tilt: Tilt }) {
   const image = useImage(uri)
   const size = useSharedValue<SkSize>({ width: 0, height: 0 })
@@ -36,11 +40,17 @@ export function HoloFoil({ uri, tilt }: { uri: string; tilt: Tilt }) {
 
   if (!image) return null
   return (
-    <Canvas style={StyleSheet.absoluteFill} onSize={size} pointerEvents="none">
-      <Image image={image} x={0} y={0} width={width} height={height} fit="cover" />
-      <Fill blendMode="colorDodge">
-        <Shader source={HOLO} uniforms={uniforms} />
-      </Fill>
-    </Canvas>
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+      onLayout={(e) => size.set({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+    >
+      <Canvas style={StyleSheet.absoluteFill}>
+        <Image image={image} x={0} y={0} width={width} height={height} fit="cover" />
+        <Fill blendMode="colorDodge">
+          <Shader source={HOLO} uniforms={uniforms} />
+        </Fill>
+      </Canvas>
+    </View>
   )
 }

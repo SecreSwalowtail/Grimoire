@@ -6,6 +6,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { deckMeta } from '@/components/decks/deck-row';
 import { FolderIcon } from '@/components/decks/parts';
 import { ReorderList, ROW_GAP, useDropFx, type AutoScroll, type DropTargets } from '@/components/decks/reorder-list';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
@@ -35,7 +36,8 @@ const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView)
 // Opened from the Decks screen's "Manage" button.
 export default function OrganizeScreen() {
   const insets = useSafeAreaInsets()
-  const { folders, decks } = useDeckStore()
+  const store = useDeckStore()
+  const { folders, decks } = store
   // Like the Decks screen: decks in a folder are inside it, so the list shows the rest.
   const loose = decks.filter((d) => d.folderId == null)
   const [selected, setSelected] = useState<string[]>([])
@@ -173,7 +175,7 @@ export default function OrganizeScreen() {
                   <View style={styles.art} />
                   <View style={styles.itemText}>
                     <Text style={styles.itemName} numberOfLines={1}>{d.name}</Text>
-                    <Text style={styles.itemMeta} numberOfLines={1}>{d.format} · No cards yet</Text>
+                    <Text style={styles.itemMeta} numberOfLines={1}>{deckMeta(d, store)}</Text>
                   </View>
                 </Item>
               )}

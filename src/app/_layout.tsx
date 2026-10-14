@@ -1,5 +1,6 @@
 import {
   CormorantGaramond_500Medium,
+  CormorantGaramond_500Medium_Italic,
   CormorantGaramond_600SemiBold,
   CormorantGaramond_700Bold,
 } from '@expo-google-fonts/cormorant-garamond';
@@ -38,6 +39,7 @@ async function initDb(db: SQLiteDatabase) {
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     CormorantGaramond_500Medium,
+    CormorantGaramond_500Medium_Italic,
     CormorantGaramond_600SemiBold,
     CormorantGaramond_700Bold,
     Manrope_400Regular,

@@ -6,7 +6,10 @@ import { PrimaryButton, SectionLabel, Sheet } from '@/components/controls';
 import { Option } from '@/components/decks/new-sheet';
 import { DeckThumb, NameField } from '@/components/decks/parts';
 import { Colors, Fonts } from '@/constants/theme';
+import { formatEur } from '@/utils/format';
 import {
+  deckCardCount,
+  deckValue,
   deleteDecks,
   duplicateDecks,
   FORMATS,
@@ -31,7 +34,8 @@ export function DeckOptionsSheet({
   onMove: (deckId: string) => void
   onDeleted: (name: string, undo: Undo) => void
 }) {
-  const { folders, decks } = useDeckStore()
+  const store = useDeckStore()
+  const { folders, decks } = store
   const deck = decks.find((d) => d.id === deckId)
   const [name, setName] = useState('')
   const [format, setFormat] = useState<DeckFormat>('Modern')
@@ -49,6 +53,8 @@ export function DeckOptionsSheet({
   }
 
   const folder = folders.find((f) => f.id === deck?.folderId)
+  const cardCount = deck ? deckCardCount(deck, store) : 0
+  const value = formatEur(deck ? deckValue(deck, store) : 0)
 
   return (
     <Sheet visible={deck != null} onClose={onClose}>
@@ -57,7 +63,7 @@ export function DeckOptionsSheet({
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={2}>{name || deck?.name}</Text>
           <Text style={styles.meta}>
-            0 cards · <Text style={styles.value}>€0</Text>
+            {cardCount} {cardCount === 1 ? 'card' : 'cards'} · <Text style={styles.value}>{value}</Text>
           </Text>
         </View>
         <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">

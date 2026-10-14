@@ -1,17 +1,23 @@
 import { Image } from 'expo-image';
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ManaSymbol, parseManaCost } from '@/components/mana-symbol';
 import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import { cardImage, cardManaCost, cardThumb, type ScryfallCard } from '@/db/scryfall';
+import { cardImage, cardManaCost, cardThumb, rememberCard, type ScryfallCard } from '@/db/scryfall';
 import { capitalize, formatEur } from '@/utils/format';
 
-// Not tappable yet: rows will open Card detail once that screen exists.
+// Rows and tiles open Card detail; it gets the card from memory, so it opens without a request.
 // The design's weekly ▲/▼ % under the price needs price history we don't have for search results yet.
 
 function price(card: ScryfallCard) {
   const eur = card.prices.eur ?? card.prices.eur_foil
   return eur != null ? formatEur(Number(eur)) : '—'
+}
+
+function open(card: ScryfallCard) {
+  rememberCard(card)
+  router.push({ pathname: '/card/[id]', params: { id: card.id } })
 }
 
 function label(card: ScryfallCard) {
@@ -22,7 +28,7 @@ function label(card: ScryfallCard) {
 export function MarketRow({ card }: { card: ScryfallCard }) {
   const cost = parseManaCost(cardManaCost(card))
   return (
-    <View style={styles.row} accessible accessibilityLabel={label(card)}>
+    <Pressable style={styles.row} onPress={() => open(card)} accessibilityRole="button" accessibilityLabel={label(card)}>
       <Image source={{ uri: cardThumb(card) ?? undefined }} style={styles.thumb} contentFit="cover" transition={120} />
       <View style={styles.middle}>
         <View style={styles.nameRow}>
@@ -40,18 +46,18 @@ export function MarketRow({ card }: { card: ScryfallCard }) {
         </View>
       </View>
       <Text style={styles.price}>{price(card)}</Text>
-    </View>
+    </Pressable>
   )
 }
 
 // Grid view: the card image with name and price under it, 3 per row like the Binder.
 export function MarketTile({ card }: { card: ScryfallCard }) {
   return (
-    <View style={styles.tile} accessible accessibilityLabel={label(card)}>
+    <Pressable style={styles.tile} onPress={() => open(card)} accessibilityRole="button" accessibilityLabel={label(card)}>
       <Image source={{ uri: cardImage(card) ?? undefined }} style={styles.tileImage} contentFit="cover" transition={150} />
       <Text style={styles.tileName} numberOfLines={1}>{card.name}</Text>
       <Text style={styles.tilePrice}>{price(card)}</Text>
-    </View>
+    </Pressable>
   )
 }
 

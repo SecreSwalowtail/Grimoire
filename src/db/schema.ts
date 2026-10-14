@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
@@ -98,9 +98,32 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 3;
   }
 
-  // if (version === 3) {
+  if (version === 3) {
+    await db.execAsync(`
+      -- Mana value, for a deck's average.
+      ALTER TABLE cards ADD COLUMN cmc REAL;
+
+      -- What a copy cost (per copy, in EUR) and whether it's up for trade.
+      ALTER TABLE collection ADD COLUMN purchase_price REAL;
+      ALTER TABLE collection ADD COLUMN for_trade INTEGER NOT NULL DEFAULT 0;
+
+      -- The cards in each deck, per part of the deck. Kept in step by utils/deck-store.ts.
+      CREATE TABLE IF NOT EXISTS deck_cards (
+        deck_id TEXT NOT NULL REFERENCES decks (id),
+        card_id TEXT NOT NULL REFERENCES cards (id),
+        board TEXT NOT NULL CHECK (board IN ('main', 'side', 'maybe')),
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        position INTEGER NOT NULL,
+        PRIMARY KEY (deck_id, card_id, board)
+      );
+      CREATE INDEX IF NOT EXISTS deck_cards_card ON deck_cards (card_id);
+    `);
+    version = 4;
+  }
+
+  // if (version === 4) {
   //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 4;
+  //   version = 5;
   // }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -93,19 +93,22 @@ export function SectionLabel({ children, style }: { children: ReactNode; style?:
 
 export type SegmentOption<T> = { value: T; label: string; dot?: string }
 
-// Pill-shaped radio group. `small` is the compact version used next to a section label.
+// Pill-shaped radio group. `small` is the compact version used next to a section label, sized to
+// its labels; `fill` makes a small one share out the full width instead.
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
   label,
   small,
+  fill,
 }: {
   options: SegmentOption<T>[]
   value: T
   onChange: (value: T) => void
   label: string
   small?: boolean
+  fill?: boolean
 }) {
   return (
     <View style={[styles.segmented, small && styles.segmentedSmall]} accessibilityRole="radiogroup" accessibilityLabel={label}>
@@ -114,7 +117,7 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={option.value}
-            style={[styles.segment, small && styles.segmentSmall, selected && styles.segmentSelected]}
+            style={[styles.segment, small && styles.segmentSmall, small && fill && styles.segmentFill, selected && styles.segmentSelected]}
             onPress={() => onChange(option.value)}
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
@@ -303,6 +306,10 @@ const styles = StyleSheet.create({
     flex: 0,
     paddingHorizontal: 10,
     borderRadius: 8,
+  },
+  segmentFill: {
+    flex: 1,
+    paddingHorizontal: 4,
   },
   segmentSelected: {
     backgroundColor: Colors.selected,

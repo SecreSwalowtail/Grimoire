@@ -30,18 +30,21 @@ export type NewKind = 'deck' | 'folder'
 // "New deck / New folder" sheet. `folderId` preselects "Put in folder"; `deckIds` pre-checks
 // decks to file into a new folder (from Organize and Move).
 // "Paste list" only creates the deck for now; "Scan cards" creates it and opens the Scan tab.
+// `onDeckCreated` gets the new deck's id (Card detail uses it to put the card in).
 export function NewSheet({
   visible,
   kind: initialKind,
   folderId = null,
   deckIds = [],
   onClose,
+  onDeckCreated,
 }: {
   visible: boolean
   kind: NewKind
   folderId?: string | null
   deckIds?: string[]
   onClose: () => void
+  onDeckCreated?: (deckId: string) => void
 }) {
   const { folders, decks } = useDeckStore()
   const [kind, setKind] = useState(initialKind)
@@ -78,7 +81,8 @@ export function NewSheet({
 
   const create = () => {
     if (isDeck) {
-      createDeck({ name: name.trim() || 'New deck', format, folderId: place })
+      const id = createDeck({ name: name.trim() || 'New deck', format, folderId: place })
+      onDeckCreated?.(id)
       if (start === 'scan') router.navigate('/scan')
     } else {
       createFolder({ name: name.trim() || 'New folder', color }, picked)

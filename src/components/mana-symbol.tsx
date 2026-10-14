@@ -26,6 +26,8 @@ export function symbolValue(symbol: string) {
 export function symbolName(symbol: string) {
   if (/^(\d+|X)$/.test(symbol)) return `${symbol} generic mana`
   if (symbol === 'S') return 'Snow mana'
+  if (symbol === 'T') return 'Tap'
+  if (symbol === 'Q') return 'Untap'
   if (COLOR_NAMES[symbol]) return `${capitalize(COLOR_NAMES[symbol])} mana`
   const [a, b, c] = symbol.split('/')
   if (b === 'P') return `Phyrexian ${COLOR_NAMES[a]} mana`
@@ -46,11 +48,13 @@ function tokenFor(symbol: string): Token {
   if (ELEMENTS[symbol]) return { ...token, primary: ELEMENTS[symbol] }
   if (symbol === 'C') return { ...token, primary: 'none' }
   if (symbol === 'S') return { ...token, primary: 'snow' }
+  if (symbol === 'T') return { ...token, primary: 'tap' }
+  if (symbol === 'Q') return { ...token, primary: 'untap' }
   const [a, b, c] = symbol.split('/')
   if (ELEMENTS[a] && b === 'P') return { ...token, primary: ELEMENTS[a], life: true }
   if (ELEMENTS[a] && ELEMENTS[b]) return { ...token, primary: ELEMENTS[a], secondary: ELEMENTS[b], life: c === 'P' }
   if (a === '2' && ELEMENTS[b]) return { ...token, primary: 'two', secondary: ELEMENTS[b] }
-  // Numbers, X, and anything rarer (tap, energy…) as text on a neutral tile.
+  // Numbers, X, and anything rarer (energy, chaos…) as text on a neutral tile.
   return { ...token, text: symbol }
 }
 

@@ -8,13 +8,15 @@ import { DeckRow } from '@/components/decks/deck-row';
 import { FolderIcon } from '@/components/decks/parts';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { Colors, Fonts } from '@/constants/theme';
-import { deleteDecks, FOLDER_COLORS, folderDecks, useDeckStore, withAlpha } from '@/utils/deck-store';
+import { deckValue, deleteDecks, FOLDER_COLORS, folderDecks, useDeckStore, withAlpha } from '@/utils/deck-store';
+import { formatEur } from '@/utils/format';
 
 // One folder's decks. Swipe a deck left for Move / Delete (with Undo).
 export default function FolderScreen() {
   const insets = useSafeAreaInsets()
   const { folderId } = useLocalSearchParams<{ folderId: string }>()
-  const { folders, decks } = useDeckStore()
+  const store = useDeckStore()
+  const { folders, decks } = store
   const folder = folders.find((f) => f.id === folderId)
   // Deleting this folder from its own menu goes back to Decks, which shows the Undo toast.
   const deckSheets = useDeckSheets({ onFolderDeleted: () => router.back() })
@@ -22,7 +24,8 @@ export default function FolderScreen() {
   if (!folder) return <View style={styles.root}>{deckSheets.sheets}</View>
 
   const hex = FOLDER_COLORS[folder.color].hex
-  const inside = folderDecks(decks, folder)
+  const inside = folderDecks(decks, folder, store)
+  const value = formatEur(inside.reduce((sum, d) => sum + deckValue(d, store), 0))
 
   return (
     <View style={styles.root}>
@@ -63,7 +66,7 @@ export default function FolderScreen() {
           <View style={styles.headerText}>
             <Text style={styles.title} numberOfLines={1}>{folder.name}</Text>
             <Text style={styles.summary}>
-              {inside.length} {inside.length === 1 ? 'deck' : 'decks'} · €0
+              {inside.length} {inside.length === 1 ? 'deck' : 'decks'} · {value}
             </Text>
           </View>
         </View>

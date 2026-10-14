@@ -11,6 +11,9 @@ export type CopyOptions = {
   finish?: Finish;
   condition?: Condition;
   language?: string;
+  // Price paid per copy, in EUR.
+  purchasePrice?: number | null;
+  forTrade?: boolean;
 };
 
 export type CollectionEntry = {
@@ -21,6 +24,8 @@ export type CollectionEntry = {
   condition: Condition;
   language: string;
   added_at: number;
+  purchase_price: number | null;
+  for_trade: number;
   name: string;
   set_code: string;
   set_name: string;
@@ -35,19 +40,25 @@ export type CollectionEntry = {
 };
 
 // Add copies of a card. If the same card + finish + condition + language is already owned,
-// the quantity is increased instead. Saves/refreshes the card data too.
+// the quantity is increased instead (keeping its price paid if it has one). Saves/refreshes the
+// card data too.
 // Not wrapped in a transaction: call it inside db.withTransactionAsync() when adding many.
 export async function addToCollection(db: SQLiteDatabase, card: ScryfallCard, options: CopyOptions = {}) {
   await upsertCard(db, card);
   const result = await db.runAsync(
-    `INSERT INTO collection (card_id, quantity, finish, condition, language, added_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (card_id, finish, condition, language) DO UPDATE SET quantity = quantity + excluded.quantity`,
+    `INSERT INTO collection (card_id, quantity, finish, condition, language, purchase_price, for_trade, added_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (card_id, finish, condition, language) DO UPDATE SET
+       quantity = quantity + excluded.quantity,
+       purchase_price = COALESCE(purchase_price, excluded.purchase_price),
+       for_trade = MAX(for_trade, excluded.for_trade)`,
     card.id,
     options.quantity ?? 1,
     options.finish ?? 'nonfoil',
     options.condition ?? 'NM',
     options.language ?? card.lang ?? 'en',
+    options.purchasePrice ?? null,
+    options.forTrade ? 1 : 0,
     Date.now(),
   );
   return result.lastInsertRowId;
@@ -94,11 +105,80 @@ export async function getOwnedPricesDaysAgo(db: SQLiteDatabase, days: number) {
   )
 }
 
+const ENTRY_COLUMNS = `collection.*, cards.name, cards.set_code, cards.set_name, cards.collector_number, cards.rarity,
+            cards.colors, cards.image_uri, cards.price_eur, cards.price_eur_foil, cards.price_usd, cards.price_usd_foil`;
+
 export async function getCollection(db: SQLiteDatabase) {
   return db.getAllAsync<CollectionEntry>(
-    `SELECT collection.*, cards.name, cards.set_code, cards.set_name, cards.collector_number, cards.rarity,
-            cards.colors, cards.image_uri, cards.price_eur, cards.price_eur_foil, cards.price_usd, cards.price_usd_foil
+    `SELECT ${ENTRY_COLUMNS}
      FROM collection JOIN cards ON cards.id = collection.card_id
      ORDER BY collection.added_at DESC`,
+  );
+}
+
+// Every owned copy of a card, in any printing. Scryfall names are unique per card (printings share
+// the name, other cards never do), so the name finds them all.
+export async function getCopiesOfCard(db: SQLiteDatabase, name: string) {
+  return db.getAllAsync<CollectionEntry>(
+    `SELECT ${ENTRY_COLUMNS}
+     FROM collection JOIN cards ON cards.id = collection.card_id
+     WHERE cards.name = ?
+     ORDER BY collection.added_at`,
+    name,
+  );
+}
+
+export type EntryChanges = {
+  quantity: number;
+  finish: Finish;
+  condition: Condition;
+  language: string;
+  purchasePrice: number | null;
+  forTrade: boolean;
+};
+
+// Edit a copy. If it now matches another entry of the same printing (same finish, condition and
+// language), the two become one: quantities add up, the other's price paid is kept if this has none.
+export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: EntryChanges) {
+  await db.withTransactionAsync(async () => {
+    const entry = await db.getFirstAsync<{ card_id: string }>('SELECT card_id FROM collection WHERE id = ?', entryId);
+    if (!entry) return;
+    const twin = await db.getFirstAsync<{ id: number; quantity: number; purchase_price: number | null }>(
+      'SELECT id, quantity, purchase_price FROM collection WHERE card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?',
+      entry.card_id, changes.finish, changes.condition, changes.language, entryId,
+    );
+    if (twin) {
+      await db.runAsync('DELETE FROM collection WHERE id = ?', entryId);
+      await db.runAsync(
+        'UPDATE collection SET quantity = ?, purchase_price = ?, for_trade = ? WHERE id = ?',
+        twin.quantity + changes.quantity, changes.purchasePrice ?? twin.purchase_price, changes.forTrade ? 1 : 0, twin.id,
+      );
+    } else {
+      await db.runAsync(
+        `UPDATE collection SET quantity = ?, finish = ?, condition = ?, language = ?, purchase_price = ?, for_trade = ?
+         WHERE id = ?`,
+        changes.quantity, changes.finish, changes.condition, changes.language, changes.purchasePrice, changes.forTrade ? 1 : 0, entryId,
+      );
+    }
+  });
+}
+
+export async function removeEntry(db: SQLiteDatabase, entryId: number) {
+  await db.runAsync('DELETE FROM collection WHERE id = ?', entryId);
+}
+
+export type PricePoint = {
+  date: string; // YYYY-MM-DD
+  price_eur: number | null;
+  price_eur_foil: number | null;
+  price_usd: number | null;
+  price_usd_foil: number | null;
+};
+
+// The daily snapshots saved for one printing, oldest first (one a day it was opened or refreshed).
+export async function getPriceHistory(db: SQLiteDatabase, cardId: string) {
+  return db.getAllAsync<PricePoint>(
+    'SELECT date, price_eur, price_eur_foil, price_usd, price_usd_foil FROM price_history WHERE card_id = ? ORDER BY date',
+    cardId,
   );
 }

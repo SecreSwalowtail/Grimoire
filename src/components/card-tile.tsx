@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { css, cubicBezier, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
 
 import { HoloFoil } from '@/components/card-effects/holo-foil';
@@ -40,7 +41,7 @@ const PULSE = css.keyframes({
   to: { opacity: 1 },
 })
 
-// One card in the 3-column Binder grid: full card image with quantity / foil badges,
+// One card in the 3-column Binder grid (tap to open Card detail): full card image with quantity / foil badges,
 // name, and set code + price. Rarity is shown by the dot (and spoken by screen readers).
 // The card tilts in 3D with the phone, catches a moving glare, foils get a holographic layer,
 // and expensive cards shimmer.
@@ -73,9 +74,10 @@ export function CardTile({ entry, active }: { entry: CollectionEntry; active: bo
   }))
 
   return (
-    <View
+    <Pressable
       style={styles.tile}
-      accessible
+      onPress={() => router.push({ pathname: '/card/[id]', params: { id: entry.card_id } })}
+      accessibilityRole="button"
       accessibilityLabel={`${entry.name}, ${entry.quantity} ${entry.quantity === 1 ? 'copy' : 'copies'}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? formatEur(price) : 'no price'}`}
     >
       {/* The shadow and glow sit on a layer that never moves: only the card inside tilts,
@@ -139,7 +141,7 @@ export function CardTile({ entry, active }: { entry: CollectionEntry; active: bo
         </View>
         <Text style={styles.price} numberOfLines={1}>{price != null ? formatEur(price) : '—'}</Text>
       </View>
-    </View>
+    </Pressable>
   )
 }
 
