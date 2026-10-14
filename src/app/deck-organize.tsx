@@ -1,68 +1,117 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState, type ReactElement, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
+import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CheckBox, FolderIcon } from '@/components/decks/parts';
-import { ReorderList } from '@/components/decks/reorder-list';
+import { FolderIcon } from '@/components/decks/parts';
+import { ReorderList, ROW_GAP, useDropFx, type AutoScroll, type DropTargets } from '@/components/decks/reorder-list';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { Colors, Fonts } from '@/constants/theme';
 import {
   deleteDecks,
   duplicateDecks,
   FOLDER_COLORS,
-  folderDecks,
+  moveDecks,
   reorderDecks,
   reorderFolders,
-  updateFolder,
   useDeckStore,
 } from '@/utils/deck-store';
 
 const DANGER = '#EE8466'
 const TOOLBAR = 96
+const FOLDER_ROW = 60
+const DECK_ROW = 64
 
-// Organize (select & reorder): pick folders and decks, then Move / New folder / Duplicate / Delete.
-// Opened from Decks ("Select") or a folder's "Manage decks" (`folderId`: only that folder's decks).
-// Drag a row by its grip (or hold it) to reorder. Dropping a deck on a folder isn't wired up yet.
+// Gesture-handler's ScrollView, so the drag gestures and scrolling get along, made animatable
+// so a drag can scroll it.
+const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView)
+
+// Manage decks: folders, and the decks not in one. Tap rows to select them (they turn gold), then
+// New folder / Duplicate / Delete. Drag a row by its grip (or hold it) to reorder; drag a deck
+// onto a folder to file it there (with Undo). Holding a row near the top or bottom edge scrolls.
+// Opened from the Decks screen's "Manage" button.
 export default function OrganizeScreen() {
   const insets = useSafeAreaInsets()
-  const { folderId } = useLocalSearchParams<{ folderId?: string }>()
   const { folders, decks } = useDeckStore()
+  // Like the Decks screen: decks in a folder are inside it, so the list shows the rest.
+  const loose = decks.filter((d) => d.folderId == null)
   const [selected, setSelected] = useState<string[]>([])
   // No scrolling while a row is being dragged.
   const [dragging, setDragging] = useState(false)
   const toolbarHeight = TOOLBAR + insets.bottom
   const deckSheets = useDeckSheets({ toastBottom: toolbarHeight + 16 })
+  // Where the two lists sit in the scroll content, to find the folder under a dragged deck.
+  const [foldersY, setFoldersY] = useState<number | null>(null)
+  const [decksY, setDecksY] = useState<number | null>(null)
+  const dropFx = useDropFx()
 
-  const scopeFolder = folders.find((f) => f.id === folderId)
-  const shownFolders = scopeFolder ? [] : folders
-  const shownDecks = scopeFolder ? folderDecks(decks, scopeFolder) : decks
-  const ids = [...shownFolders.map((f) => f.id), ...shownDecks.map((d) => d.id)]
+  const { height: screenHeight } = useWindowDimensions()
+  const scrollRef = useAnimatedRef<Animated.ScrollView>()
+  const scrollOffset = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollOffset.set(e.contentOffset.y)
+  })
+  const [contentHeight, setContentHeight] = useState(0)
+  const [viewHeight, setViewHeight] = useState(0)
+  const autoScroll: AutoScroll = {
+    ref: scrollRef,
+    offset: scrollOffset,
+    max: contentHeight - viewHeight,
+    // The visible list runs from under the status bar to the top of the toolbar.
+    top: insets.top,
+    bottom: screenHeight - toolbarHeight,
+  }
+
+  // Filing a deck by dropping it on a folder, with an Undo toast. Dropping it on the folder
+  // it's already in changes nothing.
+  const fileDeck = (deckId: string, folderId: string) => {
+    const deck = decks.find((d) => d.id === deckId)
+    const folder = folders.find((f) => f.id === folderId)
+    if (!deck || !folder || deck.folderId === folderId) return
+    deckSheets.showUndo(`${deck.name} moved to ${folder.name}`, moveDecks([deckId], folderId))
+  }
+  const folderTargets: DropTargets | undefined =
+    folders.length > 0 && foldersY != null && decksY != null
+      ? {
+          ids: folders.map((f) => f.id),
+          top: foldersY - decksY,
+          slot: FOLDER_ROW + ROW_GAP,
+          height: FOLDER_ROW,
+          fx: dropFx,
+          onDrop: fileDeck,
+        }
+      : undefined
+
+  const ids = [...folders.map((f) => f.id), ...loose.map((d) => d.id)]
   // Drop ids of things deleted meanwhile.
   const picked = selected.filter((id) => ids.includes(id))
-  const pickedFolders = shownFolders.filter((f) => picked.includes(f.id)).map((f) => f.id)
-  const pickedDecks = shownDecks.filter((d) => picked.includes(d.id)).map((d) => d.id)
+  const pickedFolders = folders.filter((f) => picked.includes(f.id)).map((f) => f.id)
+  const pickedDecks = loose.filter((d) => picked.includes(d.id)).map((d) => d.id)
   const allPicked = ids.length > 0 && picked.length === ids.length
 
   const toggle = (id: string) =>
     setSelected(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id])
   const clear = () => setSelected([])
-  // Dragging decks in a folder sorted by name switches it to your own order, so the drop sticks.
-  const moveDecks = (order: string[]) => {
-    reorderDecks(order)
-    if (scopeFolder && scopeFolder.sort !== 'custom') updateFolder(scopeFolder.id, { sort: 'custom' })
-  }
 
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-      <ScrollView scrollEnabled={!dragging} contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: toolbarHeight + 24 }]}>
+      <AnimatedScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        onLayout={(e) => setViewHeight(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_w, h) => setContentHeight(h)}
+        scrollEnabled={!dragging}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: toolbarHeight + 24 }]}
+      >
         <View style={styles.header}>
           {/* Title centered on the screen, between the two links. */}
           <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
-            {picked.length ? `${picked.length} selected` : scopeFolder ? scopeFolder.name : 'Select items'}
+            {picked.length ? `${picked.length} selected` : 'Manage decks'}
           </Text>
           <TouchableOpacity style={styles.headerSide} onPress={() => router.back()} accessibilityRole="button">
             <Text style={styles.link} numberOfLines={1}>Done</Text>
@@ -81,61 +130,63 @@ export default function OrganizeScreen() {
           <Text style={styles.hintText}>Drag to reorder · drop a deck on a folder to file it</Text>
         </View>
 
-        {shownFolders.length > 0 && (
+        {folders.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>Folders</Text>
-            <ReorderList
-              items={shownFolders}
-              itemHeight={60}
-              onReorder={reorderFolders}
-              onDragChange={setDragging}
-              renderItem={(f, grip) => {
-                const n = decks.filter((d) => d.folderId === f.id).length
-                return (
-                  <Item selected={picked.includes(f.id)} onPress={() => toggle(f.id)} label={`${f.name} folder, ${n} decks`} grip={grip}>
-                    <FolderIcon color={FOLDER_COLORS[f.color].hex} width={26} />
-                    <Text style={styles.itemName} numberOfLines={1}>{f.name}</Text>
-                    <Text style={styles.itemCount}>{n} {n === 1 ? 'deck' : 'decks'}</Text>
-                  </Item>
-                )
-              }}
-            />
+            <View onLayout={(e) => setFoldersY(e.nativeEvent.layout.y)}>
+              <ReorderList
+                items={folders}
+                itemHeight={FOLDER_ROW}
+                onReorder={reorderFolders}
+                onDragChange={setDragging}
+                dropFx={dropFx}
+                scroll={autoScroll}
+                renderItem={(f, grip) => {
+                  const n = decks.filter((d) => d.folderId === f.id).length
+                  return (
+                    <Item selected={picked.includes(f.id)} onPress={() => toggle(f.id)} label={`${f.name} folder, ${n} decks`} grip={grip}>
+                      <FolderIcon color={FOLDER_COLORS[f.color].hex} width={26} />
+                      <Text style={styles.itemName} numberOfLines={1}>{f.name}</Text>
+                      <Text style={styles.itemCount}>{n} {n === 1 ? 'deck' : 'decks'}</Text>
+                    </Item>
+                  )
+                }}
+              />
+            </View>
           </>
         )}
 
         <Text style={styles.sectionLabel}>Decks</Text>
-        {shownDecks.length === 0 ? (
-          <Text style={styles.none}>No decks here yet.</Text>
+        {loose.length === 0 ? (
+          <Text style={styles.none}>{decks.length === 0 ? 'No decks yet.' : 'All decks are in folders.'}</Text>
         ) : (
-          <ReorderList
-            items={shownDecks}
-            itemHeight={64}
-            onReorder={moveDecks}
-            onDragChange={setDragging}
-            renderItem={(d, grip) => (
-              <Item selected={picked.includes(d.id)} onPress={() => toggle(d.id)} label={`${d.name}, ${d.format}`} grip={grip}>
-                <View style={styles.art} />
-                <View style={styles.itemText}>
-                  <Text style={styles.itemName} numberOfLines={1}>{d.name}</Text>
-                  <Text style={styles.itemMeta}>{d.format} · No cards yet</Text>
-                </View>
-              </Item>
-            )}
-          />
+          <View onLayout={(e) => setDecksY(e.nativeEvent.layout.y)}>
+            <ReorderList
+              items={loose}
+              itemHeight={DECK_ROW}
+              onReorder={reorderDecks}
+              onDragChange={setDragging}
+              dropTargets={folderTargets}
+              scroll={autoScroll}
+              renderItem={(d, grip) => (
+                <Item selected={picked.includes(d.id)} onPress={() => toggle(d.id)} label={`${d.name}, ${d.format}`} grip={grip}>
+                  <View style={styles.art} />
+                  <View style={styles.itemText}>
+                    <Text style={styles.itemName} numberOfLines={1}>{d.name}</Text>
+                    <Text style={styles.itemMeta} numberOfLines={1}>{d.format} · No cards yet</Text>
+                  </View>
+                </Item>
+              )}
+            />
+          </View>
         )}
-      </ScrollView>
+      </AnimatedScrollView>
 
       <View
         style={[styles.toolbar, { height: toolbarHeight, paddingBottom: insets.bottom + 8 }]}
         accessibilityRole="toolbar"
         accessibilityLabel="Selection actions"
       >
-        <Tool
-          label="Move"
-          icon={{ ios: 'folder', android: 'drive_file_move' }}
-          disabled={!pickedDecks.length}
-          onPress={() => deckSheets.openMove(pickedDecks, clear)}
-        />
         <Tool
           label="New folder"
           icon={{ ios: 'folder.badge.plus', android: 'create_new_folder' }}
@@ -177,7 +228,7 @@ export default function OrganizeScreen() {
   )
 }
 
-// A selectable row: round checkbox, the given content, and the drag grip (from ReorderList).
+// A row you tap to select (it turns gold), with the drag grip from ReorderList at its end.
 // Fills the row height ReorderList gives it.
 function Item({
   selected,
@@ -201,7 +252,6 @@ function Item({
         accessibilityLabel={label}
         accessibilityState={{ checked: selected }}
       >
-        <CheckBox checked={selected} round />
         {children}
       </Pressable>
       {grip}
@@ -317,8 +367,8 @@ const styles = StyleSheet.create({
   },
   itemSelected: {
     borderWidth: 1.5,
-    borderColor: 'rgba(212,166,74,0.6)',
-    backgroundColor: 'rgba(212,166,74,0.08)',
+    borderColor: Colors.gold,
+    backgroundColor: 'rgba(212,166,74,0.14)',
   },
   itemPress: {
     flex: 1,

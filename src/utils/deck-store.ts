@@ -119,8 +119,18 @@ export function duplicateDecks(ids: string[]) {
   set({ ...state, decks })
 }
 
-export function moveDecks(ids: string[], folderId: string | null) {
+// The undo puts each deck back where it came from (out of folders if that folder is gone).
+export function moveDecks(ids: string[], folderId: string | null): Undo {
+  const from = new Map(state.decks.filter((d) => ids.includes(d.id)).map((d) => [d.id, d.folderId]))
   set({ ...state, decks: state.decks.map((d) => (ids.includes(d.id) ? { ...d, folderId } : d)) })
+  return () => {
+    const decks = state.decks.map((d) => {
+      if (!from.has(d.id)) return d
+      const back = from.get(d.id) ?? null
+      return { ...d, folderId: back == null || state.folders.some((f) => f.id === back) ? back : null }
+    })
+    set({ ...state, decks })
+  }
 }
 
 // Also files the given decks into the new folder.
@@ -199,6 +209,16 @@ export function deleteFolders(ids: string[], withDecks: boolean): Undo {
 export function folderDecks(decks: Deck[], folder: Folder) {
   const inFolder = decks.filter((d) => d.folderId === folder.id)
   return folder.sort === 'name' ? [...inFolder].sort((a, b) => a.name.localeCompare(b.name)) : inFolder
+}
+
+// A deck's price in EUR, and the average mana value of its cards (null with no cards).
+// Decks hold no cards yet, so these are placeholders for the deck card list.
+export function deckValue(_deck: Deck) {
+  return 0
+}
+
+export function deckManaValue(_deck: Deck): number | null {
+  return null
 }
 
 // "#D4A64A" + 0.18 -> "rgba(212,166,74,0.18)", for folder tints and glows.

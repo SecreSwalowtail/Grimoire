@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DeckRow, FolderCard } from '@/components/decks/deck-row';
+import { DEFAULT_DECK_SORT, DeckSortSheet, sortDecks, sortFolders, type DeckSort } from '@/components/decks/sort-sheet';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { Colors, Fonts } from '@/constants/theme';
 import { useDeckStore } from '@/utils/deck-store';
@@ -23,16 +24,17 @@ export default function DecksScreen() {
   const insets = useSafeAreaInsets()
   const { folders, decks } = useDeckStore()
   const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<DeckSort>(DEFAULT_DECK_SORT)
+  const [sortOpen, setSortOpen] = useState(false)
+  const sorted = sort.by != null
   const deckSheets = useDeckSheets()
 
   const loose = decks.filter((d) => d.folderId == null)
   const q = query.trim().toLowerCase()
-  // Pinned folders first, otherwise in creation order.
-  const shownFolders = folders
-    .filter((f) => !q || f.name.toLowerCase().includes(q))
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+  // In the chosen sort, pinned folders first.
+  const shownFolders = sortFolders(folders.filter((f) => !q || f.name.toLowerCase().includes(q)), decks, sort)
   // While searching, decks inside folders match too.
-  const shownDecks = q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose
+  const shownDecks = sortDecks(q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose, sort)
   const count = (folderId: string) => decks.filter((d) => d.folderId === folderId).length
   // Grid tiles: folder ids, then the "New folder" card (hidden while searching).
   const tiles = [...shownFolders.map((f) => f.id), ...(q ? [] : [NEW_FOLDER])]
@@ -46,11 +48,21 @@ export default function DecksScreen() {
           <Text style={styles.title}>Decks</Text>
           <View style={styles.actions}>
             <TouchableOpacity
-              style={styles.select}
+              style={styles.manage}
               onPress={() => router.push('/deck-organize')}
               accessibilityRole="button"
+              accessibilityLabel="Manage decks"
             >
-              <Text style={styles.selectLabel}>Select</Text>
+              <Text style={styles.manageLabel}>Manage</Text>
+            </TouchableOpacity>
+            {/* Gold edge while a sort other than your own order is on. */}
+            <TouchableOpacity
+              style={[styles.iconBtn, sorted && styles.iconBtnOn]}
+              onPress={() => setSortOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Sort decks"
+            >
+              <SymbolView name={{ ios: 'arrow.up.arrow.down', android: 'swap_vert' }} size={20} tintColor={sorted ? Colors.goldLight : Colors.text} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.add}
@@ -142,6 +154,7 @@ export default function DecksScreen() {
       </ScrollView>
 
       {deckSheets.sheets}
+      <DeckSortSheet visible={sortOpen} value={sort} onApply={setSort} onClose={() => setSortOpen(false)} />
     </View>
   )
 }
@@ -179,7 +192,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  select: {
+  manage: {
     height: 44,
     paddingHorizontal: 16,
     borderRadius: 14,
@@ -188,10 +201,24 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     justifyContent: 'center',
   },
-  selectLabel: {
+  manageLabel: {
     fontSize: 14,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.10)',
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnOn: {
+    borderColor: 'rgba(212,166,74,0.6)',
+    backgroundColor: 'rgba(212,166,74,0.10)',
   },
   add: {
     width: 44,

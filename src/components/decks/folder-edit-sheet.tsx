@@ -8,19 +8,17 @@ import { Colors, Fonts } from '@/constants/theme';
 import { FOLDER_COLORS, updateFolder, useDeckStore, type FolderColor, type FolderSort } from '@/utils/deck-store';
 
 // "Edit folder" sheet: name, color, how decks inside are sorted, pin to top. Changes are a draft
-// until Save. "Manage decks" opens Organize for this folder; "Delete folder…" asks first.
+// until Save. "Delete folder…" asks first.
 export function FolderEditSheet({
   folderId,
   onClose,
-  onManage,
   onDelete,
 }: {
   folderId: string | null
   onClose: () => void
-  onManage: (folderId: string) => void
   onDelete: (folderId: string) => void
 }) {
-  const { folders, decks } = useDeckStore()
+  const { folders } = useDeckStore()
   const folder = folders.find((f) => f.id === folderId)
   const [name, setName] = useState('')
   const [color, setColor] = useState<FolderColor>('gold')
@@ -39,7 +37,6 @@ export function FolderEditSheet({
     setLoadedFor(null)
   }
 
-  const count = folder ? decks.filter((d) => d.folderId === folder.id).length : 0
 
   return (
     <Sheet visible={folder != null} onClose={onClose}>
@@ -73,15 +70,6 @@ export function FolderEditSheet({
             <Text style={styles.rowLabel}>Pin to top of Decks</Text>
             <Toggle value={pinned} onChange={setPinned} label="Pin to top of Decks" />
           </View>
-          <Pressable
-            style={[styles.row, styles.rule]}
-            onPress={() => folder && onManage(folder.id)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.rowLabel}>Manage decks</Text>
-            <Text style={styles.rowValue}>{count} {count === 1 ? 'deck' : 'decks'}</Text>
-            <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />
-          </Pressable>
           <Pressable
             style={[styles.row, styles.rule]}
             onPress={() => folder && onDelete(folder.id)}
@@ -143,11 +131,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: Fonts.bold,
     color: Colors.text,
-  },
-  rowValue: {
-    fontSize: 15,
-    fontFamily: Fonts.regular,
-    color: Colors.textSecondary,
   },
   delete: {
     flex: 1,

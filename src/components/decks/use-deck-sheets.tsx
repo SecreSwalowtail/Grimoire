@@ -1,4 +1,4 @@
-import { router, useIsFocused } from 'expo-router';
+import { useIsFocused } from 'expo-router';
 import { useState, useSyncExternalStore } from 'react';
 
 import { DeckOptionsSheet } from '@/components/decks/deck-options-sheet';
@@ -60,10 +60,6 @@ export function useDeckSheets({
       <FolderEditSheet
         folderId={editFolderId}
         onClose={() => setEditFolderId(null)}
-        onManage={(folderId) => {
-          setEditFolderId(null)
-          router.push({ pathname: '/deck-organize', params: { folderId } })
-        }}
         onDelete={(folderId) => {
           setEditFolderId(null)
           setDeleteFolderIds([folderId])
