@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { css, cubicBezier, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
 
 import { HoloFoil } from '@/components/card-effects/holo-foil';
-import { useTilt } from '@/components/card-effects/tilt';
+import { FLAT, useTilt } from '@/components/card-effects/tilt';
 import { Colors, Fonts, RarityColors } from '@/constants/theme';
 import { entryPrice, type CollectionEntry } from '@/db/collection';
 import { capitalize, formatEur } from '@/utils/format';
@@ -12,7 +12,7 @@ import { capitalize, formatEur } from '@/utils/format';
 // Magic cards are 63 × 88 mm.
 const CARD_RATIO = 63 / 88
 const MAX_TILT_DEG = 11.25
-const GLARE_TRAVEL = 44 // % of the glare layer the highlight moves at full tilt
+const GLARE_TRAVEL = 63 // % of the glare layer (140% of the card) the highlight moves at full tilt
 
 // Price tiers (EUR per copy), each adding to the one below:
 //  10+  gold light sweeps across the card now and then
@@ -44,8 +44,12 @@ const PULSE = css.keyframes({
 // name, and set code + price. Rarity is shown by the dot (and spoken by screen readers).
 // The card tilts in 3D with the phone, catches a moving glare, foils get a holographic layer,
 // and expensive cards shimmer.
-export function CardTile({ entry }: { entry: CollectionEntry }) {
-  const tilt = useTilt()
+//
+// `active` = the card is on screen. Off-screen cards bind to the never-changing FLAT tilt, so
+// their animated styles and foil shader don't re-run while the phone moves.
+export function CardTile({ entry, active }: { entry: CollectionEntry; active: boolean }) {
+  const screenTilt = useTilt()
+  const tilt = active ? screenTilt : FLAT
   const reducedMotion = useReducedMotion()
   const price = entryPrice(entry)
   const foil = entry.finish !== 'nonfoil'
@@ -74,7 +78,9 @@ export function CardTile({ entry }: { entry: CollectionEntry }) {
       accessible
       accessibilityLabel={`${entry.name}, ${entry.quantity} ${entry.quantity === 1 ? 'copy' : 'copies'}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? formatEur(price) : 'no price'}`}
     >
-      <Animated.View style={[styles.cardShadow, premium && styles.premiumGlow, tiltStyle]}>
+      {/* The shadow and glow sit on a layer that never moves: only the card inside tilts,
+          so Android doesn't have to redraw blurred shadows every frame. */}
+      <View style={[styles.cardShadow, premium && styles.premiumGlow]}>
         {tier === 3 && (
           <Animated.View
             pointerEvents="none"
@@ -90,9 +96,13 @@ export function CardTile({ entry }: { entry: CollectionEntry }) {
             ]}
           />
         )}
-        <View style={[styles.card, premium && styles.premiumEdge]}>
-          <Image source={{ uri: entry.image_uri ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
-          {foil && entry.image_uri && <HoloFoil uri={entry.image_uri} />}
+        <Animated.View style={[styles.card, premium && styles.premiumEdge, tiltStyle]}>
+          {/* Foils draw their image in Skia; a second <Image> would download it twice. */}
+          {foil && entry.image_uri ? (
+            <HoloFoil uri={entry.image_uri} tilt={tilt} />
+          ) : (
+            <Image source={{ uri: entry.image_uri ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+          )}
           <Animated.View pointerEvents="none" style={[styles.glare, glareStyle]} />
           {tier > 0 && !reducedMotion && (
             <Animated.View
@@ -119,9 +129,9 @@ export function CardTile({ entry }: { entry: CollectionEntry }) {
               <SymbolView name={{ ios: 'sparkle', android: 'auto_awesome' }} size={11} tintColor={Colors.goldLight} />
             </View>
           )}
-        </View>
-      </Animated.View>
-      <Text style={styles.name} numberOfLines={2}>{entry.name}</Text>
+        </Animated.View>
+      </View>
+      <Text style={styles.name} numberOfLines={1}>{entry.name}</Text>
       <View style={styles.meta}>
         <View style={styles.setRow}>
           <View style={[styles.dot, { backgroundColor: RarityColors[entry.rarity] ?? Colors.textMuted }]} />
@@ -156,13 +166,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(232,192,106,0.8)',
   },
+  // 140% of the card (was 200%): half the area to draw, same visible highlight.
   glare: {
     position: 'absolute',
-    left: '-50%',
-    top: '-50%',
-    width: '200%',
-    height: '200%',
-    experimental_backgroundImage: 'radial-gradient(circle at 50% 35%, rgba(255,255,255,0.28), rgba(255,255,255,0) 35%)',
+    left: '-20%',
+    top: '-20%',
+    width: '140%',
+    height: '140%',
+    experimental_backgroundImage: 'radial-gradient(circle at 50% 39%, rgba(255,255,255,0.28), rgba(255,255,255,0) 50%)',
   },
   shimmer: {
     position: 'absolute',
@@ -211,7 +222,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   name: {
-    minHeight: 32,
     fontSize: 13,
     lineHeight: 16,
     fontFamily: Fonts.bold,

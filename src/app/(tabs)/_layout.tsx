@@ -1,7 +1,7 @@
-import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router/js-tabs';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { NavIcon } from '@/components/nav-icon';
 import { Colors, Fonts } from '@/constants/theme';
 import { getScanMode, pressCapture, useScanMode } from '@/utils/capture-button';
 
@@ -24,7 +24,7 @@ export default function TabLayout() {
         options={{
           title: 'Binder',
           tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'books.vertical', android: 'menu_book' }} size={24} tintColor={color} />
+            <NavIcon kind="binder" color={color} bg={Colors.background} />
           ),
         }}
       />
@@ -33,7 +33,7 @@ export default function TabLayout() {
         options={{
           title: 'Market',
           tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'tag', android: 'sell' }} size={24} tintColor={color} />
+            <NavIcon kind="market" color={color} bg={Colors.background} />
           ),
         }}
       />
@@ -50,7 +50,7 @@ export default function TabLayout() {
               </View>
             ) : (
               <View style={styles.scanButton}>
-                <SymbolView name={{ ios: 'viewfinder', android: 'document_scanner' }} size={26} tintColor={Colors.onGold} />
+                <NavIcon kind="scan" color={Colors.onGold} bg={Colors.gold} size={28} />
               </View>
             ),
           tabBarLabel: ({ focused, color }) => (
@@ -72,7 +72,7 @@ export default function TabLayout() {
         options={{
           title: 'Decks',
           tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'rectangle.stack', android: 'stacks' }} size={24} tintColor={color} />
+            <NavIcon kind="decks" color={color} bg={Colors.background} />
           ),
         }}
       />
@@ -81,7 +81,7 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'gearshape', android: 'settings' }} size={24} tintColor={color} />
+            <NavIcon kind="settings" color={color} bg={Colors.background} />
           ),
         }}
       />

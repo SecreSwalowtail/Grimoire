@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 3;
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
@@ -71,9 +71,36 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 1;
   }
 
-  // if (version === 1) {
+  // Version 2 could end up set without its tables (a half-applied edit during development), so
+  // version 3 creates the deck tables whenever they are missing.
+  if (version === 1 || version === 2) {
+    await db.execAsync(`
+      -- Decks tab. Ids are made by the app (see utils/deck-store.ts); position is the order the
+      -- user sees (creation order, copies right after their originals).
+      CREATE TABLE IF NOT EXISTS deck_folders (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL,                   -- key of FOLDER_COLORS, e.g. 'gold'
+        sort TEXT NOT NULL DEFAULT 'custom' CHECK (sort IN ('custom', 'name', 'value')),
+        pinned INTEGER NOT NULL DEFAULT 0,     -- 0 / 1
+        position INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS decks (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        format TEXT NOT NULL,                  -- one of FORMATS, e.g. 'Modern'
+        folder_id TEXT REFERENCES deck_folders (id) ON DELETE SET NULL,
+        position INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS decks_folder ON decks (folder_id);
+    `);
+    version = 3;
+  }
+
+  // if (version === 3) {
   //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 2;
+  //   version = 4;
   // }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

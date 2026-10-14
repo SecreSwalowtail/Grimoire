@@ -2,7 +2,7 @@ import { Canvas, Fill, Image, Shader, Skia, useImage, type SkSize } from '@shopi
 import { StyleSheet } from 'react-native';
 import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
 
-import { useTilt } from '@/components/card-effects/tilt';
+import type { Tilt } from '@/components/card-effects/tilt';
 
 // Rainbow bands that slide with the phone's tilt, plus a bright spot that follows the light,
 // like the holographic layer of a real foil card. Output is premultiplied (rgb <= alpha).
@@ -22,9 +22,9 @@ half4 main(float2 pos) {
 `)!
 
 // Draws the card image with the holographic layer blended on top (color dodge, as on real foils).
-// Sits over the plain <Image>, which keeps showing until Skia has loaded its copy.
-export function HoloFoil({ uri }: { uri: string }) {
-  const tilt = useTilt()
+// It is the foil card's only image (no <Image> underneath), so the picture is downloaded once.
+// Skia redraws only when the tilt changes; pass FLAT for off-screen cards so they never redraw.
+export function HoloFoil({ uri, tilt }: { uri: string; tilt: Tilt }) {
   const image = useImage(uri)
   const size = useSharedValue<SkSize>({ width: 0, height: 0 })
   const width = useDerivedValue(() => size.get().width)

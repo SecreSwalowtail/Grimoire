@@ -10,12 +10,14 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type ViewToken,
 } from 'react-native';
 import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TiltContext, TiltSensor } from '@/components/card-effects/tilt';
 import { CardTile } from '@/components/card-tile';
+import { ManaSymbol } from '@/components/mana-symbol';
 import { SortMenu, type SortOption } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
 import { entryPrice, getCollection, getOwnedPricesDaysAgo, type CollectionEntry } from '@/db/collection';
@@ -24,14 +26,17 @@ import { formatEur } from '@/utils/format';
 // Cards per row, like a 9-pocket binder page.
 const COLUMNS = 3
 
-// Color filter chips: WUBRG + colorless ('C' = no colors).
+// A card counts as visible as soon as any part of it is on screen.
+const VIEWABILITY = { itemVisiblePercentThreshold: 1 }
+
+// Color filter chips: WUBRG + colorless ('C' = no colors), shown as their mana symbols.
 const COLOR_FILTERS = [
-  { key: 'W', label: 'White', color: '#EFE6CC' },
-  { key: 'U', label: 'Blue', color: '#4A90D0' },
-  { key: 'B', label: 'Black', color: '#2E2633' },
-  { key: 'R', label: 'Red', color: '#D8553A' },
-  { key: 'G', label: 'Green', color: '#4CA36A' },
-  { key: 'C', label: 'Colorless', color: '#B3AB9C' },
+  { key: 'W', label: 'White' },
+  { key: 'U', label: 'Blue' },
+  { key: 'B', label: 'Black' },
+  { key: 'R', label: 'Red' },
+  { key: 'G', label: 'Green' },
+  { key: 'C', label: 'Colorless' },
 ] as const
 type ColorKey = (typeof COLOR_FILTERS)[number]['key']
 
@@ -39,7 +44,10 @@ export default function BinderScreen() {
   const db = useSQLiteContext()
   const isFocused = useIsFocused()
   const reducedMotion = useReducedMotion()
-  const tilt = { x: useSharedValue(0), y: useSharedValue(0) }
+  const tiltX = useSharedValue(0)
+  const tiltY = useSharedValue(0)
+  // One stable object: a new one each render would re-render every card through the context.
+  const [tilt] = useState(() => ({ x: tiltX, y: tiltY }))
   const insets = useSafeAreaInsets()
   const [entries, setEntries] = useState<CollectionEntry[]>([])
   const [weekChange, setWeekChange] = useState<number | null>(null)
@@ -48,6 +56,16 @@ export default function BinderScreen() {
   const [color, setColor] = useState<ColorKey | null>(null)
   const [sort, setSort] = useState<SortOption>('recent')
   const [sortOpen, setSortOpen] = useState(false)
+  const [visibleIds, setVisibleIds] = useState<Set<number>>(() => new Set())
+
+  // Fires only when the set of visible cards changes, not on every scroll frame.
+  // Must keep the same identity: FlatList doesn't allow changing it on the fly.
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<CollectionEntry | null>[] }) => {
+      setVisibleIds(new Set(viewableItems.flatMap((v) => (v.item ? [v.item.id] : []))))
+    },
+    [],
+  )
 
   const load = useCallback(async () => {
     const [collection, weekAgo] = await Promise.all([getCollection(db), getOwnedPricesDaysAgo(db, 7)])
@@ -150,20 +168,15 @@ export default function BinderScreen() {
           return (
             <Pressable
               key={f.key}
-              style={[styles.colorChip, selected && styles.chipActive]}
+              style={styles.colorChip}
               onPress={() => setColor(selected ? null : f.key)}
               accessibilityRole="button"
               accessibilityLabel={f.label}
               accessibilityState={{ selected }}
             >
-              <View
-                style={[
-                  styles.swatch,
-                  { backgroundColor: f.color },
-                  f.key === 'B' && styles.swatchBlack,
-                  f.key === 'C' && styles.swatchColorless,
-                ]}
-              />
+              {/* The mana tile is the whole chip; a gold outline marks the picked color. */}
+              <ManaSymbol symbol={f.key} size={36} />
+              {selected && <View pointerEvents="none" style={styles.colorChipActive} />}
             </Pressable>
           )
         })}
@@ -185,7 +198,15 @@ export default function BinderScreen() {
         data={[...visible, ...Array<null>((COLUMNS - (visible.length % COLUMNS)) % COLUMNS).fill(null)]}
         keyExtractor={(e, i) => (e ? String(e.id) : `spacer-${i}`)}
         numColumns={COLUMNS}
-        renderItem={({ item }) => (item ? <CardTile entry={item} /> : <View style={{ flex: 1 }} />)}
+        renderItem={({ item }) =>
+          item ? <CardTile entry={item} active={visibleIds.has(item.id)} /> : <View style={{ flex: 1 }} />
+        }
+        extraData={visibleIds}
+        // Only on-screen cards follow the tilt (see CardTile's `active`).
+        viewabilityConfig={VIEWABILITY}
+        onViewableItemsChanged={onViewableItemsChanged}
+        // Keep fewer off-screen rows mounted (default is 10 screens each way).
+        windowSize={5}
         ListEmptyComponent={
           !loaded ? null : entries.length === 0 ? (
             <View style={styles.empty}>
@@ -348,29 +369,13 @@ const styles = StyleSheet.create({
   colorChip: {
     width: 36,
     height: 36,
+  },
+  // Round, like the mana symbol under it.
+  colorChipActive: {
+    ...StyleSheet.absoluteFill,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(237,230,214,0.12)',
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swatch: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-  },
-  swatchBlack: {
-    width: 14,
-    height: 14,
-    borderWidth: 1.5,
-    borderColor: '#A592AE',
-  },
-  swatchColorless: {
-    width: 13,
-    height: 13,
-    borderRadius: 2,
-    transform: [{ rotate: '45deg' }],
+    borderWidth: 2,
+    borderColor: Colors.goldLight,
   },
   gridRow: {
     gap: 10,

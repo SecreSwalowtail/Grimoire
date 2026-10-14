@@ -19,9 +19,10 @@ export type ScryfallCard = {
   rarity: string;
   lang: string;
   type_line?: string;
+  mana_cost?: string;
   colors?: string[];
-  image_uris?: { normal?: string };
-  card_faces?: { colors?: string[]; image_uris?: { normal?: string } }[];
+  image_uris?: { normal?: string; small?: string };
+  card_faces?: { colors?: string[]; mana_cost?: string; image_uris?: { normal?: string; small?: string } }[];
   prices: { eur: string | null; eur_foil: string | null; usd: string | null; usd_foil: string | null };
 };
 
@@ -82,9 +83,45 @@ export async function getCardsByIdentifiers(identifiers: CardIdentifier[]) {
   return { found, notFound };
 }
 
+// 'edhrec' = popularity in Commander decks (most played first when ascending).
+export type SearchOrder = 'name' | 'cmc' | 'power' | 'toughness' | 'eur' | 'released' | 'edhrec';
+
+export type SearchOptions = {
+  order: SearchOrder;
+  dir: 'asc' | 'desc';
+  unique: 'cards' | 'prints'; // one row per card, or one per printing
+};
+
+export type SearchResult = { data: ScryfallCard[]; total_cards: number; has_more: boolean };
+
+// First page (up to 175 cards) of a search in Scryfall's syntax: https://scryfall.com/docs/syntax
+// Scryfall answers "no cards" with a 404; that comes back here as an empty result.
+export async function searchCards(q: string, options: SearchOptions): Promise<SearchResult> {
+  const params = { q, ...options };
+  const query = Object.entries(params)
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join('&');
+  try {
+    return await throttled('default', () => request<SearchResult>(`/cards/search?${query}`));
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return { data: [], total_cards: 0, has_more: false };
+    throw e;
+  }
+}
+
 // Double-faced cards keep their image and colors on the faces instead of the card.
 export function cardImage(card: ScryfallCard) {
   return card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null;
+}
+
+// Small image (146 × 204) for list thumbnails.
+export function cardThumb(card: ScryfallCard) {
+  return card.image_uris?.small ?? card.card_faces?.[0]?.image_uris?.small ?? null;
+}
+
+// "{2}{G}{W}". Double-faced cards only have it on the faces: the front's is used.
+export function cardManaCost(card: ScryfallCard) {
+  return card.mana_cost ?? card.card_faces?.[0]?.mana_cost ?? '';
 }
 
 export function cardColors(card: ScryfallCard) {

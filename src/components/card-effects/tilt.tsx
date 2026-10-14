@@ -12,8 +12,9 @@ import {
 // Phone tilt shared by every card on a screen: x/y in -1..1, 0 = how you're currently holding it.
 export type Tilt = { x: SharedValue<number>; y: SharedValue<number> }
 
-// Default when no TiltSensor is running (reduced motion, other screens): cards stay flat.
-const FLAT: Tilt = { x: makeMutable(0), y: makeMutable(0) }
+// Never changes. Used when no TiltSensor is running (reduced motion, other screens), and by
+// off-screen cards: animated styles bound to it never re-run, so those cards cost nothing.
+export const FLAT: Tilt = { x: makeMutable(0), y: makeMutable(0) }
 export const TiltContext = createContext<Tilt>(FLAT)
 export const useTilt = () => useContext(TiltContext)
 
@@ -23,6 +24,9 @@ const SIGN_Y = Platform.OS === 'ios' ? -1 : 1
 const FULL_TILT = 3 // m/s² of gravity change for full tilt (about 18°)
 const RECENTER = 0.015 // how fast "neutral" follows the way you hold the phone (per frame)
 const SMOOTHING = 0.25 // output smoothing, removes sensor jitter
+// Smallest change worth writing (≈0.03° of card tilt). Without it the smoothed value creeps
+// toward its target forever, and every card would re-render its transform on every frame.
+const EPSILON = 0.003
 
 const clamp = (v: number) => {
   'worklet'
@@ -45,10 +49,13 @@ export function TiltSensor({ tilt }: { tilt: Tilt }) {
     const by = baseY.get() ?? gy
     baseX.set(bx + (gx - bx) * RECENTER)
     baseY.set(by + (gy - by) * RECENTER)
+    // Only write when the change is visible: a still phone then costs the cards nothing.
     const x = tilt.x.get()
     const y = tilt.y.get()
-    tilt.x.set(x + (clamp((gx - bx) / FULL_TILT) - x) * SMOOTHING)
-    tilt.y.set(y + (clamp((gy - by) / FULL_TILT) - y) * SMOOTHING)
+    const dx = (clamp((gx - bx) / FULL_TILT) - x) * SMOOTHING
+    const dy = (clamp((gy - by) / FULL_TILT) - y) * SMOOTHING
+    if (Math.abs(dx) > EPSILON) tilt.x.set(x + dx)
+    if (Math.abs(dy) > EPSILON) tilt.y.set(y + dy)
   })
 
   return null

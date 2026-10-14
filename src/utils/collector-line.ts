@@ -16,7 +16,7 @@ export type CollectorLine = {
 }
 
 // Language codes printed on cards -> Scryfall codes.
-const LANGUAGES: Record<string, string> = {
+export const LANGUAGES: Record<string, string> = {
   EN: 'en', ES: 'es', SP: 'es', FR: 'fr', DE: 'de', IT: 'it', PT: 'pt',
   JP: 'ja', JA: 'ja', KO: 'ko', KR: 'ko', RU: 'ru', CS: 'zhs', CT: 'zht', PH: 'ph',
 }

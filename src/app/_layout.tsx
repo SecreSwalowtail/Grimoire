@@ -13,13 +13,27 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { migrateDbIfNeeded } from '@/db/schema';
+import { loadDeckStore } from '@/utils/deck-store';
 
 // Keep the splash screen up until the fonts are ready, so text never flashes in the system font.
 SplashScreen.preventAutoHideAsync();
+
+// The screens render only after this, so the decks are already loaded when Decks opens.
+// If the decks can't be read, the rest of the app still opens (Decks starts empty and doesn't
+// save, so nothing on disk is overwritten).
+async function initDb(db: SQLiteDatabase) {
+  await migrateDbIfNeeded(db)
+  try {
+    await loadDeckStore(db)
+  } catch (error) {
+    console.warn('Loading decks failed', error)
+  }
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -40,9 +54,12 @@ export default function RootLayout() {
   // On a font error, continue with system fonts rather than staying on the splash screen.
   if (!fontsLoaded && !fontError) return null
 
+  // Gesture root for swipeable rows (Decks folder screen).
   return (
-  <SQLiteProvider databaseName='binder.db' onInit={migrateDbIfNeeded}>
-    <Stack screenOptions={{ headerShown: false }} />
-  </SQLiteProvider>
+  <GestureHandlerRootView style={{ flex: 1 }}>
+    <SQLiteProvider databaseName='binder.db' onInit={initDb}>
+      <Stack screenOptions={{ headerShown: false }} />
+    </SQLiteProvider>
+  </GestureHandlerRootView>
   )
 }
