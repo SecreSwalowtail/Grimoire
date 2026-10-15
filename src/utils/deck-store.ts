@@ -268,6 +268,17 @@ export function setCommander(deckId: string, cardId: string, on: boolean) {
   })
 }
 
+// Makes exactly these main-deck cards the deck's commanders (one, or two that can share command).
+export function setCommanders(deckId: string, cardIds: string[]) {
+  const ids = new Set(cardIds.map((id) => cardKey(deckId, id, 'main')))
+  set({
+    ...state,
+    cards: state.cards.map((c) =>
+      c.deckId !== deckId ? c : ids.has(c.id) ? { ...c, commander: true } : c.commander ? { ...c, commander: false } : c,
+    ),
+  })
+}
+
 // The undo puts each deck back where it came from (out of folders if that folder is gone).
 export function moveDecks(ids: string[], folderId: string | null): Undo {
   const from = new Map(state.decks.filter((d) => ids.includes(d.id)).map((d) => [d.id, d.folderId]))

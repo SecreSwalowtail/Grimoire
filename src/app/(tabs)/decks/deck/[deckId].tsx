@@ -24,6 +24,7 @@ import { setGroupBy, useGroupBy } from '@/components/deck/group-prefs';
 import { GroupSheet } from '@/components/deck/group-sheet';
 import { StatsTab } from '@/components/deck/stats-tab';
 import { useDeckLines } from '@/components/deck/use-deck-lines';
+import { canShareCommand } from '@/rules/commander';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { ManaSymbol } from '@/components/mana-symbol';
 import { Colors, Fonts } from '@/constants/theme';
@@ -41,7 +42,7 @@ import {
 import {
   moveDeckCards,
   removeDeckCards,
-  setCommander,
+  setCommanders,
   useDeckStore,
   withAlpha,
   type Board,
@@ -74,7 +75,7 @@ function coverLine(deck: Deck, main: DeckLine[]) {
 // D1–D8 · One deck: its cover card, colors, size and value, then Cards (grouped, filtered, by part
 // of the deck) or Stats. + goes to the Market, where Card detail adds cards to decks; ⋯ opens Deck
 // options (which can import a decklist).
-// Hold a card to edit: it's picked up and selected. Tap cards to select more; holding any selected
+// Hold a card to edit: it's selected (not picked up). Tap cards to select more; holding any selected
 // card then picks up the whole selection (unselected cards don't drag). It can be
 // dropped on the Main deck / Sideboard / Maybe chips, on the commander (the cover card or the
 // Commander group; one card that can lead the deck, anything else turns it red), or dragged down
@@ -102,7 +103,15 @@ export default function DeckScreen() {
 
   const picked = lines.filter((l) => selected.includes(keyOf(l)))
   const commanderFormat = deck != null && hasCommander(deck.format)
-  const commanderOk = commanderFormat && picked.length === 1 && canBeCommander(picked[0]) && !picked[0].commander
+  // The commander slot takes one card that can lead the deck, or one that can share command with
+  // the commander (a partner, a Background for "Choose a Background"…). A third never fits.
+  const commanders = lines.filter((l) => l.commander)
+  const partnerOf = (l: DeckLine) => commanders.find((c) => c.cardId !== l.cardId && canShareCommand(c, l))
+  const commanderOk =
+    commanderFormat &&
+    picked.length === 1 &&
+    !picked[0].commander &&
+    (canBeCommander(picked[0]) || partnerOf(picked[0]) != null)
   const scrollRef = useAnimatedRef<Animated.ScrollView>()
   const scrollY = useSharedValue(0)
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -138,16 +147,17 @@ export default function DeckScreen() {
     }, [editing, setEditing, setSelected, setUndos]),
   )
 
-  // Picking a card up: outside edit mode it starts editing with that card selected; while editing
-  // only selected cards can be picked up, and they bring the rest of the selection.
-  const onDragStart = (line: DeckLine) => {
+  // Holding a card outside edit mode starts editing with it selected (it isn't picked up). While
+  // editing, only selected cards can be picked up, and they bring the rest of the selection.
+  const startEditing = (line: DeckLine) => {
+    Keyboard.dismiss()
+    setEditing(true)
+    setSelected([keyOf(line)])
+  }
+  const onDragStart = () => {
     // The search keyboard would cover the trash and stay up through the drag.
     Keyboard.dismiss()
     setDragging(true)
-    if (!editing) {
-      setEditing(true)
-      setSelected([keyOf(line)])
-    }
   }
   const onDrop = (target: DropTarget | null) => {
     setDragging(false)
@@ -159,9 +169,11 @@ export default function DeckScreen() {
     } else if (target === 'commander' || target === 'commander-group') {
       if (!commanderOk) return
       const line = picked[0]
-      // Moving it into the main deck (if needed) restores the deck as it was, commander mark included.
+      // Moving it into the main deck (if needed) restores the deck as it was, commander marks included.
       change = moveDeckCards(deck.id, line.board === 'main' ? [] : keys, 'main')
-      setCommander(deck.id, line.cardId, true)
+      // Next to a commander it can share command with; otherwise it takes over alone.
+      const partner = partnerOf(line)
+      setCommanders(deck.id, partner ? [partner.cardId, line.cardId] : [line.cardId])
     } else {
       if (target === board) return
       change = moveDeckCards(deck.id, keys, target)
@@ -169,8 +181,9 @@ export default function DeckScreen() {
     setUndos([...undos, change])
     setSelected([])
   }
+  // Only selected cards drag, and only in edit mode (holding outside it is the row's long press).
   const gestureFor = (line: DeckLine) =>
-    dragGesture(drag, line, onDragStart, onDrop, topZone).enabled(!editing || selected.includes(keyOf(line)))
+    dragGesture(drag, line, onDragStart, onDrop, topZone).enabled(editing && selected.includes(keyOf(line)))
 
   if (!deck) return <View style={styles.root}>{deckSheets.sheets}</View>
 
@@ -252,7 +265,7 @@ export default function DeckScreen() {
             </Pressable>
             </DropZone>
           ) : (
-            <View style={[styles.cover, styles.coverCard, styles.coverEmpty]}>
+            <View style={[styles.cover, styles.coverEmpty]}>
               <SymbolView name={{ ios: 'rectangle.stack', android: 'style' }} size={26} tintColor={Colors.textMuted} />
             </View>
           )}
@@ -312,6 +325,7 @@ export default function DeckScreen() {
               setSelected(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key])
             }}
             gestureFor={gestureFor}
+            onHold={startEditing}
             drag={drag}
           />
         ) : (
@@ -426,7 +440,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
   },
+  // No cards yet: a blank card in the cover's place.
   coverEmpty: {
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.2)',
+    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

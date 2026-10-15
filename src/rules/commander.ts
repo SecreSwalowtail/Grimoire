@@ -96,3 +96,23 @@ export function commanderStatus(card: ScryfallCard): CommanderStatus {
     text: `Only legendary creatures (and cards that say so) can lead a Commander deck. ${fits}`,
   }
 }
+
+// What deciding a commander pair needs to know about a card.
+export type PairCard = { name: string; typeLine: string; text: string; keywords: string[] }
+
+const has = (c: PairCard, keyword: string) => c.keywords.some((k) => k.toLowerCase() === keyword)
+const frontName = (c: PairCard) => c.name.split(' // ')[0]
+const isBackground = (c: PairCard) => /\bLegendary\b/.test(c.typeLine) && /\bBackground\b/.test(c.typeLine)
+
+// Whether two cards can share command (CR 702.124 and the like): both with partner, partner with
+// each other, both friends forever, a Doctor's companion and a Doctor, or a "Choose a Background"
+// commander and a Background. Anything else: one commander only.
+export function canShareCommand(a: PairCard, b: PairCard) {
+  const pair = (x: PairCard, y: PairCard) =>
+    (has(x, 'partner') && has(y, 'partner')) ||
+    (has(x, 'partner with') && x.text.includes(`Partner with ${frontName(y)}`)) ||
+    (has(x, 'friends forever') && has(y, 'friends forever')) ||
+    (has(x, "doctor's companion") && /\bTime Lord Doctor\b/.test(y.typeLine)) ||
+    (has(x, 'choose a background') && isBackground(y))
+  return pair(a, b) || pair(b, a)
+}

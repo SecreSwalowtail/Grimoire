@@ -47,6 +47,7 @@ export function CardsTab({
   selected,
   onToggle,
   gestureFor,
+  onHold,
   drag,
 }: {
   commanderFormat: boolean
@@ -62,6 +63,8 @@ export function CardsTab({
   selected: string[]
   onToggle: (line: DeckLine) => void
   gestureFor: (line: DeckLine) => GestureType
+  // Holding a card outside edit mode: start editing with it selected.
+  onHold: (line: DeckLine) => void
   drag: CardDrag
 }) {
   const [query, setQuery] = useState('')
@@ -76,7 +79,10 @@ export function CardsTab({
   const groupLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)!
   const noCommander = commanderFormat && board === 'main' && inBoard.length > 0 && !lines.some((l) => l.commander)
   // While editing a Commander deck without one, an empty slot to drop it in.
-  const emptySlot = editing && commanderFormat && !lines.some((l) => l.commander)
+  // While editing a Commander deck: the commander slot, always at the top whichever part of the
+  // deck is on show, with the commander(s) in it. The one place a new commander is dropped.
+  const commanders = lines.filter((l) => l.commander)
+  const slot = editing && commanderFormat
 
   return (
     <View>
@@ -157,15 +163,25 @@ export function CardsTab({
         </View>
       )}
 
-      {emptySlot && (
+      {slot && (
         <DropZone drag={drag} id="commander-group" style={styles.slotZone}>
-          <View style={styles.slot} accessible accessibilityLabel="Commander slot, empty. Drag a legendary creature here.">
+          <View
+            style={[styles.slot, commanders.length > 0 && styles.slotFilled]}
+            accessible
+            accessibilityLabel={
+              commanders.length
+                ? `Commander slot: ${commanders.map((c) => c.name).join(' and ')}. Drag a card here to change it.`
+                : 'Commander slot, empty. Drag a legendary creature here.'
+            }
+          >
             <View style={styles.slotIcon}>
               <PathIcon d={CROWN} color={Colors.goldLight} size={18} />
             </View>
             <View style={styles.slotText}>
-              <Text style={styles.slotTitle}>Commander</Text>
-              <Text style={styles.slotHint}>Drag a legendary creature here</Text>
+              <Text style={styles.slotTitle}>{commanders.length > 1 ? 'Commanders' : 'Commander'}</Text>
+              <Text style={commanders.length ? styles.slotName : styles.slotHint} numberOfLines={2}>
+                {commanders.length ? commanders.map((c) => c.name).join(' & ') : 'Drag a legendary creature here'}
+              </Text>
             </View>
           </View>
         </DropZone>
@@ -183,8 +199,8 @@ export function CardsTab({
         <View style={styles.groups}>
           {groups.map((g) => {
             const open = !closed.includes(g.key)
-            const head = (
-              <View style={styles.group}>
+            return (
+              <View key={g.key} style={styles.group}>
                 <Pressable
                   style={styles.groupHead}
                   onPress={() => setClosed(open ? [...closed, g.key] : closed.filter((k) => k !== g.key))}
@@ -214,6 +230,10 @@ export function CardsTab({
                       <Pressable
                         style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
                         onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId } }))}
+                        // A long press replaces the tap, so letting go doesn't open (or deselect) the card. It
+                        // stays set in edit mode: removed mid-press, letting go would count as a tap.
+                        onLongPress={() => !editing && onHold(l)}
+                        delayLongPress={300}
                         accessibilityRole={editing ? 'checkbox' : 'button'}
                         accessibilityState={editing ? { checked: on } : undefined}
                         accessibilityHint={editing ? undefined : 'Hold to select and drag'}
@@ -233,14 +253,6 @@ export function CardsTab({
                     )
                   })}
               </View>
-            )
-            // The Commander group takes a new commander too.
-            return g.head.kind === 'commander' ? (
-              <DropZone key={g.key} drag={drag} id="commander-group">
-                {head}
-              </DropZone>
-            ) : (
-              <View key={g.key}>{head}</View>
             )
           })}
         </View>
@@ -479,6 +491,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  slotFilled: {
+    borderStyle: 'solid',
+    borderColor: 'rgba(212,166,74,0.6)',
+    backgroundColor: 'rgba(212,166,74,0.10)',
+  },
+  slotName: {
+    fontSize: 13,
+    fontFamily: Fonts.bold,
+    color: Colors.goldLight,
   },
   slotIcon: {
     width: 28,

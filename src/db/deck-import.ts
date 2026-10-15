@@ -4,6 +4,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { upsertCard } from '@/db/cards';
 import { getCardsByIdentifiers, type CardIdentifier, type ScryfallCard } from '@/db/scryfall';
+import { commanderStatus } from '@/rules/commander';
 import { addDeckCards, cardInfoOf, type Board } from '@/utils/deck-store';
 
 // Decklists exported as text. Manabox writes "// SECTION" headers, then one "N Card Name" line per
@@ -35,7 +36,11 @@ export function parseDeckList(text: string) {
   let commander = false
   text.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.trim()
-    if (!line) return
+    // A blank line ends the commander section (Manabox lists the commander, a blank line, then the deck).
+    if (!line) {
+      commander = false
+      return
+    }
     const section = /^(?:\/\/\s*)?([A-Za-z ]+?):?$/.exec(line)
     if (line.startsWith('//') || (section && !/^\d/.test(line))) {
       const name = (section?.[1] ?? line.replace(/^\/\/\s*/, '')).trim().toLowerCase()
@@ -103,7 +108,9 @@ export async function importDeckList(db: SQLiteDatabase, deckId: string): Promis
   })
   let copies = 0
   for (const { row, card } of matches) {
-    if (addDeckCards(deckId, card.id, cardInfoOf(card), row.board, row.quantity, row.commander)) copies += row.quantity
+    // Only a card that can lead (or a Background) is marked, whatever the file says.
+    const leads = row.commander && commanderStatus(card).tone !== 'no'
+    if (addDeckCards(deckId, card.id, cardInfoOf(card), row.board, row.quantity, leads)) copies += row.quantity
   }
   return { canceled: false, fileName: asset.name, cards: new Set(matches.map((m) => m.card.id)).size, copies, failed }
 }

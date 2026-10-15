@@ -38,6 +38,7 @@ export type DeckLine = {
   setName: string | null
   produced: string[]
   text: string
+  keywords: string[]
   // Copies you own of this card (any printing), across binders.
   owned: number
   commander: boolean
@@ -115,6 +116,7 @@ export function lineFrom(
     setName: card?.set_name ?? null,
     produced: card?.produced_mana ?? [],
     text: card?.oracle_text ?? (card?.card_faces ?? []).map((f) => f.oracle_text ?? '').join('\n'),
+    keywords: card?.keywords ?? [],
     owned,
     commander,
   }
