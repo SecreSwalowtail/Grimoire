@@ -18,7 +18,7 @@ import {
 // Formats offered when creating a deck (Deck options adds Legacy).
 const NEW_FORMATS: DeckFormat[] = ['Standard', 'Pioneer', 'Modern', 'Pauper', 'Commander', 'Casual']
 
-type Start = 'empty' | 'paste' | 'scan'
+export type Start = 'empty' | 'paste' | 'scan'
 const STARTS: { value: Start; label: string; icon: SymbolViewProps['name'] }[] = [
   { value: 'empty', label: 'Empty', icon: { ios: 'plus', android: 'add' } },
   { value: 'paste', label: 'Paste list', icon: { ios: 'doc.on.clipboard', android: 'content_paste' } },
@@ -124,25 +124,7 @@ export function NewSheet({
             </View>
 
             <SectionLabel style={styles.label}>Start from</SectionLabel>
-            <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Start from">
-              {STARTS.map((s) => {
-                const selected = s.value === start
-                return (
-                  <Pressable
-                    key={s.value}
-                    style={[styles.start, selected && styles.selected]}
-                    onPress={() => setStart(s.value)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
-                  >
-                    <View style={[styles.startIcon, selected && styles.startIconSelected]}>
-                      <SymbolView name={s.icon} size={18} tintColor={selected ? Colors.onGold : '#CFC7B4'} />
-                    </View>
-                    <Text style={styles.startLabel}>{s.label}</Text>
-                  </Pressable>
-                )
-              })}
-            </View>
+            <StartOptions value={start} onChange={setStart} />
 
             <SectionLabel style={styles.label}>Put in folder</SectionLabel>
             <View style={styles.places} accessibilityRole="radiogroup" accessibilityLabel="Put in folder">
@@ -193,6 +175,31 @@ export function NewSheet({
       </ScrollView>
       <PrimaryButton label={cta} onPress={create} />
     </Sheet>
+  )
+}
+
+// "Start from": Empty / Paste list / Scan cards, as three tiles (New deck and New binder).
+export function StartOptions({ value, onChange }: { value: Start; onChange: (value: Start) => void }) {
+  return (
+    <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Start from">
+      {STARTS.map((s) => {
+        const selected = s.value === value
+        return (
+          <Pressable
+            key={s.value}
+            style={[styles.start, selected && styles.selected]}
+            onPress={() => onChange(s.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selected }}
+          >
+            <View style={[styles.startIcon, selected && styles.startIconSelected]}>
+              <SymbolView name={s.icon} size={18} tintColor={selected ? Colors.onGold : '#CFC7B4'} />
+            </View>
+            <Text style={styles.startLabel}>{s.label}</Text>
+          </Pressable>
+        )
+      })}
+    </View>
   )
 }
 

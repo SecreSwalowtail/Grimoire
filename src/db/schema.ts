@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 6;
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
@@ -11,7 +11,10 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
 
   const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let version = result?.user_version ?? 0;
-  if (version >= DATABASE_VERSION) return;
+  // A development build briefly had version 6 without its step, so version 6 also gets the binders
+  // whenever their table is missing.
+  const hasBinders = await db.getFirstAsync("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'binders'");
+  if (version >= DATABASE_VERSION && hasBinders) return;
 
   if (version === 0) {
     await db.execAsync(`
@@ -130,9 +133,48 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 5;
   }
 
-  // if (version === 5) {
+  if (version === 5 || (version === 6 && !hasBinders)) {
+    // SQLite can't change a UNIQUE constraint in place, so the collection table is rebuilt: the same
+    // printing can now be owned in several binders. Everything owned so far goes into the first
+    // binder. One transaction, so a failure leaves the old table as it was.
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(`
+        -- Binder tab. Like deck folders: ids made by the app, position is the user's order.
+        CREATE TABLE binders (
+          id TEXT PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          color TEXT NOT NULL,                 -- "#RRGGBB", or a BINDER_PRESETS name, e.g. 'gold'
+          position INTEGER NOT NULL
+        );
+        INSERT INTO binders (id, name, color, position) VALUES ('default', 'My binder', 'gold', 0);
+
+        CREATE TABLE collection_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          binder_id TEXT NOT NULL DEFAULT 'default' REFERENCES binders (id),
+          card_id TEXT NOT NULL REFERENCES cards (id),
+          quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+          finish TEXT NOT NULL DEFAULT 'nonfoil' CHECK (finish IN ('nonfoil', 'foil', 'etched')),
+          condition TEXT NOT NULL DEFAULT 'NM' CHECK (condition IN ('NM', 'LP', 'MP', 'HP', 'DMG')),
+          language TEXT NOT NULL DEFAULT 'en',
+          added_at INTEGER NOT NULL,
+          purchase_price REAL,
+          for_trade INTEGER NOT NULL DEFAULT 0,
+          UNIQUE (binder_id, card_id, finish, condition, language)
+        );
+        INSERT INTO collection_new (id, card_id, quantity, finish, condition, language, added_at, purchase_price, for_trade)
+          SELECT id, card_id, quantity, finish, condition, language, added_at, purchase_price, for_trade FROM collection;
+        DROP TABLE collection;
+        ALTER TABLE collection_new RENAME TO collection;
+        CREATE INDEX collection_card ON collection (card_id);
+        CREATE INDEX collection_binder ON collection (binder_id);
+      `);
+    });
+    version = 6;
+  }
+
+  // if (version === 6) {
   //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 6;
+  //   version = 7;
   // }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

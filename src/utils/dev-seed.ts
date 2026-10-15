@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite'
 
+import { BINDER_PRESETS, FIRST_BINDER_SQL } from '@/db/binders'
 import { upsertCard } from '@/db/cards'
 import { cardImage, searchCards, type ScryfallCard } from '@/db/scryfall'
 import { collectionChanged } from '@/db/version'
@@ -16,8 +17,8 @@ import {
   type FolderColor,
 } from '@/utils/deck-store'
 
-// Test data for the performance pass (Settings → Developer tools): a binder of ~2,000 real cards
-// from Scryfall (about 1 in 5 foil, 30 days of price history) and 50 decks of 100-200 cards in
+// Test data for the performance pass (Settings → Developer tools): ~2,000 real cards spread over
+// your first binder and 3 test binders, from Scryfall (about 1 in 5 foil, 30 days of price history) and 50 decks of 100-200 cards in
 // 5 folders. Everything added is tracked in the `dev_seed` table (decks by their "seed-" ids),
 // so seeding twice is caught. Developer tools → Clear database erases everything (yours too).
 
@@ -26,6 +27,11 @@ const DECKS = 50
 const FOLDERS = 5
 const HISTORY_DAYS = 30
 const PREFIX = 'seed-'
+const BINDERS = [
+  { name: 'Trade Binder', color: BINDER_PRESETS.oxblood.hex },
+  { name: 'Commander Pool', color: BINDER_PRESETS.plum.hex },
+  { name: 'Bulk Rares', color: BINDER_PRESETS.slate.hex },
+]
 
 export type SeedProgress = (text: string) => void
 
@@ -58,7 +64,15 @@ export async function seedTestData(db: SQLiteDatabase, progress: SeedProgress) {
 
   // 2. Into the binder. ON CONFLICT DO NOTHING: a copy you already own is left alone (and not
   // recorded, so removing test data never touches it).
+  const first = await db.getFirstAsync<{ id: string }>(`SELECT ${FIRST_BINDER_SQL} AS id`)
+  const binderIds = [first?.id ?? 'default', ...BINDERS.map((_, i) => `${PREFIX}binder-${i}`)]
   await db.withTransactionAsync(async () => {
+    for (const [i, b] of BINDERS.entries()) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO binders (id, name, color, position) VALUES (?, ?, ?, (SELECT MAX(position) + 1 FROM binders))',
+        binderIds[i + 1], b.name, b.color,
+      )
+    }
     for (const [i, card] of seeded.entries()) {
       if (i % 100 === 0) progress(`Adding to your binder… ${i} / ${seeded.length}`)
       await upsertCard(db, card)
@@ -66,9 +80,10 @@ export async function seedTestData(db: SQLiteDatabase, progress: SeedProgress) {
       const foil = finishes.includes('foil') && (!finishes.includes('nonfoil') || Math.random() < 0.2)
       const finish = foil ? 'foil' : finishes.includes('nonfoil') ? 'nonfoil' : finishes[0]
       const result = await db.runAsync(
-        `INSERT INTO collection (card_id, quantity, finish, condition, language, added_at)
-         VALUES (?, ?, ?, ?, 'en', ?)
-         ON CONFLICT (card_id, finish, condition, language) DO NOTHING`,
+        `INSERT INTO collection (binder_id, card_id, quantity, finish, condition, language, added_at)
+         VALUES (?, ?, ?, ?, ?, 'en', ?)
+         ON CONFLICT (binder_id, card_id, finish, condition, language) DO NOTHING`,
+        pick(binderIds),
         card.id,
         1 + random(3),
         finish,
@@ -148,7 +163,7 @@ export async function seedTestData(db: SQLiteDatabase, progress: SeedProgress) {
   progress(`Done: ${seeded.length} cards, ${DECKS} decks with ${deckCards.length} card rows.`)
 }
 
-// Erases everything the app has saved: binder, decks and folders, saved cards, price history and
+// Erases everything the app has saved: binders (back to one empty "My binder"), decks and folders, saved cards, price history and
 // test data. Children go before the tables they point at, so the foreign keys hold. VACUUM then
 // gives the space back.
 export async function clearDatabase(db: SQLiteDatabase) {
@@ -157,6 +172,9 @@ export async function clearDatabase(db: SQLiteDatabase) {
     for (const table of ['deck_cards', 'decks', 'deck_folders', 'collection', 'wishlist', 'price_history', 'cards', 'dev_seed']) {
       await db.runAsync(`DELETE FROM ${table}`)
     }
+    // New copies always need somewhere to go.
+    await db.runAsync('DELETE FROM binders')
+    await db.runAsync("INSERT INTO binders (id, name, color, position) VALUES ('default', 'My binder', 'gold', 0)")
   })
   await db.execAsync('VACUUM')
   resetDeckStore()

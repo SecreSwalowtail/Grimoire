@@ -3,26 +3,28 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
 
-export type SortOption = 'recent' | 'price' | 'name'
+export type CardSort = 'recent' | 'price' | 'name'
 
-const OPTIONS: { value: SortOption; label: string }[] = [
+export const CARD_SORTS: { value: CardSort; label: string }[] = [
   { value: 'recent', label: 'Recently added' },
   { value: 'price', label: 'Price: high to low' },
   { value: 'name', label: 'Name: A to Z' },
 ]
 
-// Small dropdown under the Binder header's sort button.
-export function SortMenu({
+// Small dropdown under a Binder header's sort button.
+export function SortMenu<T extends string>({
   visible,
   top,
+  options,
   value,
   onSelect,
   onClose,
 }: {
   visible: boolean
   top: number
-  value: SortOption
-  onSelect: (value: SortOption) => void
+  options: { value: T; label: string }[]
+  value: T
+  onSelect: (value: T) => void
   onClose: () => void
 }) {
   return (
@@ -30,7 +32,7 @@ export function SortMenu({
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close sort menu" />
       <View style={[styles.menu, { top }]} accessibilityRole="menu">
         <Text style={styles.heading}>Sort by</Text>
-        {OPTIONS.map((option) => {
+        {options.map((option) => {
           const selected = option.value === value
           return (
             <Pressable

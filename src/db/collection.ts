@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { FIRST_BINDER_SQL } from '@/db/binders';
 import { upsertCard } from '@/db/cards';
 import type { ScryfallCard } from '@/db/scryfall';
 import { collectionChanged } from '@/db/version';
@@ -8,6 +9,8 @@ export type Finish = 'nonfoil' | 'foil' | 'etched';
 export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG';
 
 export type CopyOptions = {
+  // Binder the copies go in; the first binder (in the user's order) when not given.
+  binderId?: string;
   quantity?: number;
   finish?: Finish;
   condition?: Condition;
@@ -19,6 +22,7 @@ export type CopyOptions = {
 
 export type CollectionEntry = {
   id: number;
+  binder_id: string;
   card_id: string;
   quantity: number;
   finish: Finish;
@@ -40,19 +44,20 @@ export type CollectionEntry = {
   price_usd_foil: number | null;
 };
 
-// Add copies of a card. If the same card + finish + condition + language is already owned,
+// Add copies of a card. If the same card + finish + condition + language is already in the binder,
 // the quantity is increased instead (keeping its price paid if it has one). Saves/refreshes the
 // card data too.
 // Not wrapped in a transaction: call it inside db.withTransactionAsync() when adding many.
 export async function addToCollection(db: SQLiteDatabase, card: ScryfallCard, options: CopyOptions = {}) {
   await upsertCard(db, card);
   const result = await db.runAsync(
-    `INSERT INTO collection (card_id, quantity, finish, condition, language, purchase_price, for_trade, added_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (card_id, finish, condition, language) DO UPDATE SET
+    `INSERT INTO collection (binder_id, card_id, quantity, finish, condition, language, purchase_price, for_trade, added_at)
+     VALUES (COALESCE(?, ${FIRST_BINDER_SQL}), ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (binder_id, card_id, finish, condition, language) DO UPDATE SET
        quantity = quantity + excluded.quantity,
        purchase_price = COALESCE(purchase_price, excluded.purchase_price),
        for_trade = MAX(for_trade, excluded.for_trade)`,
+    options.binderId ?? null,
     card.id,
     options.quantity ?? 1,
     options.finish ?? 'nonfoil',
@@ -69,8 +74,8 @@ export async function addToCollection(db: SQLiteDatabase, card: ScryfallCard, op
 // Undo an addToCollection(): take one copy back off, removing the entry if it was the last.
 // Pass the same card id and options that were added.
 export async function removeOneCopy(db: SQLiteDatabase, cardId: string, options: CopyOptions = {}) {
-  const key = [cardId, options.finish ?? 'nonfoil', options.condition ?? 'NM', options.language ?? 'en']
-  const where = 'card_id = ? AND finish = ? AND condition = ? AND language = ?'
+  const key = [options.binderId ?? null, cardId, options.finish ?? 'nonfoil', options.condition ?? 'NM', options.language ?? 'en']
+  const where = `binder_id = COALESCE(?, ${FIRST_BINDER_SQL}) AND card_id = ? AND finish = ? AND condition = ? AND language = ?`
   await db.withTransactionAsync(async () => {
     await db.runAsync(`DELETE FROM collection WHERE ${where} AND quantity <= 1`, ...key)
     await db.runAsync(`UPDATE collection SET quantity = quantity - 1 WHERE ${where} AND quantity > 1`, ...key)
@@ -143,15 +148,19 @@ export type EntryChanges = {
   forTrade: boolean;
 };
 
-// Edit a copy. If it now matches another entry of the same printing (same finish, condition and
-// language), the two become one: quantities add up, the other's price paid is kept if this has none.
+// Edit a copy. If it now matches another entry of the same printing in the same binder (same finish,
+// condition and language), the two become one: quantities add up, the other's price paid is kept if this has none.
 export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: EntryChanges) {
   await db.withTransactionAsync(async () => {
-    const entry = await db.getFirstAsync<{ card_id: string }>('SELECT card_id FROM collection WHERE id = ?', entryId);
+    const entry = await db.getFirstAsync<{ binder_id: string; card_id: string }>(
+      'SELECT binder_id, card_id FROM collection WHERE id = ?',
+      entryId,
+    );
     if (!entry) return;
     const twin = await db.getFirstAsync<{ id: number; quantity: number; purchase_price: number | null }>(
-      'SELECT id, quantity, purchase_price FROM collection WHERE card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?',
-      entry.card_id, changes.finish, changes.condition, changes.language, entryId,
+      `SELECT id, quantity, purchase_price FROM collection
+       WHERE binder_id = ? AND card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?`,
+      entry.binder_id, entry.card_id, changes.finish, changes.condition, changes.language, entryId,
     );
     if (twin) {
       await db.runAsync('DELETE FROM collection WHERE id = ?', entryId);

@@ -20,7 +20,7 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="(binder)"
         options={{
           title: 'Binder',
           tabBarIcon: ({ color }) => (

@@ -122,12 +122,22 @@ export function NameField({
   )
 }
 
-// The six folder colors as round swatches, the picked one ringed in its own color.
-export function ColorPicker({ value, onChange }: { value: FolderColor; onChange: (value: FolderColor) => void }) {
+// The six folder colors (or the binder colors) as round swatches, the picked one ringed in its own color.
+export function ColorPicker<K extends string = FolderColor>({
+  value,
+  onChange,
+  colors = FOLDER_COLORS as Record<K, { label: string; hex: string }>,
+  label: groupLabel = 'Folder color',
+}: {
+  value: K
+  onChange: (value: K) => void
+  colors?: Record<K, { label: string; hex: string }>
+  label?: string
+}) {
   return (
-    <View style={styles.colors} accessibilityRole="radiogroup" accessibilityLabel="Folder color">
-      {(Object.keys(FOLDER_COLORS) as FolderColor[]).map((key) => {
-        const { label, hex } = FOLDER_COLORS[key]
+    <View style={styles.colors} accessibilityRole="radiogroup" accessibilityLabel={groupLabel}>
+      {(Object.keys(colors) as K[]).map((key) => {
+        const { label, hex } = colors[key]
         const selected = key === value
         return (
           <Pressable

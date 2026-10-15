@@ -23,6 +23,7 @@ import { cardImage, getCardBySetNumber, type ScryfallCard } from '@/db/scryfall'
 import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button';
 import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan';
 import { parseCollectorLine } from '@/utils/collector-line';
+import { getScanBinder } from '@/utils/scan-binder';
 
 // Where the set code + collector number sit on a card, as fractions of the card. Tune these.
 const STRIP = { x: 0, y: 0.88, width: 0.6, height: 0.12 }
@@ -54,7 +55,7 @@ export default function ScanScreen() {
   const [processing, setProcessing] = useState(false)
   const [toast, setToast] = useState<ScanToastData | null>(null)
   // What the last successful scan added, so Undo can take it back off.
-  const [lastAdded, setLastAdded] = useState<{ cardId: string; language: string } | null>(null)
+  const [lastAdded, setLastAdded] = useState<{ cardId: string; language: string; binderId: string | null } | null>(null)
   const busy = useRef(false)
   const lastRect = useRef<NormalizedRect | null>(null)
 
@@ -131,8 +132,9 @@ export default function ScanScreen() {
         setToast({ ok: false, title: 'Card not found', message: `No card for ${line.set.toUpperCase()} #${line.collectorNumbers[0]}.` })
         return
       }
-      await addToCollection(db, found, { language: line.language })
-      setLastAdded({ cardId: found.id, language: line.language })
+      const binderId = getScanBinder()
+      await addToCollection(db, found, { language: line.language, binderId: binderId ?? undefined })
+      setLastAdded({ cardId: found.id, language: line.language, binderId })
       setToast({
         ok: true,
         name: found.name,
@@ -154,7 +156,7 @@ export default function ScanScreen() {
   const undo = async () => {
     if (!lastAdded) return
     try {
-      await removeOneCopy(db, lastAdded.cardId, { language: lastAdded.language })
+      await removeOneCopy(db, lastAdded.cardId, { language: lastAdded.language, binderId: lastAdded.binderId ?? undefined })
       setLastAdded(null)
       setToast(null)
     } catch (e) {
