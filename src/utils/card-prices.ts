@@ -56,3 +56,7 @@ export function priceChange(history: PricePoint[], days: number, finish: Finish,
   if (span < 1 || first.value === 0) return null
   return { diff: last.value - first.value, percent: ((last.value - first.value) / first.value) * 100, days: span }
 }
+
+// Whether Card detail shows prices over time (chart, changes). Off until there is a proper source
+// for past prices; the daily snapshots the app saves are still kept.
+export const SHOW_HISTORY = false

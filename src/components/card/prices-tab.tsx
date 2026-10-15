@@ -12,6 +12,7 @@ import {
   priceOf,
   pricesWithin,
   type PriceSource,
+  SHOW_HISTORY,
 } from '@/utils/card-prices';
 import { formatEur } from '@/utils/format';
 
@@ -51,7 +52,8 @@ export function PricesTab({
   const fmt = (v: number) => formatPrice(v, source)
 
   const now = priceOf(card, shownFinish, source)
-  const points = pricesWithin(history, current.days, shownFinish, source)
+  // Past prices are off for now (a source for them is still to be chosen): the chart stays empty.
+  const points = SHOW_HISTORY ? pricesWithin(history, current.days, shownFinish, source) : []
   const values = points.map((p) => p.value)
   const enough = values.length >= 2
   const first = values[0]

@@ -20,7 +20,7 @@ import { identityName, sortColors } from '@/rules/colors';
 import { commanderStatus } from '@/rules/commander';
 import { isPlayable, PAPER_FORMATS } from '@/rules/formats';
 import { FLIPPABLE } from '@/rules/printings';
-import { mainFinish, priceChange, priceOf } from '@/utils/card-prices';
+import { mainFinish, priceChange, priceOf, SHOW_HISTORY } from '@/utils/card-prices';
 import { withAlpha } from '@/utils/deck-store';
 import { capitalize, formatEur } from '@/utils/format';
 
@@ -197,7 +197,8 @@ export function OverviewTab({
 }) {
   const finish = mainFinish(card)
   const price = priceOf(card, finish, 'cardmarket')
-  const change = priceChange(history, 30, finish, 'cardmarket')
+  // Past prices are off for now, so no change over time either.
+  const change = SHOW_HISTORY ? priceChange(history, 30, finish, 'cardmarket') : null
   const owned = copies.reduce((n, c) => n + c.quantity, 0)
   const short = Math.max(copiesNeeded - owned, 0)
   const faces: (CardFace | ScryfallCard)[] = card.card_faces?.length ? card.card_faces : [card]
