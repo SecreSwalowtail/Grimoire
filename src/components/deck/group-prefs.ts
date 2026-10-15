@@ -18,7 +18,6 @@ const read = (key: string) => {
   }
 }
 
-let version = 0
 const listeners = new Set<() => void>()
 
 export function getGroupBy(deckId: string): GroupBy {
@@ -37,17 +36,17 @@ export function setGroupBy(deckId: string, by: GroupBy, everyDeck: boolean) {
   } catch (e) {
     console.warn('Failed to save grouping', e)
   }
-  version += 1
   listeners.forEach((l) => l())
 }
 
+// The grouping itself is the snapshot: reading it after the hook would be cached by the React
+// Compiler (same deck, same result), and the screen kept showing the old grouping.
 export function useGroupBy(deckId: string) {
-  useSyncExternalStore(
+  return useSyncExternalStore(
     (l) => {
       listeners.add(l)
       return () => listeners.delete(l)
     },
-    () => version,
+    () => getGroupBy(deckId),
   )
-  return getGroupBy(deckId)
 }

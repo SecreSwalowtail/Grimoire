@@ -75,6 +75,8 @@ export function CardsTab({
   const nFilters = activeFilters(filters)
   const groupLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)!
   const noCommander = commanderFormat && board === 'main' && inBoard.length > 0 && !lines.some((l) => l.commander)
+  // While editing a Commander deck without one, an empty slot to drop it in.
+  const emptySlot = editing && commanderFormat && !lines.some((l) => l.commander)
 
   return (
     <View>
@@ -153,6 +155,20 @@ export function CardsTab({
           <PathIcon d={CROWN} color={Colors.goldLight} size={16} />
           <Text style={styles.hintText}>Hold a legendary creature and drag it onto the commander slot.</Text>
         </View>
+      )}
+
+      {emptySlot && (
+        <DropZone drag={drag} id="commander-group" style={styles.slotZone}>
+          <View style={styles.slot} accessible accessibilityLabel="Commander slot, empty. Drag a legendary creature here.">
+            <View style={styles.slotIcon}>
+              <PathIcon d={CROWN} color={Colors.goldLight} size={18} />
+            </View>
+            <View style={styles.slotText}>
+              <Text style={styles.slotTitle}>Commander</Text>
+              <Text style={styles.slotHint}>Drag a legendary creature here</Text>
+            </View>
+          </View>
+        </DropZone>
       )}
 
       {groups.length === 0 ? (
@@ -448,6 +464,43 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
     fontVariant: ['tabular-nums'],
+  },
+  slotZone: {
+    marginTop: 12,
+  },
+  slot: {
+    minHeight: 60,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(212,166,74,0.45)',
+    backgroundColor: 'rgba(212,166,74,0.05)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  slotIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: 'rgba(212,166,74,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotText: {
+    flex: 1,
+    gap: 2,
+  },
+  slotTitle: {
+    fontSize: 15,
+    fontFamily: Fonts.extraBold,
+    color: Colors.text,
+  },
+  slotHint: {
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    color: Colors.textSecondary,
   },
   hint: {
     marginTop: 10,

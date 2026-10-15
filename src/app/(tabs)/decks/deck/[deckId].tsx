@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -141,6 +141,8 @@ export default function DeckScreen() {
   // Picking a card up: outside edit mode it starts editing with that card selected; while editing
   // only selected cards can be picked up, and they bring the rest of the selection.
   const onDragStart = (line: DeckLine) => {
+    // The search keyboard would cover the trash and stay up through the drag.
+    Keyboard.dismiss()
     setDragging(true)
     if (!editing) {
       setEditing(true)
