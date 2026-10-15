@@ -148,7 +148,6 @@ export default function CardScreen() {
           foil={headerFoil}
           hidden={zoom != null}
           onFlip={() => setFace(face === 0 ? 1 : 0)}
-          onOpenPrintings={() => openTab('printings')}
           onZoom={(from) => setZoom({ from, closing: false })}
         />
         <View style={styles.tabs}>

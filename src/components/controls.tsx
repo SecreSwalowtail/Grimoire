@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Dimensions,
   Modal,
@@ -11,17 +11,69 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import Animated, { SlideInDown, useReducedMotion } from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, {
+  SlideInDown,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { Colors, Fonts } from '@/constants/theme';
 
 // Building blocks shared by the bottom sheets (Market sort & filters, Decks).
 
-// Bottom sheet over a dimmed backdrop. Closes from the backdrop, Android's back button, or the
-// sheet's own buttons. Built on React Native's Modal: taps didn't reach React Native views inside
-// @expo/ui's BottomSheet on Android. `fullHeight` sheets fill the screen below the status bar
-// (for scrolling content); others fit their content.
+// Dragging a sheet down further than this, or flicking it faster (px/s), closes it.
+const CLOSE_DISTANCE = 120
+const CLOSE_SPEED = 900
+const SETTLE = { damping: 22, stiffness: 260 }
+
+// What a sheet's drag areas (the handle and the SheetHeader) move: the sheet's offset, and how to close.
+type SheetDrag = { offset: SharedValue<number>; distance: number; close: () => void }
+const SheetDragContext = createContext<SheetDrag | null>(null)
+
+// Drag down to close; let go early and it springs back. Content below the header keeps its own
+// scrolling, since only the handle and the header pick up the drag.
+function useSheetPan(drag: SheetDrag) {
+  const { offset, distance, close } = drag
+  return Gesture.Pan()
+    .activeOffsetY(8)
+    .failOffsetX([-20, 20])
+    .onChange((e) => {
+      offset.set(Math.max(0, offset.get() + e.changeY))
+    })
+    .onEnd((e) => {
+      if (offset.get() > CLOSE_DISTANCE || e.velocityY > CLOSE_SPEED) {
+        offset.set(withTiming(distance, { duration: 200 }, (done) => {
+          if (done) scheduleOnRN(close)
+        }))
+      } else {
+        offset.set(withSpring(0, SETTLE))
+      }
+    })
+}
+
+// The part of a sheet you can drag it down by.
+function DragArea({ children }: { children: ReactNode }) {
+  const drag = useContext(SheetDragContext)
+  if (!drag) return children
+  return <DragDetector drag={drag}>{children}</DragDetector>
+}
+
+function DragDetector({ drag, children }: { drag: SheetDrag; children: ReactNode }) {
+  const pan = useSheetPan(drag)
+  return <GestureDetector gesture={pan}>{children}</GestureDetector>
+}
+
+// Bottom sheet over a dimmed backdrop. Closes from the backdrop, Android's back button, dragging
+// it down by its handle or header, or the sheet's own buttons. Built on React Native's Modal: taps
+// didn't reach React Native views inside @expo/ui's BottomSheet on Android. `fullHeight` sheets
+// fill the screen below the status bar (for scrolling content); others fit their content.
 export function Sheet({
   visible,
   onClose,
@@ -39,6 +91,21 @@ export function Sheet({
   const height = Dimensions.get('screen').height
   const insets = useSafeAreaInsets()
   const reducedMotion = useReducedMotion()
+  const offset = useSharedValue(0)
+  // The latest onClose, for a drag that ends after the screen re-rendered.
+  const latestClose = useRef(onClose)
+  useEffect(() => {
+    latestClose.current = onClose
+  }, [onClose])
+  const [drag] = useState<SheetDrag>(() => ({ offset, distance: height, close: () => latestClose.current() }))
+
+  // A sheet dragged away is still down there: bring it back up for the next opening.
+  useEffect(() => {
+    if (visible) offset.set(0)
+  }, [visible, offset])
+
+  const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }))
+
   return (
     <Modal
       visible={visible}
@@ -48,38 +115,55 @@ export function Sheet({
       navigationBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.sheetRoot, { height }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
-        <Animated.View
-          entering={reducedMotion ? undefined : SlideInDown.duration(280)}
-          style={[
-            styles.sheet,
-            { paddingBottom: insets.bottom + 12 },
-            fullHeight ? { height: height - insets.top - 12 } : { maxHeight: height - insets.top - 12 },
-          ]}
-          accessibilityViewIsModal
-        >
-          <View style={styles.handle} />
-          {children}
-        </Animated.View>
-      </View>
+      {/* Gestures inside a Modal need their own root on Android. */}
+      <GestureHandlerRootView style={styles.gestureRoot}>
+        <View style={[styles.sheetRoot, { height }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+          <Animated.View style={dragStyle}>
+            <Animated.View
+              entering={reducedMotion ? undefined : SlideInDown.duration(280)}
+              style={[
+                styles.sheet,
+                { paddingBottom: insets.bottom + 12 },
+                fullHeight ? { height: height - insets.top - 12 } : { maxHeight: height - insets.top - 12 },
+              ]}
+              accessibilityViewIsModal
+            >
+              <SheetDragContext.Provider value={drag}>
+                <DragArea>
+                  <View style={styles.handleArea}>
+                    <View style={styles.handle} />
+                  </View>
+                </DragArea>
+                {children}
+              </SheetDragContext.Provider>
+            </Animated.View>
+          </Animated.View>
+        </View>
+      </GestureHandlerRootView>
     </Modal>
   )
 }
 
-export function SheetHeader({ title, onClose, onReset }: { title: string; onClose: () => void; onReset?: () => void }) {
+// Title, optional Reset, and a close button unless `onClose` is left out (then the sheet closes by
+// dragging it down, the backdrop, or going back). The sheet can be dragged down by its header.
+export function SheetHeader({ title, onClose, onReset }: { title: string; onClose?: () => void; onReset?: () => void }) {
   return (
-    <View style={styles.header}>
-      <Text style={styles.headerTitle} accessibilityRole="header">{title}</Text>
-      {onReset && (
-        <TouchableOpacity style={styles.reset} onPress={onReset} accessibilityRole="button">
-          <Text style={styles.resetLabel}>Reset</Text>
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-        <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
-      </TouchableOpacity>
-    </View>
+    <DragArea>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle} accessibilityRole="header">{title}</Text>
+        {onReset && (
+          <TouchableOpacity style={styles.reset} onPress={onReset} accessibilityRole="button">
+            <Text style={styles.resetLabel}>Reset</Text>
+          </TouchableOpacity>
+        )}
+        {onClose && (
+          <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+            <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </DragArea>
   )
 }
 
@@ -233,11 +317,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(23,21,15,0.97)',
     boxShadow: '0 -24px 60px rgba(0,0,0,0.55)',
   },
+  gestureRoot: {
+    flex: 1,
+  },
+  // A taller strip than the handle itself, so it's easy to grab. Same spacing as before.
+  handleArea: {
+    marginTop: -10,
+    paddingTop: 10,
+    paddingBottom: 14,
+  },
   handle: {
     alignSelf: 'center',
     width: 40,
     height: 5,
-    marginBottom: 14,
     borderRadius: 3,
     backgroundColor: 'rgba(237,230,214,0.22)',
   },

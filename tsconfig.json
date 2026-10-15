@@ -7,7 +7,7 @@
         "./src/*"
       ],
       "@/assets/*": [
-        "./assets/*"
+        "./src/assets/*"
       ]
     }
   },

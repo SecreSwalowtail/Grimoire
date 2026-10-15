@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 
 // Scryfall API: https://scryfall.com/docs/api
 // Rules: send User-Agent + Accept on every request, and respect rate limits
-// (/cards/collection: 2/s, most others: 10/s). A 429 blocks the app for 30s.
+// (/cards/collection and /cards/search: 2/s, most others: 10/s). A 429 blocks the app for 30-60 s.
 
 const API = 'https://api.scryfall.com';
 const HEADERS = {
@@ -78,12 +78,13 @@ export type Ruling = { source: string; published_at: string; comment: string };
 
 export type CardIdentifier = { set: string; collector_number: string } | { name: string };
 
-// Space out request starts per rate-limit group (10/s, or 2/s for /cards/collection). Requests may
-// overlap: waiting for each to finish first made e.g. Card detail's rulings sit behind its
-// printings for no reason. Each call books the next free start time at once, so order is kept.
+// Space out request starts per rate-limit group (10/s, or 2/s for /cards/collection and
+// /cards/search). Requests may overlap: waiting for each to finish first made e.g. Card detail's
+// rulings sit behind its printings for no reason. Each call books the next free start time at
+// once, so order is kept.
 const nextStart: Record<string, number> = {};
-function throttled<T>(group: 'collection' | 'default', fn: () => Promise<T>): Promise<T> {
-  const gap = group === 'collection' ? 500 : 100;
+function throttled<T>(group: 'collection' | 'search' | 'default', fn: () => Promise<T>): Promise<T> {
+  const gap = group === 'default' ? 100 : 500;
   const start = Math.max(Date.now(), nextStart[group] ?? 0);
   nextStart[group] = start + gap;
   const wait = start - Date.now();
@@ -160,7 +161,7 @@ export async function searchCards(q: string, options: SearchOptions): Promise<Se
   if (kept) return kept;
   let result: SearchResult;
   try {
-    result = await throttled('default', () => request<SearchResult>(`/cards/search?${query}`));
+    result = await throttled('search', () => request<SearchResult>(`/cards/search?${query}`));
   } catch (e) {
     if (!(e instanceof Error && e.message.startsWith('Scryfall 404'))) throw e;
     result = { data: [], total_cards: 0, has_more: false };
@@ -179,6 +180,26 @@ export async function autocomplete(text: string) {
     request<{ data: string[] }>(`/cards/autocomplete?q=${encodeURIComponent(text)}`),
   );
   return res.data;
+}
+
+export type ScryfallSet = {
+  code: string;
+  name: string;
+  set_type: string;
+  released_at?: string;
+  card_count: number;
+};
+
+// Every set (newest first), asked for once per session: about 1,000 sets, for the set filter.
+let sets: Promise<ScryfallSet[]> | null = null;
+
+export function getSets() {
+  sets ??= throttled('default', () => request<{ data: ScryfallSet[] }>('/sets')).then((res) => res.data);
+  // A failed request is asked again next time.
+  sets.catch(() => {
+    sets = null;
+  });
+  return sets;
 }
 
 // Cards already fetched this session, by id, so Card detail opens at once from a list.
@@ -208,7 +229,7 @@ export async function getCard(id: string) {
 export async function getPrintings(oracleId: string, page = 1) {
   const query = `q=${encodeURIComponent(`oracleid:${oracleId}`)}&unique=prints&order=released&dir=desc&include_extras=true&page=${page}`;
   try {
-    const res = await throttled('default', () => request<SearchResult>(`/cards/search?${query}`));
+    const res = await throttled('search', () => request<SearchResult>(`/cards/search?${query}`));
     res.data.forEach(rememberCard);
     return res;
   } catch (e) {

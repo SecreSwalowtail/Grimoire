@@ -23,6 +23,7 @@ import { timed } from '@/utils/perf';
 import {
   activeFilterCount,
   DEFAULT_FILTERS,
+  filterQuery,
   textQuery,
   trendingQuery,
   type FilterTab,
@@ -39,20 +40,31 @@ const SUGGEST_AFTER = 200
 const SUGGEST_FROM = 2
 const MAX_SUGGESTIONS = 8
 
-// What to ask Scryfall: the trending list while the search box is empty (always by popularity,
-// so the Sort setting only applies to searches), else the search box text in the chosen order.
+// Filter edits apply as you go, but only once tapping pauses this long: each change is a new
+// Scryfall search, and searches are limited to 2 a second.
+const FILTER_DELAY = 400
+
+// What to ask Scryfall: the trending list while the search box is empty and no filter is set
+// (always by popularity, so the Sort setting only applies to searches), else the search box text
+// and the filters in the chosen order. With filters alone, every card that matches them.
 // `exact`: a name picked from the suggestions, searched as that exact card (fast, ~0.2 s).
-function searchRequest(submitted: string, sort: MarketSort, exact: boolean): { query: string; options: SearchOptions } {
-  if (!submitted) return { query: trendingQuery(), options: { order: 'edhrec', dir: 'asc', unique: 'cards' } }
+function searchRequest(
+  submitted: string,
+  sort: MarketSort,
+  exact: boolean,
+  filters: MarketFilters,
+): { query: string; options: SearchOptions } {
+  const filtered = filterQuery(filters)
+  if (!submitted && !filtered) return { query: trendingQuery(), options: { order: 'edhrec', dir: 'asc', unique: 'cards' } }
+  const text = !submitted ? '' : exact ? `!"${submitted.replace(/"/g, '')}"` : textQuery(submitted)
   return {
-    query: exact ? `!"${submitted.replace(/"/g, '')}"` : textQuery(submitted),
+    query: [text, filtered].filter(Boolean).join(' '),
     options: { order: sort.by, dir: sort.desc ? 'desc' : 'asc', unique: sort.groupPrintings ? 'cards' : 'prints' },
   }
 }
 
-// Market: trending cards, and search every card. The search box and Sort & display work; the Filters
-// sheet is UI only (its state is kept, but not sent to Scryfall yet), and the price-source button
-// does nothing yet.
+// Market: trending cards, and search every card by text and filters. The price-source button does
+// nothing yet.
 export default function MarketScreen() {
   const insets = useSafeAreaInsets()
   const [text, setText] = useState('')
@@ -62,7 +74,9 @@ export default function MarketScreen() {
   const [suggestions, setSuggestions] = useState<{ key: string; names: string[] } | null>(null)
   const [focused, setFocused] = useState(false)
   const [sort, setSort] = useState<MarketSort>(DEFAULT_SORT)
+  // `filters` is what the sheet shows; `searchFilters` what the search uses (FILTER_DELAY behind).
   const [filters, setFilters] = useState<MarketFilters>(DEFAULT_FILTERS)
+  const [searchFilters, setSearchFilters] = useState<MarketFilters>(DEFAULT_FILTERS)
   const [view, setView] = useState<ResultView>('list')
   const [sortOpen, setSortOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -70,8 +84,20 @@ export default function MarketScreen() {
   // The last finished search, tagged with the request it answered: while the search box or sort
   // has moved on from it, a new search is loading.
   const [search, setSearch] = useState<{ key: string; cards: ScryfallCard[]; total: number | null; error: string | null } | null>(null)
-  const trending = submitted === ''
-  const searchKey = JSON.stringify(searchRequest(submitted, sort, exact))
+  const filtering = filterQuery(searchFilters) !== ''
+  const trending = submitted === '' && !filtering
+  const searchKey = JSON.stringify(searchRequest(submitted, sort, exact, searchFilters))
+
+  useEffect(() => {
+    if (filters === searchFilters) return
+    const timer = setTimeout(() => setSearchFilters(filters), FILTER_DELAY)
+    return () => clearTimeout(timer)
+  }, [filters, searchFilters])
+
+  const closeFilters = () => {
+    setFiltersOpen(false)
+    setSearchFilters(filters)
+  }
 
   // Keyed on the serialized request, so it only re-runs when the request really changes.
   useEffect(() => {
@@ -124,7 +150,7 @@ export default function MarketScreen() {
 
   const filterCount = activeFilterCount(filters)
   const resultSuffix = [
-    filters.languages.length > 0 ? filters.languages.map((l) => l.toUpperCase()).join(', ') : null,
+    searchFilters.languages.length > 0 ? searchFilters.languages.map((l) => l.toUpperCase()).join(', ') : null,
     sort.groupPrintings ? 'grouped' : null,
   ].filter(Boolean)
 
@@ -239,7 +265,9 @@ export default function MarketScreen() {
       <Text style={styles.emptyText}>
         {trending
           ? 'Find any Magic card by name, type, rules text or collector number, like "MH3 293".'
-          : 'Try a different name, number, type or rules text.'}
+          : filtering
+            ? 'Try loosening the filters, or a different name, number, type or rules text.'
+            : 'Try a different name, number, type or rules text.'}
       </Text>
     </View>
   )
@@ -296,8 +324,9 @@ export default function MarketScreen() {
         onTabChange={setFilterTab}
         filters={filters}
         onChange={setFilters}
-        resultCount={total}
-        onClose={() => setFiltersOpen(false)}
+        // Only a count for the filters on show: none while a change waits to be searched.
+        resultCount={filters === searchFilters ? total : null}
+        onClose={closeFilters}
       />
     </View>
   )

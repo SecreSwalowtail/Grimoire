@@ -40,7 +40,8 @@ export function FilterSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} fullHeight>
-      <SheetHeader title="Filters" onReset={() => onChange(resetTab(filters, tab))} onClose={onClose} />
+      {/* No close button: drag the sheet down, tap outside it, or go back. */}
+      <SheetHeader title="Filters" onReset={() => onChange(resetTab(filters, tab))} />
 
       <View style={styles.tabs} accessibilityRole="tablist">
         {TABS.map((t) => {

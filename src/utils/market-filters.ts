@@ -1,6 +1,7 @@
+import { symbolValue } from '@/components/mana-symbol';
 import { LANGUAGES } from '@/utils/collector-line';
 
-// State of the Market filter sheet. Only the UI uses it so far: searches don't apply it yet.
+// State of the Market filter sheet; filterQuery() turns it into Scryfall search terms.
 
 export type FilterTab = 'format' | 'colors' | 'cost' | 'set' | 'language'
 
@@ -72,6 +73,55 @@ export function resetTab(f: MarketFilters, tab: FilterTab): MarketFilters {
     case 'language':
       return { ...f, languages: d.languages }
   }
+}
+
+// "(a or b)", or just "a" for one term.
+const anyOf = (terms: string[]) => (terms.length === 1 ? terms[0] : `(${terms.join(' or ')})`)
+
+const WUBRG = ['W', 'U', 'B', 'R', 'G']
+
+// The filters as Scryfall search terms (https://scryfall.com/docs/syntax), joined by spaces so all
+// of them must match. Empty when nothing is set.
+export function filterQuery(f: MarketFilters) {
+  const terms: string[] = []
+
+  const formats = f.formats.map((key) => `${f.formatStatus}:${key}`)
+  if (formats.length) terms.push(f.formatsMatchAll ? formats.join(' ') : anyOf(formats))
+
+  // "C" alone means colorless; next to colors it adds "or colorless" (At most already includes it).
+  const field = f.colorIdentity ? 'id' : 'c'
+  const letters = WUBRG.filter((c) => f.colors.includes(c)).join('').toLowerCase()
+  const colorless = f.colors.includes('C')
+  if (letters) {
+    const op = f.colorMatch === 'exact' ? '=' : f.colorMatch === 'atmost' ? '<=' : '>='
+    const term = `${field}${op}${letters}`
+    terms.push(colorless && f.colorMatch !== 'atmost' ? anyOf([term, `${field}=c`]) : term)
+  } else if (colorless) {
+    terms.push(`${field}=c`)
+  }
+  const [min, max] = f.colorCount
+  if (min > 0) terms.push(`${field}>=${min}`)
+  if (max < 5) terms.push(`${field}<=${max}`)
+
+  if (f.cost.length) {
+    const cost = f.cost.map((s) => `{${s}}`).join('')
+    if (f.costMatch === 'exact') terms.push(`m=${cost}`)
+    else if (f.costMatch === 'contains') terms.push(`m:${cost}`)
+    else terms.push(`mv=${f.cost.reduce((sum, s) => sum + symbolValue(s), 0)}`)
+  }
+
+  // Exact print: printings from the sets. Reprint: other printings of cards that are in the sets.
+  const codes = f.sets.map((s) => s.code.toLowerCase())
+  if (codes.length) {
+    if (f.exactPrint) terms.push(anyOf(codes.map((c) => `s:${c}`)))
+    else terms.push(anyOf(codes.map((c) => `in:${c}`)), ...codes.map((c) => `-s:${c}`))
+  }
+  if (f.rarities.length) terms.push(anyOf(f.rarities.map((r) => `r:${r}`)))
+  if (f.legendaryOnly) terms.push('t:legendary')
+
+  if (f.languages.length) terms.push(anyOf(f.languages.map((l) => `lang:${l}`)))
+
+  return terms.join(' ')
 }
 
 // A collector number as printed on cards: "293", "0293", "#293", "123/264", "7e".

@@ -4,8 +4,7 @@ import { Chip, SectionLabel, Segmented } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
 import type { LegalStatus, MarketFilters } from '@/utils/market-filters';
 
-// Keys are Scryfall's legality names. Conquest, Tiny Leaders and Canadian Highlander
-// aren't tracked by Scryfall, so they'll need another source once filters are applied.
+// Keys are Scryfall's legality names: only formats Scryfall tracks can be searched by.
 const FORMATS = [
   { key: 'standard', label: 'Standard' },
   { key: 'pioneer', label: 'Pioneer' },
@@ -19,10 +18,7 @@ const FORMATS = [
   { key: 'historic', label: 'Historic' },
   { key: 'pauper', label: 'Pauper' },
   { key: 'oldschool', label: 'Old School' },
-  { key: 'canadianhighlander', label: 'Canadian High.' },
   { key: 'premodern', label: 'Premodern' },
-  { key: 'conquest', label: 'Conquest' },
-  { key: 'tinyleaders', label: 'Tiny Leaders' },
   { key: 'standardbrawl', label: 'Standard Brawl' },
   { key: 'gladiator', label: 'Gladiator' },
   { key: 'paupercommander', label: 'Pauper Cmdr' },

@@ -32,14 +32,12 @@ const HERO_HEIGHT = 420
 // is the one card on screen. And how far the glare moves (same as the Binder).
 const MAX_TILT_DEG = 11.25 * 1.25
 const GLARE_TRAVEL = 63
-// How long to hold the card before it lifts out to full screen (card-zoom.tsx).
-const LONG_PRESS_MS = 350
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
-// As long as the hold: pressing in sinks the card until it lifts out. (Reanimated CSS transition;
-// outside StyleSheet.create, whose types don't know these properties.)
+// Pressing in sinks the card a little before it lifts out to full screen (card-zoom.tsx).
+// (Reanimated CSS transition; outside StyleSheet.create, whose types don't know these properties.)
 const PRESS_TRANSITION = {
   transitionProperty: 'transform',
-  transitionDuration: LONG_PRESS_MS,
+  transitionDuration: 120,
   transitionTimingFunction: cubicBezier(0.23, 1, 0.32, 1),
 } as const
 
@@ -68,8 +66,8 @@ function stats(face: CardFace | ScryfallCard) {
 
 // The card tilts in 3D with the phone and catches a moving glare, like the Binder cards; a
 // foil-only printing (or `foil`: a foil finish picked on the Prices tab) also gets the holographic
-// layer. `tilt` stays flat when the sensor is off. Tap: all printings. Hold: the card lifts out to
-// full screen (`onZoom`, with where it sits now); `hidden` while it's out there.
+// layer. `tilt` stays flat when the sensor is off. Tap: the card lifts out to full screen
+// (`onZoom`, with where it sits now); `hidden` while it's out there.
 export function CardHero({
   card,
   face,
@@ -77,7 +75,6 @@ export function CardHero({
   foil,
   hidden,
   onFlip,
-  onOpenPrintings,
   onZoom,
 }: {
   card: ScryfallCard
@@ -86,7 +83,6 @@ export function CardHero({
   foil?: boolean
   hidden?: boolean
   onFlip: () => void
-  onOpenPrintings: () => void
   onZoom: (from: ZoomFrom) => void
 }) {
   const frame = useRef<View>(null)
@@ -121,7 +117,6 @@ export function CardHero({
   return (
     <View style={styles.hero}>
       <View>
-        {/* Sinks a little while held, so the hold reads as building up to something. */}
         <AnimatedPressable
           ref={frame}
           style={[
@@ -129,17 +124,11 @@ export function CardHero({
             { transform: [{ rotate: '-3deg' }, { scale: pressed ? 0.95 : 1 }], opacity: hidden ? 0 : 1 },
             PRESS_TRANSITION,
           ]}
-          onPress={onOpenPrintings}
-          onLongPress={zoom}
-          delayLongPress={LONG_PRESS_MS}
+          onPress={zoom}
           onPressIn={() => setPressed(true)}
           onPressOut={() => setPressed(false)}
           accessibilityRole="button"
-          accessibilityLabel={`${card.name}, ${card.set.toUpperCase()} number ${card.collector_number}. See all printings`}
-          accessibilityActions={[{ name: 'longpress', label: 'View full screen' }]}
-          onAccessibilityAction={(e) => {
-            if (e.nativeEvent.actionName === 'longpress') zoom()
-          }}
+          accessibilityLabel={`${card.name}, ${card.set.toUpperCase()} number ${card.collector_number}. View full screen`}
         >
           {/* The shadow stays on the still frame; only the card inside tilts. */}
           <Animated.View style={[styles.cardTilt, tiltStyle]}>

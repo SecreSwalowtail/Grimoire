@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { ManaSymbol, symbolName } from '@/components/mana-symbol';
 import { Colors, Fonts } from '@/constants/theme';
@@ -6,20 +6,28 @@ import { Colors, Fonts } from '@/constants/theme';
 // Card rules text as printed: {symbols} drawn as our mana symbols in the line, reminder text
 // (in parentheses) in muted italics, and a keyword that starts a line ("Deathtouch") in bold.
 
+// How far below its default spot an inline symbol is moved, as a share of its size.
+const DROP = Platform.OS === 'android' ? 0.34 : 0.14
+
 // "{2}{B}: Draw a card." -> ['', '2', '', 'B', ': Draw a card.'] (odd entries are symbols).
 const splitSymbols = (text: string) => text.split(/\{([^}]+)\}/g)
 
 // Text with its {symbols} drawn inline. Screen readers hear "2 generic mana" instead of "{2}".
 export function SymbolText({ text, style, size = 15 }: { text: string; style?: StyleProp<TextStyle>; size?: number }) {
   const parts = splitSymbols(text)
+  // Symbols grow with the system font size like the text around them, and are pulled down from where
+  // the platform places inline views so they sit centered on the capital letters.
+  const { fontScale } = useWindowDimensions()
+  const scaled = Math.round(size * fontScale)
+  const drop = scaled * DROP
   return (
     <Text style={style}>
       {parts.map((part, i) =>
         i % 2 === 0 ? (
           part
         ) : (
-          <View key={i} style={[styles.symbol, { width: size, height: size }]} accessible accessibilityLabel={symbolName(part)}>
-            <ManaSymbol symbol={part} size={size} />
+          <View key={i} style={{ width: scaled, height: scaled, transform: [{ translateY: drop }] }} accessible accessibilityLabel={symbolName(part)}>
+            <ManaSymbol symbol={part} size={scaled} />
           </View>
         ),
       )}
@@ -97,9 +105,5 @@ const styles = StyleSheet.create({
   cost: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  // Sits on the text baseline like a capital letter.
-  symbol: {
-    transform: [{ translateY: 2 }],
   },
 })

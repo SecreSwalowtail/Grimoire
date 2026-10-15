@@ -19,7 +19,7 @@ import { HoloFoil } from '@/components/card-effects/holo-foil';
 import type { Tilt } from '@/components/card-effects/tilt';
 import { faceImage, type ScryfallCard } from '@/db/scryfall';
 
-// Hold the hero card on Card detail: it lifts out of the header to almost the whole screen, over
+// Tap the hero card on Card detail: it lifts out of the header to almost the whole screen, over
 // the blurred page. It tilts much further than anywhere else, with the phone and under your finger
 // (drag across it), and its edges darken as they turn away. Going back puts it down again: the
 // screen turns that into `closing` (there is no close button on purpose).
@@ -34,7 +34,7 @@ const SENSOR_SHARE = 0.75
 // Dragging this many points across the card tilts it fully.
 const FINGER_RANGE = 150
 const GLARE_TRAVEL = 70
-// Lifting out after a hold carries a little momentum; putting it back lands without a bounce.
+// Lifting out carries a little momentum; putting it back lands without a bounce.
 const OPEN = { duration: 450, dampingRatio: 0.8 }
 const CLOSE = { duration: 380, dampingRatio: 1 }
 const LET_GO = { duration: 500, dampingRatio: 0.7 }

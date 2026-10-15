@@ -10,10 +10,9 @@ export type MarketSort = {
   by: SearchOrder
   desc: boolean
   groupPrintings: boolean
-  hideNotLegal: boolean
 }
 
-export const DEFAULT_SORT: MarketSort = { by: 'eur', desc: true, groupPrintings: true, hideNotLegal: true }
+export const DEFAULT_SORT: MarketSort = { by: 'eur', desc: true, groupPrintings: true }
 
 export const SORTS: SortOption<SearchOrder>[] = [
   { value: 'name', label: 'Name', glyph: 'Aa', asc: 'A → Z', desc: 'Z → A' },
@@ -73,14 +72,6 @@ export function SortSheet({
             value={draft.groupPrintings}
             onChange={(groupPrintings) => setDraft({ ...draft, groupPrintings })}
           />
-          <ToggleRow
-            bare
-            style={styles.divider}
-            title="Ignore not-legal cards"
-            subtitle="Hide cards banned or not legal in your format filters"
-            value={draft.hideNotLegal}
-            onChange={(hideNotLegal) => setDraft({ ...draft, hideNotLegal })}
-          />
         </View>
 
         <View style={styles.apply}>
@@ -107,10 +98,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(237,230,214,0.10)',
     backgroundColor: Colors.background,
-  },
-  divider: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(237,230,214,0.07)',
   },
   apply: {
     marginTop: 28,
