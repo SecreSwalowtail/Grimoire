@@ -1,11 +1,22 @@
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { BackHandler, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
+import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Segmented } from '@/components/controls';
+import {
+  dragGesture,
+  DragGhost,
+  DropZone,
+  EditBar,
+  TrashBubble,
+  useCardDrag,
+  type DropTarget,
+} from '@/components/deck/card-drag';
 import { CardsTab } from '@/components/deck/cards-tab';
 import { CROWN, PathIcon } from '@/components/deck/parts';
 import { FilterSheet } from '@/components/deck/filter-sheet';
@@ -27,10 +38,26 @@ import {
   type DeckFilters,
   type DeckLine,
 } from '@/rules/deck-stats';
-import { useDeckStore, withAlpha, type Board, type Deck } from '@/utils/deck-store';
+import {
+  moveDeckCards,
+  removeDeckCards,
+  setCommander,
+  useDeckStore,
+  withAlpha,
+  type Board,
+  type Deck,
+  type Undo,
+} from '@/utils/deck-store';
 import { formatEur } from '@/utils/format';
 
 type Tab = 'cards' | 'stats'
+
+// Gesture-handler's scroll view, animatable so a drag can scroll it.
+const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView)
+
+const keyOf = (l: DeckLine) => `${l.cardId}|${l.board}`
+// Height of the edit bar (title, buttons, room for the Scan button).
+const EDIT_BAR = 124
 
 // The card on show at the top: the commander; in a Commander-style deck without one, its first
 // legendary creature; otherwise the most valuable card.
@@ -47,6 +74,11 @@ function coverLine(deck: Deck, main: DeckLine[]) {
 // D1–D8 · One deck: its cover card, colors, size and value, then Cards (grouped, filtered, by part
 // of the deck) or Stats. + goes to the Market, where Card detail adds cards to decks; ⋯ opens Deck
 // options (which can import a decklist).
+// Hold a card to edit: it's picked up and selected. Tap cards to select more; holding any selected
+// card then picks up the whole selection (unselected cards don't drag). It can be
+// dropped on the Main deck / Sideboard / Maybe chips, on the commander (the cover card or the
+// Commander group; one card that can lead the deck, anything else turns it red), or dragged down
+// into the trash bubble. ⋯, + and Filter hide meanwhile; the bar at the bottom has Undo and Done.
 export default function DeckScreen() {
   const insets = useSafeAreaInsets()
   const { deckId } = useLocalSearchParams<{ deckId: string }>()
@@ -62,6 +94,81 @@ export default function DeckScreen() {
   const [filterOpen, setFilterOpen] = useState(false)
   // Deleting the deck from its own options goes back; the list shows the Undo toast.
   const deckSheets = useDeckSheets({ onDeckDeleted: () => router.back() })
+  const [editing, setEditing] = useState(false)
+  // This edit session's changes, latest last, for Undo.
+  const [undos, setUndos] = useState<Undo[]>([])
+  const [selected, setSelected] = useState<string[]>([])
+  const [dragging, setDragging] = useState(false)
+
+  const picked = lines.filter((l) => selected.includes(keyOf(l)))
+  const commanderFormat = deck != null && hasCommander(deck.format)
+  const commanderOk = commanderFormat && picked.length === 1 && canBeCommander(picked[0]) && !picked[0].commander
+  const scrollRef = useAnimatedRef<Animated.ScrollView>()
+  const scrollY = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y)
+  })
+  const drag = useCardDrag({ commanderOk, board, scrollRef, scrollY })
+  // Taking cards into the top third of the screen scrolls up to the chips.
+  const topZone = useWindowDimensions().height / 3
+
+  const stopEditing = () => {
+    setEditing(false)
+    setSelected([])
+    setUndos([])
+  }
+  const undo = () => {
+    const last = undos[undos.length - 1]
+    if (!last) return
+    last()
+    setUndos(undos.slice(0, -1))
+    setSelected([])
+  }
+  // Android's back button leaves edit mode first.
+  useFocusEffect(
+    useCallback(() => {
+      if (!editing) return
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setEditing(false)
+        setSelected([])
+        setUndos([])
+        return true
+      })
+      return () => sub.remove()
+    }, [editing, setEditing, setSelected, setUndos]),
+  )
+
+  // Picking a card up: outside edit mode it starts editing with that card selected; while editing
+  // only selected cards can be picked up, and they bring the rest of the selection.
+  const onDragStart = (line: DeckLine) => {
+    setDragging(true)
+    if (!editing) {
+      setEditing(true)
+      setSelected([keyOf(line)])
+    }
+  }
+  const onDrop = (target: DropTarget | null) => {
+    setDragging(false)
+    if (!deck || target == null || picked.length === 0) return
+    const keys = picked.map((l) => ({ cardId: l.cardId, board: l.board }))
+    let change: Undo
+    if (target === 'trash') {
+      change = removeDeckCards(deck.id, keys)
+    } else if (target === 'commander' || target === 'commander-group') {
+      if (!commanderOk) return
+      const line = picked[0]
+      // Moving it into the main deck (if needed) restores the deck as it was, commander mark included.
+      change = moveDeckCards(deck.id, line.board === 'main' ? [] : keys, 'main')
+      setCommander(deck.id, line.cardId, true)
+    } else {
+      if (target === board) return
+      change = moveDeckCards(deck.id, keys, target)
+    }
+    setUndos([...undos, change])
+    setSelected([])
+  }
+  const gestureFor = (line: DeckLine) =>
+    dragGesture(drag, line, onDragStart, onDrop, topZone).enabled(!editing || selected.includes(keyOf(line)))
 
   if (!deck) return <View style={styles.root}>{deckSheets.sheets}</View>
 
@@ -86,12 +193,21 @@ export default function DeckScreen() {
           },
         ]}
       />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 4 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <AnimatedScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 4 }, editing && styles.contentEditing]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEnabled={!dragging}
+      >
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityRole="button">
             <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel} numberOfLines={1}>{folder?.name ?? 'Decks'}</Text>
           </TouchableOpacity>
+          {!editing && (
           <View style={styles.topActions}>
             <TouchableOpacity
               style={styles.more}
@@ -111,10 +227,12 @@ export default function DeckScreen() {
               <SymbolView name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
             </TouchableOpacity>
           </View>
+          )}
         </View>
 
         <View style={styles.header}>
           {cover ? (
+            <DropZone drag={drag} id="commander">
             <Pressable
               style={styles.cover}
               onPress={() => router.push({ pathname: '/card/[id]', params: { id: cover.cardId } })}
@@ -130,6 +248,7 @@ export default function DeckScreen() {
                 </View>
               )}
             </Pressable>
+            </DropZone>
           ) : (
             <View style={[styles.cover, styles.coverCard, styles.coverEmpty]}>
               <SymbolView name={{ ios: 'rectangle.stack', android: 'style' }} size={26} tintColor={Colors.textMuted} />
@@ -164,27 +283,47 @@ export default function DeckScreen() {
               { value: 'stats', label: 'Stats' },
             ]}
             value={tab}
-            onChange={setTab}
+            onChange={(t) => {
+              stopEditing()
+              setTab(t)
+            }}
           />
         </View>
 
         {tab === 'cards' ? (
           <CardsTab
-            deckId={deck.id}
-            commanderFormat={hasCommander(deck.format)}
+            commanderFormat={commanderFormat}
             lines={lines}
             board={board}
-            onBoard={setBoard}
+            onBoard={(b) => {
+              setSelected([])
+              setBoard(b)
+            }}
             groupBy={groupBy}
             filters={filters}
             onOpenGroup={() => setGroupOpen(true)}
             onOpenFilter={() => setFilterOpen(true)}
+            editing={editing}
+            selected={selected}
+            onToggle={(l) => {
+              const key = keyOf(l)
+              setSelected(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key])
+            }}
+            gestureFor={gestureFor}
+            drag={drag}
           />
         ) : (
           <StatsTab lines={lines} />
         )}
-      </ScrollView>
+      </AnimatedScrollView>
 
+      {editing && tab === 'cards' && (
+        <>
+          <EditBar canUndo={undos.length > 0} onUndo={undo} onDone={stopEditing} selected={picked.length} />
+          <TrashBubble drag={drag} bottom={EDIT_BAR + 20} />
+        </>
+      )}
+      <DragGhost drag={drag} lines={picked} />
 
       <GroupSheet
         visible={groupOpen}
@@ -333,6 +472,9 @@ const styles = StyleSheet.create({
   },
   tabs: {
     marginTop: 22,
+  },
+  contentEditing: {
+    paddingBottom: EDIT_BAR + 40,
   },
   topActions: {
     flexDirection: 'row',

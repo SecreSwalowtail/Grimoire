@@ -322,6 +322,43 @@ export function reorderDecks(ids: string[]) {
 // leaving anything created in the meantime alone.
 export type Undo = () => void
 
+// A card in one part of a deck.
+export type DeckCardKey = { cardId: string; board: Board }
+
+// Undo for an edit to one deck's cards: puts back the deck's cards as they were.
+function restoreDeck(deckId: string): Undo {
+  const before = state.cards.filter((c) => c.deckId === deckId)
+  return () => set({ ...state, cards: [...state.cards.filter((c) => c.deckId !== deckId), ...before] })
+}
+
+// Takes cards out of a deck (every copy of each).
+export function removeDeckCards(deckId: string, keys: DeckCardKey[]): Undo {
+  const undo = restoreDeck(deckId)
+  const ids = new Set(keys.map((k) => cardKey(deckId, k.cardId, k.board)))
+  set({ ...state, cards: state.cards.filter((c) => !ids.has(c.id)) })
+  return undo
+}
+
+// Moves cards to another part of the deck. Copies already there add up; a commander moved out of
+// the main deck stops being the commander.
+export function moveDeckCards(deckId: string, keys: DeckCardKey[], to: Board): Undo {
+  const undo = restoreDeck(deckId)
+  let cards = [...state.cards]
+  for (const k of keys) {
+    if (k.board === to) continue
+    const from = cards.find((c) => c.id === cardKey(deckId, k.cardId, k.board))
+    if (!from) continue
+    const id = cardKey(deckId, k.cardId, to)
+    const there = cards.find((c) => c.id === id)
+    cards = cards.filter((c) => c.id !== from.id)
+    cards = there
+      ? cards.map((c) => (c.id === id ? { ...c, quantity: c.quantity + from.quantity } : c))
+      : [...cards, { ...from, id, board: to, commander: false }]
+  }
+  set({ ...state, cards })
+  return undo
+}
+
 // A deleted deck's cards leave with it; undo brings both back.
 export function deleteDecks(ids: string[]): Undo {
   const removed = state.decks.map((d, i) => ({ d, i })).filter(({ d }) => ids.includes(d.id))

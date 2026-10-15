@@ -2,12 +2,13 @@ import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
 
+import { DropZone, type CardDrag } from '@/components/deck/card-drag';
 import { CostRow, CROWN, GroupIcon, PathIcon } from '@/components/deck/parts';
 import { Colors, Fonts } from '@/constants/theme';
 import {
   activeFilters,
-  canBeCommander,
   filterLines,
   GROUP_OPTIONS,
   groupLines,
@@ -16,7 +17,7 @@ import {
   type DeckLine,
   type GroupBy,
 } from '@/rules/deck-stats';
-import { setCommander, type Board } from '@/utils/deck-store';
+import type { Board } from '@/utils/deck-store';
 import { formatEur } from '@/utils/format';
 
 const BOARDS: { value: Board; label: string }[] = [
@@ -29,10 +30,11 @@ const count = (lines: DeckLine[]) => lines.reduce((n, l) => n + l.quantity, 0)
 
 // D1 · The deck's cards: search, sort by name, group (opens Group by), filter (opens Filter),
 // which part of the deck, then the groups, each opening and closing with a tap. Tap a card for
-// Card detail. Cards your binders don't cover are tagged "Not owned". In Commander-style decks,
-// hold a main-deck card to make it the commander (or a regular card again); commanders lead the list.
+// Card detail. Cards your binders don't cover are tagged "Not owned"; commanders lead the list.
+// Hold a card to edit: it's picked up to drag (see card-drag.tsx), and taps then select cards
+// instead of opening them; the part-of-deck chips and the Commander group take dropped cards. The
+// filter button hides meanwhile.
 export function CardsTab({
-  deckId,
   commanderFormat,
   lines,
   board,
@@ -41,8 +43,12 @@ export function CardsTab({
   filters,
   onOpenGroup,
   onOpenFilter,
+  editing,
+  selected,
+  onToggle,
+  gestureFor,
+  drag,
 }: {
-  deckId: string
   commanderFormat: boolean
   lines: DeckLine[]
   board: Board
@@ -51,6 +57,12 @@ export function CardsTab({
   filters: DeckFilters
   onOpenGroup: () => void
   onOpenFilter: () => void
+  editing: boolean
+  // Selected lines, as "cardId|board".
+  selected: string[]
+  onToggle: (line: DeckLine) => void
+  gestureFor: (line: DeckLine) => GestureType
+  drag: CardDrag
 }) {
   const [query, setQuery] = useState('')
   const [desc, setDesc] = useState(false)
@@ -63,9 +75,6 @@ export function CardsTab({
   const nFilters = activeFilters(filters)
   const groupLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)!
   const noCommander = commanderFormat && board === 'main' && inBoard.length > 0 && !lines.some((l) => l.commander)
-  // Whether holding this row toggles the commander.
-  const canToggle = (l: DeckLine) => commanderFormat && l.board === 'main' && (l.commander || canBeCommander(l))
-  const toggle = (l: DeckLine) => setCommander(deckId, l.cardId, !l.commander)
 
   return (
     <View>
@@ -100,19 +109,21 @@ export function CardsTab({
             <Text style={styles.toolLabel} numberOfLines={1}>{groupBy === 'none' ? 'List' : groupLabel.label}</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.filter, nFilters > 0 && styles.filterOn]}
-          onPress={onOpenFilter}
-          accessibilityRole="button"
-          accessibilityLabel={`Filter cards, ${nFilters} active`}
-        >
-          <SymbolView name={{ ios: 'line.3.horizontal.decrease', android: 'filter_alt' }} size={20} tintColor={Colors.goldLight} />
-          {nFilters > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeLabel}>{nFilters}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {!editing && (
+          <TouchableOpacity
+            style={[styles.filter, nFilters > 0 && styles.filterOn]}
+            onPress={onOpenFilter}
+            accessibilityRole="button"
+            accessibilityLabel={`Filter cards, ${nFilters} active`}
+          >
+            <SymbolView name={{ ios: 'line.3.horizontal.decrease', android: 'filter_alt' }} size={20} tintColor={Colors.goldLight} />
+            {nFilters > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeLabel}>{nFilters}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Which part of the deck: the counts tell what's in each. */}
@@ -121,25 +132,26 @@ export function CardsTab({
           const on = b.value === board
           const n = count(lines.filter((l) => l.board === b.value))
           return (
-            <Pressable
-              key={b.value}
-              style={[styles.board, on && styles.boardOn]}
-              onPress={() => onBoard(b.value)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={`${b.label}, ${n} cards`}
-            >
-              <Text style={[styles.boardLabel, on && styles.boardLabelOn]} numberOfLines={1}>{b.label}</Text>
-              <Text style={[styles.boardCount, on && styles.boardCountOn]}>{n}</Text>
-            </Pressable>
+            <DropZone key={b.value} drag={drag} id={b.value} style={styles.boardZone}>
+              <Pressable
+                style={[styles.board, on && styles.boardOn]}
+                onPress={() => onBoard(b.value)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`${b.label}, ${n} cards`}
+              >
+                <Text style={[styles.boardLabel, on && styles.boardLabelOn]} numberOfLines={1}>{b.label}</Text>
+                <Text style={[styles.boardCount, on && styles.boardCountOn]}>{n}</Text>
+              </Pressable>
+            </DropZone>
           )
         })}
       </View>
 
-      {noCommander && (
+      {noCommander && !editing && (
         <View style={styles.hint}>
           <PathIcon d={CROWN} color={Colors.goldLight} size={16} />
-          <Text style={styles.hintText}>Hold a legendary creature to make it your commander.</Text>
+          <Text style={styles.hintText}>Hold a legendary creature and drag it onto the commander slot.</Text>
         </View>
       )}
 
@@ -155,8 +167,8 @@ export function CardsTab({
         <View style={styles.groups}>
           {groups.map((g) => {
             const open = !closed.includes(g.key)
-            return (
-              <View key={g.key} style={styles.group}>
+            const head = (
+              <View style={styles.group}>
                 <Pressable
                   style={styles.groupHead}
                   onPress={() => setClosed(open ? [...closed, g.key] : closed.filter((k) => k !== g.key))}
@@ -179,15 +191,16 @@ export function CardsTab({
                 {open &&
                   g.lines.map((l) => {
                     const missing = missingCopies(l)
+                    const key = `${l.cardId}|${l.board}`
+                    const on = selected.includes(key)
                     return (
+                      <GestureDetector key={key} gesture={gestureFor(l)}>
                       <Pressable
-                        key={`${l.cardId}|${l.board}`}
-                        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                        onPress={() => router.push({ pathname: '/card/[id]', params: { id: l.cardId } })}
-                        onLongPress={canToggle(l) ? () => toggle(l) : undefined}
-                        accessibilityRole="button"
-                        accessibilityActions={canToggle(l) ? [{ name: 'longpress', label: l.commander ? 'Remove as commander' : 'Make commander' }] : undefined}
-                        onAccessibilityAction={() => canToggle(l) && toggle(l)}
+                        style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
+                        onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId } }))}
+                        accessibilityRole={editing ? 'checkbox' : 'button'}
+                        accessibilityState={editing ? { checked: on } : undefined}
+                        accessibilityHint={editing ? undefined : 'Hold to select and drag'}
                         accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? formatEur(l.price * l.quantity) : 'no price'}`}
                       >
                         <Text style={styles.qty}>{l.quantity}×</Text>
@@ -200,9 +213,18 @@ export function CardsTab({
                         <CostRow cost={l.manaCost} />
                         <Text style={styles.price} numberOfLines={1}>{l.price != null ? formatEur(l.price * l.quantity) : '—'}</Text>
                       </Pressable>
+                      </GestureDetector>
                     )
                   })}
               </View>
+            )
+            // The Commander group takes a new commander too.
+            return g.head.kind === 'commander' ? (
+              <DropZone key={g.key} drag={drag} id="commander-group">
+                {head}
+              </DropZone>
+            ) : (
+              <View key={g.key}>{head}</View>
             )
           })}
         </View>
@@ -292,8 +314,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  board: {
+  boardZone: {
     flex: 1,
+  },
+  board: {
     height: 36,
     paddingHorizontal: 8,
     borderRadius: 18,
@@ -383,6 +407,10 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: 'rgba(237,230,214,0.04)',
+  },
+  // A selected card: tinted gold.
+  rowOn: {
+    backgroundColor: 'rgba(212,166,74,0.16)',
   },
   qty: {
     width: 28,
