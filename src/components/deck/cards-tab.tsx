@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from '
 import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
 
 import { DropZone, type CardDrag } from '@/components/deck/card-drag';
-import { CostRow, CROWN, GroupIcon, PathIcon } from '@/components/deck/parts';
+import { CostRow, CROWN, GroupIcon, ICON, PathIcon } from '@/components/deck/parts';
 import { Colors, Fonts } from '@/constants/theme';
 import {
   activeFilters,
@@ -124,7 +124,7 @@ export function CardsTab({
             accessibilityRole="button"
             accessibilityLabel={`Filter cards, ${nFilters} active`}
           >
-            <SymbolView name={{ ios: 'line.3.horizontal.decrease', android: 'filter_alt' }} size={20} tintColor={Colors.goldLight} />
+            <PathIcon d={ICON.filter} color={Colors.goldLight} size={22} />
             {nFilters > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeLabel}>{nFilters}</Text>

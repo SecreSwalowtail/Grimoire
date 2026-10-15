@@ -6,14 +6,23 @@ import { Colors, Fonts, RarityColors } from '@/constants/theme';
 import { costSymbols, TYPE_INFO, type GroupHead } from '@/rules/deck-stats';
 import { withAlpha } from '@/utils/deck-store';
 
+// Drawn icons, centered in their 24 × 24 box (the system icon font sits slightly off center).
+export const ICON = {
+  // Each dot drawn both ways from its middle, so the row is centered on 12.
+  more: 'M5.5 12h0M12 12h0M18.5 12h0',
+  plus: 'M12 5v14M5 12h14',
+  // Symmetric about the middle (x = 12, y from 4.5 to 19.5).
+  filter: 'M4 4.5h16l-6 7.5v7.5l-4-2V12z',
+}
+
 // The commander's crown.
 export const CROWN = 'M4 17.5l1.5-9 4.5 4 2-6.5 2 6.5 4.5-4 1.5 9z'
 
 // A stroke icon from the design's 24 × 24 paths.
-export function PathIcon({ d, color, size = 16 }: { d: string; color: string; size?: number }) {
+export function PathIcon({ d, color, size = 16, weight = 1.9 }: { d: string; color: string; size?: number; weight?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d={d} stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d={d} stroke={color} strokeWidth={weight} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   )
 }

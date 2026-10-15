@@ -12,6 +12,8 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // Screens change instantly (no transition), here and in every stack.
+        animation: 'none',
         tabBarActiveTintColor: Colors.gold,
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarStyle: styles.tabBar,

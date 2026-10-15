@@ -94,7 +94,7 @@ export function PrintingsTab({
       })}
       <TouchableOpacity style={styles.addCopy} onPress={onAddCopy} accessibilityRole="button">
         <SymbolView name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
-        <Text style={styles.addCopyLabel}>{copies.length ? 'Add another copy' : 'Add a copy to your binder'}</Text>
+        <Text style={styles.addCopyLabel}>Add to binder</Text>
       </TouchableOpacity>
 
       <Text style={[styles.label, styles.printsLabel]}>All printings</Text>

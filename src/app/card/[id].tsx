@@ -106,10 +106,6 @@ export default function CardScreen() {
   const headerFoil = tab === 'prices' && finish !== 'nonfoil'
   const use = cardUse(card.name, store)
   const decksUsing = [...use.values()].filter((c) => c.main + c.side > 0).length
-  const prices = (printings?.list ?? [])
-    .map((p) => Number(p.prices.eur ?? p.prices.eur_foil ?? NaN))
-    .filter((v) => Number.isFinite(v))
-  const cheapest = prices.length ? Math.min(...prices) : null
   const firstPrinting = (printings?.list ?? []).reduce<ScryfallCard | null>(
     (first, p) => (!first || (p.released_at ?? '') < (first.released_at ?? '') ? p : first),
     null,
@@ -223,7 +219,6 @@ export default function CardScreen() {
         visible={deckSheet}
         card={card}
         owned={owned}
-        cheapest={cheapest}
         onClose={() => setDeckSheet(false)}
         onNewDeck={(board) => {
           setDeckSheet(false)

@@ -25,7 +25,7 @@ import { withAlpha } from '@/utils/deck-store';
 import { capitalize, formatEur } from '@/utils/format';
 
 // C1 · Card — Overview: the hero (art backdrop, tilted card, name, cost, type), then at a glance,
-// card text, facts and legality. The bottom bar (Add to deck / Add copy) is the screen's.
+// card text, facts and legality. The bottom bar (Add to deck / Add to binder) is the screen's.
 
 const HERO_HEIGHT = 420
 // Degrees at full tilt: 25% more than the Binder / Market cards (11.25°, card-tile.tsx), since this
@@ -325,7 +325,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   )
 }
 
-// Fixed at the bottom of the Overview: "Add to deck" and the gold "Add copy".
+// Fixed at the bottom of the Overview: "Add to deck" and the gold "Add to binder".
 export function OverviewActions({ onAddToDeck, onAddCopy }: { onAddToDeck: () => void; onAddCopy: () => void }) {
   const insets = useSafeAreaInsets()
   return (
@@ -336,7 +336,7 @@ export function OverviewActions({ onAddToDeck, onAddCopy }: { onAddToDeck: () =>
       </TouchableOpacity>
       <TouchableOpacity style={styles.primary} onPress={onAddCopy} accessibilityRole="button">
         <SymbolView name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.onGold} weight="bold" />
-        <Text style={styles.primaryLabel}>Add copy</Text>
+        <Text style={styles.primaryLabel}>Add to binder</Text>
       </TouchableOpacity>
     </View>
   )

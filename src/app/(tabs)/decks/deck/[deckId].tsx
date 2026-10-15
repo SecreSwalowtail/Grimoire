@@ -18,7 +18,7 @@ import {
   type DropTarget,
 } from '@/components/deck/card-drag';
 import { CardsTab } from '@/components/deck/cards-tab';
-import { CROWN, PathIcon } from '@/components/deck/parts';
+import { CROWN, ICON, PathIcon } from '@/components/deck/parts';
 import { FilterSheet } from '@/components/deck/filter-sheet';
 import { setGroupBy, useGroupBy } from '@/components/deck/group-prefs';
 import { GroupSheet } from '@/components/deck/group-sheet';
@@ -230,7 +230,7 @@ export default function DeckScreen() {
               accessibilityRole="button"
               accessibilityLabel="Deck options"
             >
-              <SymbolView name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.text} />
+              <PathIcon d={ICON.more} color={Colors.text} size={22} weight={3} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.add}
@@ -239,7 +239,7 @@ export default function DeckScreen() {
               accessibilityLabel="Add cards"
               accessibilityHint="Find cards in the Market and add them from Card detail"
             >
-              <SymbolView name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
+              <PathIcon d={ICON.plus} color={Colors.onGold} size={22} weight={2.4} />
             </TouchableOpacity>
           </View>
           )}

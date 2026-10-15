@@ -167,7 +167,7 @@ export function CopySheet({
 
   return (
     <Sheet visible={visible} onClose={onClose}>
-      <SheetHeader title={editing ? 'Edit copy' : 'Add a copy'} onClose={onClose} />
+      <SheetHeader title={editing ? 'Edit copy' : 'Add to binder'} onClose={onClose} />
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Pressable
           style={styles.printing}

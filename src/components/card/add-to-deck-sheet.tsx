@@ -1,30 +1,31 @@
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { PrimaryButton, Segmented, Sheet } from '@/components/controls';
+import { PrimaryButton, SectionLabel, Segmented, Sheet } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
 import { getSavedCard, upsertCard } from '@/db/cards';
 import type { ScryfallCard } from '@/db/scryfall';
 import { copyRule, deckFit, shortName } from '@/rules/formats';
 import {
+  addDeckCards,
   cardInfoOf,
   cardUse,
   isCommander,
-  setDeckCardCount,
   useDeckStore,
   type Board,
   type Deck,
-  type DeckFormat,
   type DeckData,
+  type DeckFormat,
 } from '@/utils/deck-store';
-import { formatEur } from '@/utils/format';
 
-// C6 · Add to deck. Pick the part of the deck (main, sideboard, maybe) and how many copies "+" adds,
-// then set each deck. A deck counts every printing of the card; "+" adds the printing on show (never
-// past the format's copy limit), "−" takes one, from it first. Decks the card can't go in come
-// last, greyed out: not legal in the format, or outside the commander's colors.
+// C6 · Add to deck. Pick the part of the deck (main, sideboard, maybe) and how many copies, then tap
+// the decks to put them in (one or several), and the button adds them. "Ignore format rules" lets
+// the card into decks whose format doesn't allow it, and past the copy limit. Afterwards: one deck
+// opens that deck (back to the same screen, edit mode and all, if it's already open behind);
+// several open the Decks list.
 
 const BOARDS: { value: Board; label: string }[] = [
   { value: 'main', label: 'Main deck' },
@@ -32,39 +33,41 @@ const BOARDS: { value: Board; label: string }[] = [
   { value: 'maybe', label: 'Maybe' },
 ]
 
-const IN_BOARD: Record<Board, string> = { main: 'In this deck', side: 'In the sideboard', maybe: 'On the maybe list' }
-
-// Copies of this card (any printing) in one part of a deck, per printing id.
-function copiesIn(data: DeckData, deckId: string, board: Board, name: string) {
-  return data.cards.filter((c) => c.deckId === deckId && c.board === board && data.info[c.cardId]?.name === name)
-}
+const IN_BOARD: Record<Board, string> = { main: 'in the deck', side: 'in the sideboard', maybe: 'on the maybe list' }
 
 // What all your decks need at once: the deck plus sideboard of every deck (not the maybe lists).
 export function copiesNeeded(data: DeckData, name: string) {
   return data.cards.reduce((n, c) => n + (c.board !== 'maybe' && data.info[c.cardId]?.name === name ? c.quantity : 0), 0)
 }
 
+type Row = {
+  deck: Deck
+  // How many copies the button would add here, and why it can't (or adds fewer).
+  adds: number
+  blocked: string | null
+  note: string
+  noteColor: string
+}
+
 export function AddToDeckSheet({
   visible,
   card,
   owned,
-  cheapest,
   onClose,
   onNewDeck,
 }: {
   visible: boolean
   card: ScryfallCard
   owned: number
-  // Lowest EUR price among the card's printings, for the "buy the rest" note.
-  cheapest: number | null
   onClose: () => void
   onNewDeck: (board: Board) => void
 }) {
   const db = useSQLiteContext()
   const store = useDeckStore()
   const [board, setBoard] = useState<Board>('main')
-  // How many copies "+" adds.
   const [amount, setAmount] = useState(1)
+  const [ignoreRules, setIgnoreRules] = useState(false)
+  const [picked, setPicked] = useState<string[]>([])
   const name = card.name
 
   // Each deck's commander colors (from the commanders' saved data), for decks that have one.
@@ -92,58 +95,77 @@ export function AddToDeckSheet({
     }
   }, [visible, commanderKey, db])
 
-  // Start from one copy each time it opens (state adjusted during render).
+  // Fresh each time it opens (state adjusted during render).
   const [wasVisible, setWasVisible] = useState(visible)
   if (visible !== wasVisible) {
     setWasVisible(visible)
-    if (visible) setAmount(1)
-  }
-
-  // A card outside the commander's colors can't go in that deck.
-  const fitFor = (deck: Deck, fit: ReturnType<typeof deckFit>) => {
-    const id = identity.get(deck.id)
-    if (!fit.allowed || !id) return fit
-    const outside = (card.color_identity ?? []).filter((c) => !id.colors.has(c))
-    return outside.length ? { allowed: false, reason: `Outside ${id.names.join(' & ')}'s colors` } : fit
+    if (visible) {
+      setAmount(1)
+      setIgnoreRules(false)
+      setPicked([])
+    }
   }
 
   // Counted once per render: this sheet renders with the screen even while it's closed, and
   // counting per deck went through every deck card for every deck (50 decks x 4,000 cards).
   const use = cardUse(name, store)
-  const formatRules = new Map<DeckFormat, { fit: ReturnType<typeof deckFit>; rule: ReturnType<typeof copyRule> }>()
+  const rulesByFormat = new Map<DeckFormat, { fit: ReturnType<typeof deckFit>; rule: ReturnType<typeof copyRule> }>()
   const rulesFor = (format: DeckFormat) => {
-    let found = formatRules.get(format)
+    let found = rulesByFormat.get(format)
     if (!found) {
       found = { fit: deckFit(card, format), rule: copyRule(card, format) }
-      formatRules.set(format, found)
+      rulesByFormat.set(format, found)
     }
     return found
   }
-  const rows = store.decks
-    .map((deck) => {
-      const r = rulesFor(deck.format)
-      return { deck, rule: r.rule, fit: fitFor(deck, r.fit), counts: use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 } }
-    })
-    .sort((a, b) => Number(b.fit.allowed) - Number(a.fit.allowed))
 
-  // `room`: how many more the copy limit allows (null: no limit).
-  const change = async (deck: Deck, by: number, room: number | null = null) => {
-    const here = copiesIn(store, deck.id, board, name)
-    if (by > 0) {
-      const add = room == null ? by : Math.min(by, room)
-      if (add <= 0) return
-      await upsertCard(db, card).catch(() => undefined)
-      const mine = here.find((c) => c.cardId === card.id)
-      setDeckCardCount(deck.id, card.id, cardInfoOf(card), board, (mine?.quantity ?? 0) + add)
+  const rows: Row[] = store.decks
+    .map((deck) => {
+      const { fit, rule } = rulesFor(deck.format)
+      const counts = use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 }
+      const here = counts[board]
+      // A card outside the commander's colors can't go in that deck.
+      const id = identity.get(deck.id)
+      const outside = id ? (card.color_identity ?? []).filter((c) => !id.colors.has(c)) : []
+      const notAllowed = !fit.allowed ? fit.reason ?? 'Not allowed in this format' : outside.length ? `Outside ${id!.names.join(' & ')}'s colors` : null
+      // The copy limit covers the deck and its sideboard together.
+      const room = board !== 'maybe' && rule.max != null ? Math.max(rule.max - (counts.main + counts.side), 0) : null
+      const atLimit = room === 0
+      const blocked = ignoreRules ? null : notAllowed ?? (atLimit ? `At the limit · ${rule.label.toLowerCase()}` : null)
+      const adds = ignoreRules || room == null ? amount : Math.min(amount, room)
+      let note = here > 0 ? `${here} ${IN_BOARD[board]}` : rule.label
+      let noteColor: string = here > 0 ? Colors.positive : Colors.textMuted
+      if (blocked) {
+        note = blocked
+        noteColor = Colors.textMuted
+      } else if (ignoreRules && notAllowed) {
+        note = `${notAllowed} · rules ignored`
+        noteColor = Colors.goldLight
+      } else if (!ignoreRules && adds < amount) {
+        note = `Adds ${adds} · ${rule.label.toLowerCase()}`
+        noteColor = Colors.goldLight
+      }
+      return { deck, adds, blocked, note, noteColor }
+    })
+    .sort((a, b) => Number(a.blocked != null) - Number(b.blocked != null))
+
+  // Decks picked that can still take the card (turning the rules back on can block some).
+  const chosen = rows.filter((r) => picked.includes(r.deck.id) && !r.blocked)
+  const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((p) => p !== id) : [...picked, id])
+
+  const add = async () => {
+    if (chosen.length === 0) {
+      onClose()
       return
     }
-    // Take from the printing on show first, then from any other.
-    const from = here.find((c) => c.cardId === card.id) ?? here[0]
-    if (from) setDeckCardCount(deck.id, from.cardId, store.info[from.cardId], board, from.quantity - 1)
+    await upsertCard(db, card).catch(() => undefined)
+    const info = cardInfoOf(card)
+    for (const r of chosen) addDeckCards(r.deck.id, card.id, info, board, r.adds)
+    onClose()
+    // One deck: open it (or go back to it, as it was left). Several: the Decks list.
+    if (chosen.length === 1) router.navigate({ pathname: '/decks/deck/[deckId]', params: { deckId: chosen[0].deck.id } })
+    else router.navigate('/decks')
   }
-
-  const needed = [...use.values()].reduce((sum, c) => sum + c.main + c.side, 0)
-  const short = needed - owned
 
   return (
     <Sheet visible={visible} onClose={onClose}>
@@ -159,97 +181,79 @@ export function AddToDeckSheet({
         </TouchableOpacity>
       </View>
 
-      <View style={styles.boards}>
-        <Segmented label="Add to which part of the deck" options={BOARDS} value={board} onChange={setBoard} />
-      </View>
-
-      <View style={styles.amountRow}>
-        <View style={styles.rowText}>
-          <Text style={styles.amountTitle}>Copies to add</Text>
-          <Text style={styles.deckMeta}>Each + adds this many</Text>
-        </View>
-        <View style={[styles.stepper, styles.stepperOn]}>
-          <TouchableOpacity
-            style={styles.step}
-            onPress={() => setAmount(Math.max(1, amount - 1))}
-            disabled={amount <= 1}
-            accessibilityRole="button"
-            accessibilityLabel="One copy fewer"
-          >
-            <Text style={[styles.stepLabel, amount <= 1 && styles.stepOff]}>−</Text>
-          </TouchableOpacity>
-          <Text style={styles.count} accessibilityLiveRegion="polite" accessibilityLabel={`${amount} ${amount === 1 ? 'copy' : 'copies'} to add`}>
-            {amount}
-          </Text>
-          <TouchableOpacity
-            style={styles.step}
-            onPress={() => setAmount(Math.min(99, amount + 1))}
-            accessibilityRole="button"
-            accessibilityLabel="One copy more"
-          >
-            <Text style={[styles.stepLabel, styles.stepAdd]}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
-        <Text style={styles.label}>Your decks · legal first</Text>
+        <Segmented label="Add to which part of the deck" options={BOARDS} value={board} onChange={setBoard} />
+
+        <View style={styles.options}>
+          <View style={styles.option}>
+            <Text style={styles.optionTitle}>Copies</Text>
+            <View style={styles.stepper}>
+              <TouchableOpacity
+                style={styles.step}
+                onPress={() => setAmount(Math.max(1, amount - 1))}
+                disabled={amount <= 1}
+                accessibilityRole="button"
+                accessibilityLabel="One copy fewer"
+              >
+                <Text style={[styles.stepLabel, amount <= 1 && styles.stepOff]}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.count} accessibilityLiveRegion="polite" accessibilityLabel={`${amount} ${amount === 1 ? 'copy' : 'copies'}`}>
+                {amount}
+              </Text>
+              <TouchableOpacity
+                style={styles.step}
+                onPress={() => setAmount(Math.min(99, amount + 1))}
+                accessibilityRole="button"
+                accessibilityLabel="One copy more"
+              >
+                <Text style={[styles.stepLabel, styles.stepAdd]}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.optionRule} />
+          <Pressable
+            style={styles.option}
+            onPress={() => setIgnoreRules(!ignoreRules)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: ignoreRules }}
+          >
+            <View style={styles.optionText}>
+              <Text style={styles.optionTitle}>Ignore format rules</Text>
+              <Text style={styles.optionHint}>Add it even if it isn&apos;t legal, or past the copy limit</Text>
+            </View>
+            <View style={[styles.box, ignoreRules && styles.boxOn]}>
+              {ignoreRules && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
+            </View>
+          </Pressable>
+        </View>
+
+        <SectionLabel style={styles.label}>{rows.length ? 'Your decks · tap to pick' : 'Your decks'}</SectionLabel>
         {rows.length === 0 ? (
           <Text style={styles.none}>You have no decks yet.</Text>
         ) : (
           <View style={styles.list}>
-            {rows.map(({ deck, fit, rule, counts }, i) => {
-              const folder = store.folders.find((f) => f.id === deck.folderId)
-              const n = counts[board]
-              // The copy limit covers the deck and its sideboard together.
-              const played = board === 'maybe' ? n : counts.main + counts.side
-              const room = board !== 'maybe' && rule.max != null ? rule.max - played : null
-              const atMax = room != null && room <= 0
-              let note = rule.label
-              let noteColor: string = Colors.textMuted
-              if (!fit.allowed) note = fit.reason ?? 'Not allowed in this format'
-              else if (n > 0 && board !== 'maybe' && n > owned) {
-                note = `Needs ${n} · you own ${owned} · ${n - owned} short`
-                noteColor = Colors.goldLight
-              } else if (n > 0) {
-                note = `${IN_BOARD[board]} · ${n} ${n === 1 ? 'copy' : 'copies'}`
-                noteColor = Colors.positive
-              }
+            {rows.map((r, i) => {
+              const folder = store.folders.find((f) => f.id === r.deck.folderId)
+              const on = picked.includes(r.deck.id) && !r.blocked
               return (
-                <View key={deck.id} style={[styles.row, i > 0 && styles.rowRule, !fit.allowed && styles.rowOff]}>
+                <Pressable
+                  key={r.deck.id}
+                  style={[styles.row, i > 0 && styles.rowRule, on && styles.rowOn, r.blocked != null && styles.rowOff]}
+                  onPress={() => toggle(r.deck.id)}
+                  disabled={r.blocked != null}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on, disabled: r.blocked != null }}
+                  accessibilityLabel={`${r.deck.name}, ${r.deck.format}. ${r.note}`}
+                >
                   <View style={styles.rowText}>
-                    <Text style={styles.deckName} numberOfLines={1}>{deck.name}</Text>
-                    <Text style={styles.deckMeta} numberOfLines={1}>{deck.format} · {folder ? `in ${folder.name}` : 'No folder'}</Text>
-                    <Text style={[styles.note, { color: noteColor }]} numberOfLines={2}>{note}</Text>
+                    <Text style={styles.deckName} numberOfLines={1}>{r.deck.name}</Text>
+                    <Text style={styles.deckMeta} numberOfLines={1}>{r.deck.format} · {folder ? folder.name : 'No folder'}</Text>
+                    <Text style={[styles.note, { color: r.noteColor }]} numberOfLines={2}>{r.note}</Text>
                   </View>
-                  {fit.allowed ? (
-                    <View style={[styles.stepper, n > 0 && styles.stepperOn]}>
-                      <TouchableOpacity
-                        style={styles.step}
-                        onPress={() => change(deck, -1)}
-                        disabled={n === 0}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove one from ${deck.name}`}
-                      >
-                        <Text style={[styles.stepLabel, n === 0 && styles.stepOff]}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={[styles.count, n === 0 && styles.countOff]} accessibilityLiveRegion="polite">{n}</Text>
-                      <TouchableOpacity
-                        style={styles.step}
-                        onPress={() => change(deck, amount, room)}
-                        disabled={atMax}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Add ${room == null ? amount : Math.min(amount, room)} to ${deck.name}`}
-                      >
-                        <Text style={[styles.stepLabel, styles.stepAdd, atMax && styles.stepOff]}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.notLegal}>
-                      <Text style={styles.notLegalLabel}>Not legal</Text>
-                    </View>
-                  )}
-                </View>
+                  <View style={[styles.box, styles.roundBox, on && styles.boxOn]}>
+                    {on && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
+                  </View>
+                </Pressable>
               )
             })}
           </View>
@@ -261,21 +265,10 @@ export function AddToDeckSheet({
         </TouchableOpacity>
       </ScrollView>
 
-      {short > 0 && (
-        <TouchableOpacity
-          style={styles.short}
-          onPress={() => card.purchase_uris?.cardmarket && Linking.openURL(card.purchase_uris.cardmarket)}
-          disabled={!card.purchase_uris?.cardmarket}
-          accessibilityRole="link"
-        >
-          <SymbolView name={{ ios: 'exclamationmark.circle', android: 'error' }} size={18} tintColor={Colors.goldLight} />
-          <Text style={styles.shortText}>
-            Your decks need {needed} · you own {owned}. {short} more{cheapest != null ? ` from ${formatEur(cheapest * short)}` : ''}.
-          </Text>
-          {card.purchase_uris?.cardmarket && <Text style={styles.buy}>Buy</Text>}
-        </TouchableOpacity>
-      )}
-      <PrimaryButton label="Done" onPress={onClose} />
+      <PrimaryButton
+        label={chosen.length === 0 ? 'Done' : `Add ${amount} to ${chosen.length} ${chosen.length === 1 ? 'deck' : 'decks'}`}
+        onPress={add}
+      />
     </Sheet>
   )
 }
@@ -315,105 +308,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  boards: {
-    marginTop: 16,
-  },
   body: {
     flexShrink: 1,
-    marginTop: 18,
+    marginTop: 16,
   },
   bodyContent: {
     paddingBottom: 16,
   },
-  label: {
-    marginBottom: 8,
-    marginLeft: 2,
-    fontSize: 12,
-    fontFamily: Fonts.extraBold,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: Colors.textSecondary,
-  },
-  none: {
-    marginLeft: 2,
-    fontSize: 14,
-    fontFamily: Fonts.regular,
-    color: Colors.textSecondary,
-  },
-  list: {
+  // Copies and the rules checkbox, as two rows of one card.
+  options: {
+    marginTop: 12,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(237,230,214,0.10)',
     backgroundColor: Colors.background,
-    overflow: 'hidden',
   },
-  row: {
-    minHeight: 76,
-    paddingVertical: 10,
-    paddingLeft: 16,
-    paddingRight: 10,
+  option: {
+    minHeight: 58,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  rowRule: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(237,230,214,0.07)',
+  optionRule: {
+    height: 1,
+    marginHorizontal: 14,
+    backgroundColor: 'rgba(237,230,214,0.07)',
   },
-  rowOff: {
-    opacity: 0.55,
-  },
-  rowText: {
+  optionText: {
     flex: 1,
-    minWidth: 0,
-    gap: 3,
+    gap: 2,
   },
-  deckName: {
+  optionTitle: {
     fontSize: 15,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
   },
-  deckMeta: {
-    fontSize: 13,
+  optionHint: {
+    fontSize: 12,
     fontFamily: Fonts.regular,
     color: Colors.textSecondary,
   },
-  note: {
-    fontSize: 12,
-    fontFamily: Fonts.bold,
-  },
-  amountRow: {
-    marginTop: 12,
-    minHeight: 56,
-    paddingLeft: 14,
-    paddingRight: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(237,230,214,0.10)',
-    backgroundColor: Colors.background,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  amountTitle: {
-    fontSize: 15,
-    fontFamily: Fonts.extraBold,
-    color: Colors.text,
-  },
   stepper: {
-    height: 44,
+    height: 42,
     paddingHorizontal: 3,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderColor: 'rgba(212,166,74,0.40)',
+    backgroundColor: 'rgba(212,166,74,0.10)',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-  },
-  stepperOn: {
-    borderColor: 'rgba(212,166,74,0.40)',
-    backgroundColor: 'rgba(212,166,74,0.10)',
   },
   step: {
     width: 36,
@@ -433,33 +381,92 @@ const styles = StyleSheet.create({
     color: '#5A5446',
   },
   count: {
-    minWidth: 18,
+    minWidth: 20,
     textAlign: 'center',
     fontSize: 16,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
     fontVariant: ['tabular-nums'],
   },
-  countOff: {
-    color: Colors.textMuted,
-  },
-  notLegal: {
-    height: 28,
-    paddingHorizontal: 10,
-    borderRadius: 9,
-    backgroundColor: 'rgba(237,230,214,0.08)',
+  box: {
+    width: 24,
+    height: 24,
+    marginRight: 6,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: 'rgba(237,230,214,0.28)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  notLegalLabel: {
-    fontSize: 12,
-    fontFamily: Fonts.extraBold,
+  roundBox: {
+    borderRadius: 12,
+    marginRight: 0,
+  },
+  boxOn: {
+    borderWidth: 0,
+    backgroundColor: Colors.gold,
+  },
+  label: {
+    marginTop: 20,
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  none: {
+    marginLeft: 2,
+    fontSize: 14,
+    fontFamily: Fonts.regular,
     color: Colors.textSecondary,
   },
+  list: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.10)',
+    backgroundColor: Colors.background,
+    overflow: 'hidden',
+  },
+  row: {
+    minHeight: 72,
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rowRule: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(237,230,214,0.07)',
+  },
+  rowOn: {
+    backgroundColor: 'rgba(212,166,74,0.12)',
+  },
+  rowOff: {
+    opacity: 0.45,
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  deckName: {
+    fontSize: 15,
+    fontFamily: Fonts.extraBold,
+    color: Colors.text,
+  },
+  deckMeta: {
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    color: Colors.textSecondary,
+  },
+  note: {
+    fontSize: 12,
+    fontFamily: Fonts.bold,
+  },
   newDeck: {
-    marginTop: 10,
-    height: 50,
+    marginTop: 12,
+    height: 48,
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: 'rgba(212,166,74,0.45)',
     flexDirection: 'row',
@@ -469,30 +476,6 @@ const styles = StyleSheet.create({
   },
   newDeckLabel: {
     fontSize: 14,
-    fontFamily: Fonts.extraBold,
-    color: Colors.goldLight,
-  },
-  short: {
-    marginBottom: 10,
-    minHeight: 48,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(212,166,74,0.32)',
-    backgroundColor: 'rgba(212,166,74,0.08)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  shortText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: Fonts.regular,
-    color: Colors.text,
-  },
-  buy: {
-    fontSize: 13,
     fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
   },

@@ -100,7 +100,7 @@ export default function OrganizeScreen() {
 
   return (
     <View style={styles.root}>
-      <Stack.Screen options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+      <Stack.Screen options={{ presentation: 'fullScreenModal', animation: 'none' }} />
       <AnimatedScrollView
         ref={scrollRef}
         onScroll={onScroll}
