@@ -61,14 +61,44 @@ export const isPlayable = (status: Legality | undefined) => status === 'legal' |
 
 // The decks' formats as Scryfall keys; Casual has no card pool.
 const DECK_FORMAT_KEY: Record<DeckFormat, string | null> = {
+  Commander: 'commander',
   Standard: 'standard',
-  Pioneer: 'pioneer',
   Modern: 'modern',
+  Pioneer: 'pioneer',
   Pauper: 'pauper',
   Legacy: 'legacy',
-  Commander: 'commander',
+  Vintage: 'vintage',
+  Oathbreaker: 'oathbreaker',
+  'Pauper Commander': 'paupercommander',
+  'Duel Commander': 'duel',
+  PreDH: 'predh',
+  Premodern: 'premodern',
+  'Old School': 'oldschool',
+  'Penny Dreadful': 'penny',
+  'Future Standard': 'future',
+  Alchemy: 'alchemy',
+  Explorer: 'explorer',
+  Historic: 'historic',
+  Timeless: 'timeless',
+  Brawl: 'brawl',
+  'Standard Brawl': 'standardbrawl',
+  'Competitive Brawl': 'competitivebrawl',
+  Gladiator: 'gladiator',
   Casual: null,
 }
+
+// One copy of each card (basic lands aside): Commander and the formats built like it.
+const SINGLETON = new Set<DeckFormat>([
+  'Commander',
+  'Oathbreaker',
+  'Pauper Commander',
+  'Duel Commander',
+  'PreDH',
+  'Brawl',
+  'Standard Brawl',
+  'Competitive Brawl',
+  'Gladiator',
+])
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -114,7 +144,7 @@ export function copyRule(card: ScryfallCard, format: DeckFormat): CopyRule {
     const n = NUMBER_WORDS[upTo[1].toLowerCase()] ?? Number(upTo[1])
     if (n) return { max: n, label: `Up to ${n} copies · its own rule` }
   }
-  if (format === 'Commander') return { max: 1, label: 'Singleton · 1 copy max' }
+  if (SINGLETON.has(format)) return { max: 1, label: 'Singleton · 1 copy max' }
   if (format === 'Casual') return { max: null, label: 'Casual · no copy limit' }
   const key = DECK_FORMAT_KEY[format]
   if (key && card.legalities?.[key] === 'restricted') return { max: 1, label: 'Restricted · 1 copy max' }

@@ -1,16 +1,17 @@
 import { SymbolView } from 'expo-symbols';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { PrimaryButton, Segmented, Sheet } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
-import { upsertCard } from '@/db/cards';
+import { getSavedCard, upsertCard } from '@/db/cards';
 import type { ScryfallCard } from '@/db/scryfall';
 import { copyRule, deckFit, shortName } from '@/rules/formats';
 import {
   cardInfoOf,
   cardUse,
+  isCommander,
   setDeckCardCount,
   useDeckStore,
   type Board,
@@ -20,9 +21,10 @@ import {
 } from '@/utils/deck-store';
 import { formatEur } from '@/utils/format';
 
-// C6 · Add to deck. Pick the part of the deck (main, sideboard, maybe), then set how many copies
-// each deck holds. A deck counts every printing of the card; "+" adds the printing on show, "−"
-// takes from it first. Decks whose format doesn't allow the card come last, greyed out.
+// C6 · Add to deck. Pick the part of the deck (main, sideboard, maybe) and how many copies "+" adds,
+// then set each deck. A deck counts every printing of the card; "+" adds the printing on show (never
+// past the format's copy limit), "−" takes one, from it first. Decks the card can't go in come
+// last, greyed out: not legal in the format, or outside the commander's colors.
 
 const BOARDS: { value: Board; label: string }[] = [
   { value: 'main', label: 'Main deck' },
@@ -61,7 +63,49 @@ export function AddToDeckSheet({
   const db = useSQLiteContext()
   const store = useDeckStore()
   const [board, setBoard] = useState<Board>('main')
+  // How many copies "+" adds.
+  const [amount, setAmount] = useState(1)
   const name = card.name
+
+  // Each deck's commander colors (from the commanders' saved data), for decks that have one.
+  const commanders = store.cards.filter((c) => isCommander(c, store.decks))
+  const commanderKey = commanders.map((c) => `${c.deckId}:${c.cardId}`).join(',')
+  const [identity, setIdentity] = useState<Map<string, { colors: Set<string>; names: string[] }>>(() => new Map())
+  useEffect(() => {
+    if (!visible) return
+    let live = true
+    ;(async () => {
+      const next = new Map<string, { colors: Set<string>; names: string[] }>()
+      for (const pair of commanderKey ? commanderKey.split(',') : []) {
+        const [deckId, cardId] = pair.split(':')
+        const saved = await getSavedCard(db, cardId)
+        if (!saved) continue
+        const entry = next.get(deckId) ?? { colors: new Set<string>(), names: [] }
+        for (const c of saved.card.color_identity ?? []) entry.colors.add(c)
+        entry.names.push(shortName(saved.card))
+        next.set(deckId, entry)
+      }
+      if (live) setIdentity(next)
+    })().catch((e) => console.warn('Failed to read commanders', e))
+    return () => {
+      live = false
+    }
+  }, [visible, commanderKey, db])
+
+  // Start from one copy each time it opens (state adjusted during render).
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
+    if (visible) setAmount(1)
+  }
+
+  // A card outside the commander's colors can't go in that deck.
+  const fitFor = (deck: Deck, fit: ReturnType<typeof deckFit>) => {
+    const id = identity.get(deck.id)
+    if (!fit.allowed || !id) return fit
+    const outside = (card.color_identity ?? []).filter((c) => !id.colors.has(c))
+    return outside.length ? { allowed: false, reason: `Outside ${id.names.join(' & ')}'s colors` } : fit
+  }
 
   // Counted once per render: this sheet renders with the screen even while it's closed, and
   // counting per deck went through every deck card for every deck (50 decks x 4,000 cards).
@@ -76,15 +120,21 @@ export function AddToDeckSheet({
     return found
   }
   const rows = store.decks
-    .map((deck) => ({ deck, ...rulesFor(deck.format), counts: use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 } }))
+    .map((deck) => {
+      const r = rulesFor(deck.format)
+      return { deck, rule: r.rule, fit: fitFor(deck, r.fit), counts: use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 } }
+    })
     .sort((a, b) => Number(b.fit.allowed) - Number(a.fit.allowed))
 
-  const change = async (deck: Deck, by: number) => {
+  // `room`: how many more the copy limit allows (null: no limit).
+  const change = async (deck: Deck, by: number, room: number | null = null) => {
     const here = copiesIn(store, deck.id, board, name)
     if (by > 0) {
+      const add = room == null ? by : Math.min(by, room)
+      if (add <= 0) return
       await upsertCard(db, card).catch(() => undefined)
       const mine = here.find((c) => c.cardId === card.id)
-      setDeckCardCount(deck.id, card.id, cardInfoOf(card), board, (mine?.quantity ?? 0) + 1)
+      setDeckCardCount(deck.id, card.id, cardInfoOf(card), board, (mine?.quantity ?? 0) + add)
       return
     }
     // Take from the printing on show first, then from any other.
@@ -113,6 +163,35 @@ export function AddToDeckSheet({
         <Segmented label="Add to which part of the deck" options={BOARDS} value={board} onChange={setBoard} />
       </View>
 
+      <View style={styles.amountRow}>
+        <View style={styles.rowText}>
+          <Text style={styles.amountTitle}>Copies to add</Text>
+          <Text style={styles.deckMeta}>Each + adds this many</Text>
+        </View>
+        <View style={[styles.stepper, styles.stepperOn]}>
+          <TouchableOpacity
+            style={styles.step}
+            onPress={() => setAmount(Math.max(1, amount - 1))}
+            disabled={amount <= 1}
+            accessibilityRole="button"
+            accessibilityLabel="One copy fewer"
+          >
+            <Text style={[styles.stepLabel, amount <= 1 && styles.stepOff]}>−</Text>
+          </TouchableOpacity>
+          <Text style={styles.count} accessibilityLiveRegion="polite" accessibilityLabel={`${amount} ${amount === 1 ? 'copy' : 'copies'} to add`}>
+            {amount}
+          </Text>
+          <TouchableOpacity
+            style={styles.step}
+            onPress={() => setAmount(Math.min(99, amount + 1))}
+            accessibilityRole="button"
+            accessibilityLabel="One copy more"
+          >
+            <Text style={[styles.stepLabel, styles.stepAdd]}>+</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         <Text style={styles.label}>Your decks · legal first</Text>
         {rows.length === 0 ? (
@@ -124,7 +203,8 @@ export function AddToDeckSheet({
               const n = counts[board]
               // The copy limit covers the deck and its sideboard together.
               const played = board === 'maybe' ? n : counts.main + counts.side
-              const atMax = board !== 'maybe' && rule.max != null && played >= rule.max
+              const room = board !== 'maybe' && rule.max != null ? rule.max - played : null
+              const atMax = room != null && room <= 0
               let note = rule.label
               let noteColor: string = Colors.textMuted
               if (!fit.allowed) note = fit.reason ?? 'Not allowed in this format'
@@ -156,10 +236,10 @@ export function AddToDeckSheet({
                       <Text style={[styles.count, n === 0 && styles.countOff]} accessibilityLiveRegion="polite">{n}</Text>
                       <TouchableOpacity
                         style={styles.step}
-                        onPress={() => change(deck, 1)}
+                        onPress={() => change(deck, amount, room)}
                         disabled={atMax}
                         accessibilityRole="button"
-                        accessibilityLabel={`Add one to ${deck.name}`}
+                        accessibilityLabel={`Add ${room == null ? amount : Math.min(amount, room)} to ${deck.name}`}
                       >
                         <Text style={[styles.stepLabel, styles.stepAdd, atMax && styles.stepOff]}>+</Text>
                       </TouchableOpacity>
@@ -301,6 +381,24 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 12,
     fontFamily: Fonts.bold,
+  },
+  amountRow: {
+    marginTop: 12,
+    minHeight: 56,
+    paddingLeft: 14,
+    paddingRight: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.10)',
+    backgroundColor: Colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  amountTitle: {
+    fontSize: 15,
+    fontFamily: Fonts.extraBold,
+    color: Colors.text,
   },
   stepper: {
     height: 44,

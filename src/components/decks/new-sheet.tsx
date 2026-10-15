@@ -5,18 +5,21 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls';
 import { CheckBox, ColorPicker, NameField } from '@/components/decks/parts';
+import { setScanDeck } from '@/utils/scan-binder';
 import { Colors, Fonts } from '@/constants/theme';
 import {
   createDeck,
   createFolder,
   FOLDER_COLORS,
+  FORMATS,
+  POPULAR_FORMATS,
   useDeckStore,
   type DeckFormat,
   type FolderColor,
 } from '@/utils/deck-store';
 
-// Formats offered when creating a deck (Deck options adds Legacy).
-const NEW_FORMATS: DeckFormat[] = ['Standard', 'Pioneer', 'Modern', 'Pauper', 'Commander', 'Casual']
+// The formats behind "More formats".
+const MORE_FORMATS = FORMATS.filter((f) => !POPULAR_FORMATS.includes(f))
 
 export type Start = 'empty' | 'paste' | 'scan'
 const STARTS: { value: Start; label: string; icon: SymbolViewProps['name'] }[] = [
@@ -30,7 +33,8 @@ export type NewKind = 'deck' | 'folder'
 // "New deck / New folder" sheet. `folderId` preselects "Put in folder"; `deckIds` pre-checks
 // decks to file into a new folder (from Organize and Move).
 // "Paste list" only creates the deck for now; "Scan cards" creates it and opens the Scan tab.
-// `onDeckCreated` gets the new deck's id (Card detail uses it to put the card in).
+// `onDeckCreated` gets the new deck's id (Card detail uses it to put the card in). "Scan cards"
+// sends what you scan to the new deck's main deck too.
 export function NewSheet({
   visible,
   kind: initialKind,
@@ -50,6 +54,7 @@ export function NewSheet({
   const [kind, setKind] = useState(initialKind)
   const [name, setName] = useState('')
   const [format, setFormat] = useState<DeckFormat>('Modern')
+  const [moreFormats, setMoreFormats] = useState(false)
   const [start, setStart] = useState<Start>('empty')
   const [place, setPlace] = useState<string | null>(folderId)
   const [color, setColor] = useState<FolderColor>('gold')
@@ -63,6 +68,7 @@ export function NewSheet({
       setKind(initialKind)
       setName('')
       setFormat('Modern')
+      setMoreFormats(false)
       setStart('empty')
       setPlace(folderId)
       setColor('gold')
@@ -83,7 +89,10 @@ export function NewSheet({
     if (isDeck) {
       const id = createDeck({ name: name.trim() || 'New deck', format, folderId: place })
       onDeckCreated?.(id)
-      if (start === 'scan') router.navigate('/scan')
+      if (start === 'scan') {
+        setScanDeck({ deckId: id, board: 'main' })
+        router.navigate('/scan')
+      }
     } else {
       createFolder({ name: name.trim() || 'New folder', color }, picked)
     }
@@ -118,10 +127,32 @@ export function NewSheet({
           <>
             <SectionLabel style={styles.label}>Format</SectionLabel>
             <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Format">
-              {NEW_FORMATS.map((f) => (
+              {POPULAR_FORMATS.map((f) => (
                 <Option key={f} label={f} selected={f === format} onPress={() => setFormat(f)} style={styles.third} />
               ))}
+              {/* Longer names, so two per row. */}
+              {moreFormats &&
+                MORE_FORMATS.map((f) => (
+                  <Option key={f} label={f} selected={f === format} onPress={() => setFormat(f)} style={styles.half} />
+                ))}
             </View>
+            <Pressable
+              style={styles.more}
+              onPress={() => setMoreFormats(!moreFormats)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: moreFormats }}
+            >
+              <Text style={styles.moreLabel}>
+                {moreFormats
+                  ? 'Fewer formats'
+                  : MORE_FORMATS.includes(format) ? `More formats · ${format}` : `More formats (${MORE_FORMATS.length})`}
+              </Text>
+              <SymbolView
+                name={moreFormats ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
+                size={16}
+                tintColor={Colors.goldLight}
+              />
+            </Pressable>
 
             <SectionLabel style={styles.label}>Start from</SectionLabel>
             <StartOptions value={start} onChange={setStart} />
@@ -266,6 +297,28 @@ const styles = StyleSheet.create({
   third: {
     width: '31%',
     flexGrow: 1,
+  },
+  // Two per row.
+  half: {
+    width: '48%',
+    flexGrow: 1,
+  },
+  more: {
+    marginTop: 8,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(212,166,74,0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  moreLabel: {
+    fontSize: 13,
+    fontFamily: Fonts.extraBold,
+    color: Colors.goldLight,
   },
   option: {
     height: 44,

@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { DeckOptionsSheet } from '@/components/decks/deck-options-sheet';
 import { DeleteFolderDialog } from '@/components/decks/delete-folder-dialog';
 import { FolderEditSheet } from '@/components/decks/folder-edit-sheet';
+import { ImportSheet } from '@/components/decks/import-sheet';
 import { MoveSheet } from '@/components/decks/move-sheet';
 import { NewSheet, type NewKind } from '@/components/decks/new-sheet';
 import { UndoToast } from '@/components/decks/parts';
@@ -35,11 +36,13 @@ function useToast() {
 export function useDeckSheets({
   toastBottom = 16,
   onFolderDeleted,
-}: { toastBottom?: number; onFolderDeleted?: () => void } = {}) {
+  onDeckDeleted,
+}: { toastBottom?: number; onFolderDeleted?: () => void; onDeckDeleted?: () => void } = {}) {
   const [newSheet, setNewSheet] = useState<NewState | null>(null)
   const [editFolderId, setEditFolderId] = useState<string | null>(null)
   const [optionsDeckId, setOptionsDeckId] = useState<string | null>(null)
   const [moveDeckIds, setMoveDeckIds] = useState<string[] | null>(null)
+  const [importDeckId, setImportDeckId] = useState<string | null>(null)
   const [deleteFolderIds, setDeleteFolderIds] = useState<string[] | null>(null)
   const [onMoved, setOnMoved] = useState<(() => void) | undefined>(undefined)
   const shownToast = useToast()
@@ -72,8 +75,16 @@ export function useDeckSheets({
           setOptionsDeckId(null)
           setMoveDeckIds([deckId])
         }}
-        onDeleted={(name, undo) => showUndo(`${name} deleted`, undo)}
+        onImport={(deckId) => {
+          setOptionsDeckId(null)
+          setImportDeckId(deckId)
+        }}
+        onDeleted={(name, undo) => {
+          showUndo(`${name} deleted`, undo)
+          onDeckDeleted?.()
+        }}
       />
+      <ImportSheet deckId={importDeckId} onClose={() => setImportDeckId(null)} />
       <MoveSheet
         deckIds={moveDeckIds}
         onClose={() => setMoveDeckIds(null)}

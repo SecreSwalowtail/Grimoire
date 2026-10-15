@@ -55,6 +55,8 @@ export type ScryfallCard = {
   defense?: string;
   colors?: string[];
   color_identity?: string[];
+  // Mana it can make: "W", "U", "B", "R", "G", "C".
+  produced_mana?: string[];
   keywords?: string[];
   legalities?: Record<string, Legality>;
   games?: string[];

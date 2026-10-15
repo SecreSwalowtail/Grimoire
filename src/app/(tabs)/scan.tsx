@@ -23,7 +23,8 @@ import { cardImage, getCardBySetNumber, type ScryfallCard } from '@/db/scryfall'
 import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button';
 import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan';
 import { parseCollectorLine } from '@/utils/collector-line';
-import { getScanBinder } from '@/utils/scan-binder';
+import { addDeckCards, cardInfoOf, useDeckStore } from '@/utils/deck-store';
+import { getScanBinder, getScanDeck, setScanDeck, useScanDeck, type ScanDeck } from '@/utils/scan-binder';
 
 // Where the set code + collector number sit on a card, as fractions of the card. Tune these.
 const STRIP = { x: 0, y: 0.88, width: 0.6, height: 0.12 }
@@ -55,7 +56,10 @@ export default function ScanScreen() {
   const [processing, setProcessing] = useState(false)
   const [toast, setToast] = useState<ScanToastData | null>(null)
   // What the last successful scan added, so Undo can take it back off.
-  const [lastAdded, setLastAdded] = useState<{ cardId: string; language: string; binderId: string | null } | null>(null)
+  const deckStore = useDeckStore()
+  const scanDeck = useScanDeck()
+  const intoDeck = scanDeck ? deckStore.decks.find((d) => d.id === scanDeck.deckId) : undefined
+  const [lastAdded, setLastAdded] = useState<{ cardId: string; language: string; binderId: string | null; deck: ScanDeck | null } | null>(null)
   const busy = useRef(false)
   const lastRect = useRef<NormalizedRect | null>(null)
 
@@ -134,7 +138,9 @@ export default function ScanScreen() {
       }
       const binderId = getScanBinder()
       await addToCollection(db, found, { language: line.language, binderId: binderId ?? undefined })
-      setLastAdded({ cardId: found.id, language: line.language, binderId })
+      const deck = getScanDeck()
+      const inDeck = deck != null && addDeckCards(deck.deckId, found.id, cardInfoOf(found), deck.board, 1)
+      setLastAdded({ cardId: found.id, language: line.language, binderId, deck: inDeck ? deck : null })
       setToast({
         ok: true,
         name: found.name,
@@ -157,6 +163,9 @@ export default function ScanScreen() {
     if (!lastAdded) return
     try {
       await removeOneCopy(db, lastAdded.cardId, { language: lastAdded.language, binderId: lastAdded.binderId ?? undefined })
+      const { deck } = lastAdded
+      const info = deck && deckStore.info[lastAdded.cardId]
+      if (deck && info) addDeckCards(deck.deckId, lastAdded.cardId, info, deck.board, -1)
       setLastAdded(null)
       setToast(null)
     } catch (e) {
@@ -247,6 +256,20 @@ export default function ScanScreen() {
       <View pointerEvents="box-none" style={[styles.overlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.header}>
           <Text style={styles.title}>Scan</Text>
+          {/* Scans also going into a new deck: which one, and a way to stop. */}
+          {intoDeck && scanDeck && (
+            <TouchableOpacity
+              style={styles.deckPill}
+              onPress={() => setScanDeck(null)}
+              accessibilityRole="button"
+              accessibilityLabel={`Adding scans to ${intoDeck.name}, ${BOARD_NAME[scanDeck.board]}. Tap to stop.`}
+            >
+              <Text style={styles.deckPillLabel} numberOfLines={1}>
+                {intoDeck.name} · {BOARD_NAME[scanDeck.board]}
+              </Text>
+              <SymbolView name={{ ios: 'xmark', android: 'close' }} size={14} tintColor={Colors.goldLight} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.iconBtn, torch && styles.iconBtnOn]}
             onPress={() => setTorch((t) => !t)}
@@ -304,6 +327,8 @@ export default function ScanScreen() {
 
 const BRACKET = 34
 
+const BOARD_NAME = { main: 'Main deck', side: 'Sideboard', maybe: 'Maybe' } as const
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -324,6 +349,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 1, // above the frame's scrim
+  },
+  deckPill: {
+    flexShrink: 1,
+    height: 36,
+    marginHorizontal: 12,
+    paddingLeft: 14,
+    paddingRight: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(212,166,74,0.45)',
+    backgroundColor: 'rgba(14,13,11,0.75)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  deckPillLabel: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontFamily: Fonts.extraBold,
+    color: Colors.goldLight,
   },
   title: {
     fontSize: 42,

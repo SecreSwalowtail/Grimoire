@@ -9,8 +9,59 @@ import { cardImage, type ScryfallCard } from '@/db/scryfall'
 // read and change this in-memory copy, so they never wait on the database, and each change is
 // written back in the background.
 
-export const FORMATS = ['Standard', 'Pioneer', 'Modern', 'Pauper', 'Legacy', 'Commander', 'Casual'] as const
+// Every format a deck can be for: the most played first (POPULAR_FORMATS), then the other paper
+// formats, the MTG Arena ones, and Casual (no card pool). Saved by name.
+export const FORMATS = [
+  'Commander',
+  'Standard',
+  'Modern',
+  'Pioneer',
+  'Pauper',
+  'Legacy',
+  'Vintage',
+  'Oathbreaker',
+  'Pauper Commander',
+  'Duel Commander',
+  'PreDH',
+  'Premodern',
+  'Old School',
+  'Penny Dreadful',
+  'Future Standard',
+  'Alchemy',
+  'Explorer',
+  'Historic',
+  'Timeless',
+  'Brawl',
+  'Standard Brawl',
+  'Competitive Brawl',
+  'Gladiator',
+  'Casual',
+] as const
 export type DeckFormat = (typeof FORMATS)[number]
+
+// Formats built around a commander. In any other format a deck's commander mark is kept (switching
+// back brings it back) but not shown or used.
+const COMMANDER_FORMATS: DeckFormat[] = [
+  'Commander',
+  'Pauper Commander',
+  'Duel Commander',
+  'PreDH',
+  'Brawl',
+  'Standard Brawl',
+  'Competitive Brawl',
+  'Oathbreaker',
+]
+export const hasCommander = (format: DeckFormat) => COMMANDER_FORMATS.includes(format)
+
+// Whether a deck card is its commander right now (marked, and the deck's format has one).
+export function isCommander(card: DeckCard, decks: Deck[]) {
+  if (!card.commander) return false
+  const deck = decks.find((d) => d.id === card.deckId)
+  return deck != null && hasCommander(deck.format)
+}
+
+// Shown first when picking a format; the rest are behind "More formats".
+export const POPULAR_FORMATS: DeckFormat[] = ['Commander', 'Standard', 'Modern', 'Pioneer', 'Pauper', 'Legacy']
 
 export const FOLDER_COLORS = {
   gold: { label: 'Gold', hex: '#D4A64A' },
@@ -33,7 +84,8 @@ export type Board = 'main' | 'side' | 'maybe'
 const BOARDS: readonly Board[] = ['main', 'side', 'maybe']
 
 // Copies of one printing in one part of a deck. `id` is "deckId|cardId|board".
-export type DeckCard = { id: string; deckId: string; cardId: string; board: Board; quantity: number }
+// `commander`: the deck's commander (only main-deck cards; two for partners).
+export type DeckCard = { id: string; deckId: string; cardId: string; board: Board; quantity: number; commander?: boolean }
 
 // What the deck screens need to know about a card (a cached copy of its row in `cards`).
 export type CardInfo = {
@@ -116,7 +168,14 @@ export async function loadDeckStore(database: SQLiteDatabase) {
     info,
     cards: rows.cards.map((c) => {
       const board = pick(c.board, BOARDS, 'main')
-      return { id: cardKey(c.deck_id, c.card_id, board), deckId: c.deck_id, cardId: c.card_id, board, quantity: c.quantity }
+      return {
+        id: cardKey(c.deck_id, c.card_id, board),
+        deckId: c.deck_id,
+        cardId: c.card_id,
+        board,
+        quantity: c.quantity,
+        commander: board === 'main' && c.commander === 1,
+      }
     }),
     folders: rows.folders.map((f) => ({
       id: f.id,
@@ -183,6 +242,30 @@ export function setDeckCardCount(deckId: string, cardId: string, card: CardInfo,
   else if (exists) cards = state.cards.map((c) => (c.id === id ? { ...c, quantity } : c))
   else cards = [...state.cards, { id, deckId, cardId, board, quantity }]
   set({ ...state, info, cards })
+}
+
+// Adds `by` copies (negative takes them away) to one part of a deck. Does nothing if the deck is
+// gone. Returns whether it did anything. `commander` also makes the card a commander (main deck).
+export function addDeckCards(deckId: string, cardId: string, card: CardInfo, board: Board, by: number, commander = false) {
+  if (!state.decks.some((d) => d.id === deckId)) return false
+  const now = state.cards.find((c) => c.id === cardKey(deckId, cardId, board))?.quantity ?? 0
+  setDeckCardCount(deckId, cardId, card, board, now + by)
+  if (commander && board === 'main') setCommander(deckId, cardId, true)
+  return true
+}
+
+// Makes a main-deck card the deck's commander, or a regular card again. A third commander replaces
+// the earliest: a deck has one, or two with partners.
+export function setCommander(deckId: string, cardId: string, on: boolean) {
+  const id = cardKey(deckId, cardId, 'main')
+  const others = state.cards.filter((c) => c.deckId === deckId && c.commander && c.id !== id)
+  const drop = on && others.length >= 2 ? others[0].id : null
+  set({
+    ...state,
+    cards: state.cards.map((c) =>
+      c.id === id ? { ...c, commander: on } : c.id === drop ? { ...c, commander: false } : c,
+    ),
+  })
 }
 
 // The undo puts each deck back where it came from (out of folders if that folder is gone).

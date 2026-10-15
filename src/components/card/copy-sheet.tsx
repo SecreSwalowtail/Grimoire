@@ -1,11 +1,12 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { Tilt } from '@/components/card-effects/tilt';
 import { CardThumb } from '@/components/card/card-thumb';
 import { PrimaryButton, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
+import { getBinders, type Binder } from '@/db/binders';
 import {
   addToCollection,
   removeEntry,
@@ -21,9 +22,12 @@ import { mainFinish } from '@/utils/card-prices';
 import { formatEur } from '@/utils/format';
 
 // C5 · Add / edit a copy. Adding uses the printing on show ("Change" goes to Printings to pick
-// another); editing keeps the copy's printing. Nothing is saved until the gold button.
+// another); editing keeps the copy's printing. Under it, the binder the copy goes in (your first
+// binder to start with; editing can move the copy). Nothing is saved until the gold button.
 
 type Draft = {
+  // null: the first binder, until the binders have loaded.
+  binderId: string | null
   qty: number
   finish: Finish
   condition: Condition
@@ -63,6 +67,19 @@ export function CopySheet({
   const [draft, setDraft] = useState<Draft | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [binders, setBinders] = useState<Binder[]>([])
+
+  // The binders, fresh each time the sheet opens (they can change on the Binder tab).
+  useEffect(() => {
+    if (!visible) return
+    let live = true
+    getBinders(db)
+      .then((b) => live && setBinders(b))
+      .catch((e) => console.warn('Failed to load binders', e))
+    return () => {
+      live = false
+    }
+  }, [visible, db])
 
   // Fill the form each time the sheet opens (state adjusted during render).
   const openKey = visible ? `${entry?.id ?? 'new'}:${card.id}` : null
@@ -74,6 +91,7 @@ export function CopySheet({
       setDraft(
         entry
           ? {
+              binderId: entry.binder_id,
               qty: entry.quantity,
               finish: entry.finish,
               condition: entry.condition,
@@ -82,6 +100,7 @@ export function CopySheet({
               forTrade: entry.for_trade === 1,
             }
           : {
+              binderId: null,
               qty: 1,
               finish: mainFinish(card),
               condition: 'NM',
@@ -95,6 +114,8 @@ export function CopySheet({
 
   if (!draft) return null
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch })
+  const binder = binders.find((b) => b.id === draft.binderId) ?? binders[0] ?? null
+  const binderName = binder?.name ?? 'your binder'
   const condition = CONDITIONS.find((c) => c.code === draft.condition)!
   // The printing's own language isn't always one of the usual seven: offer it too.
   const languages = COPY_LANGUAGES.some((l) => l.code === draft.language)
@@ -115,6 +136,7 @@ export function CopySheet({
     setBusy(true)
     try {
       const changes = {
+        binderId: binder?.id ?? entry?.binder_id,
         quantity: draft.qty,
         finish: draft.finish,
         condition: draft.condition,
@@ -122,7 +144,7 @@ export function CopySheet({
         purchasePrice: parsePaid(draft.paid),
         forTrade: draft.forTrade,
       }
-      if (entry) await updateEntry(db, entry.id, changes)
+      if (entry) await updateEntry(db, entry.id, { ...changes, binderId: changes.binderId ?? entry.binder_id })
       else await addToCollection(db, card, changes)
       onSaved()
       onClose()
@@ -161,6 +183,29 @@ export function CopySheet({
           </View>
           {!editing && <Text style={styles.change}>Change</Text>}
         </Pressable>
+
+        {binders.length > 0 && (
+          <>
+            <Text style={[styles.label, styles.gap]}>Binder</Text>
+            <View style={styles.binders} accessibilityRole="radiogroup" accessibilityLabel="Binder">
+              {binders.map((b) => {
+                const on = b.id === binder?.id
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[styles.binder, on && styles.optionOn]}
+                    onPress={() => set({ binderId: b.id })}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                  >
+                    <View style={[styles.binderDot, { backgroundColor: b.color }]} />
+                    <Text style={[styles.binderLabel, on && styles.optionLabelOn]} numberOfLines={1}>{b.name}</Text>
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </>
+        )}
 
         <View style={styles.pair}>
           <View style={styles.half}>
@@ -263,7 +308,7 @@ export function CopySheet({
           confirmRemove ? (
             <View style={styles.confirm}>
               <Text style={styles.confirmText}>
-                Remove {entry.quantity === 1 ? 'this copy' : `these ${entry.quantity} copies`} from your binder?
+                Remove {entry.quantity === 1 ? 'this copy' : `these ${entry.quantity} copies`} from {binderName}?
               </Text>
               <View style={styles.confirmButtons}>
                 <TouchableOpacity style={styles.cancel} onPress={() => setConfirmRemove(false)} accessibilityRole="button">
@@ -284,7 +329,7 @@ export function CopySheet({
 
       <View style={styles.summary}>
         <Text style={styles.summaryNote}>
-          {editing ? 'Worth now' : 'Adds to your binder'} · {draft.condition}
+          {editing ? 'Worth now' : `Adds to ${binderName}`} · {draft.condition}
           {draft.finish !== 'nonfoil' ? ` ${FINISH_LABEL[draft.finish].toLowerCase()}` : ''}
         </Text>
         <Text style={styles.summaryValue}>{value}</Text>
@@ -340,6 +385,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
+  },
+  binders: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  binder: {
+    height: 40,
+    maxWidth: '100%',
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.10)',
+    backgroundColor: Colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  // A tiny binder: rounded on the right like the covers.
+  binderDot: {
+    width: 10,
+    height: 13,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  binderLabel: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontFamily: Fonts.extraBold,
+    color: '#CFC7B4',
   },
   pair: {
     marginTop: 16,

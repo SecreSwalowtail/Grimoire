@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 6;
+const DATABASE_VERSION = 7;
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
@@ -172,9 +172,17 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 6;
   }
 
-  // if (version === 6) {
+  if (version === 6) {
+    await db.execAsync(`
+      -- The deck's commander(s): a card of the main deck marked as such (two for partners).
+      ALTER TABLE deck_cards ADD COLUMN commander INTEGER NOT NULL DEFAULT 0;
+    `);
+    version = 7;
+  }
+
+  // if (version === 7) {
   //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 7;
+  //   version = 8;
   // }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -140,6 +140,8 @@ export async function getCopiesOfCard(db: SQLiteDatabase, name: string) {
 }
 
 export type EntryChanges = {
+  // Moves the copy to this binder.
+  binderId: string;
   quantity: number;
   finish: Finish;
   condition: Condition;
@@ -148,19 +150,17 @@ export type EntryChanges = {
   forTrade: boolean;
 };
 
-// Edit a copy. If it now matches another entry of the same printing in the same binder (same finish,
-// condition and language), the two become one: quantities add up, the other's price paid is kept if this has none.
+// Edit a copy (and move it to another binder). If it now matches another entry of the same printing
+// in that binder (same finish, condition and language), the two become one: quantities add up, the
+// other's price paid is kept if this has none.
 export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: EntryChanges) {
   await db.withTransactionAsync(async () => {
-    const entry = await db.getFirstAsync<{ binder_id: string; card_id: string }>(
-      'SELECT binder_id, card_id FROM collection WHERE id = ?',
-      entryId,
-    );
+    const entry = await db.getFirstAsync<{ card_id: string }>('SELECT card_id FROM collection WHERE id = ?', entryId);
     if (!entry) return;
     const twin = await db.getFirstAsync<{ id: number; quantity: number; purchase_price: number | null }>(
       `SELECT id, quantity, purchase_price FROM collection
        WHERE binder_id = ? AND card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?`,
-      entry.binder_id, entry.card_id, changes.finish, changes.condition, changes.language, entryId,
+      changes.binderId, entry.card_id, changes.finish, changes.condition, changes.language, entryId,
     );
     if (twin) {
       await db.runAsync('DELETE FROM collection WHERE id = ?', entryId);
@@ -170,8 +170,10 @@ export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: 
       );
     } else {
       await db.runAsync(
-        `UPDATE collection SET quantity = ?, finish = ?, condition = ?, language = ?, purchase_price = ?, for_trade = ?
+        `UPDATE collection SET binder_id = ?, quantity = ?, finish = ?, condition = ?, language = ?, purchase_price = ?,
+           for_trade = ?
          WHERE id = ?`,
+        changes.binderId,
         changes.quantity, changes.finish, changes.condition, changes.language, changes.purchasePrice, changes.forTrade ? 1 : 0, entryId,
       );
     }

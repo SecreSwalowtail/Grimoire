@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -5,7 +6,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { SectionLabel } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
-import { FOLDER_COLORS, withAlpha, type FolderColor } from '@/utils/deck-store';
+import { FOLDER_COLORS, isCommander, useDeckStore, withAlpha, type FolderColor } from '@/utils/deck-store';
 
 // Pieces shared by the Decks screens and sheets.
 
@@ -23,14 +24,45 @@ export function FolderIcon({ color, width = 28, fill = 0.18 }: { color: string; 
 // Stand-in "card art" until decks hold cards: a neutral card-back gradient.
 const CARD_BACK = 'radial-gradient(circle at 50% 25%, #857C6C, #2D2A24 60%, #100F0D)'
 
-// Three fanned cards, the deck's thumbnail. `large` is the Deck options header version.
-export function DeckThumb({ large }: { large?: boolean }) {
+// Three fanned cards, the deck's thumbnail: its most valuable cards (deck and sideboard), the
+// priciest in front. A commander takes the middle, raised and on top. Card backs fill empty slots.
+// `large` is the Deck options header version.
+export function DeckThumb({ deckId, large }: { deckId: string; large?: boolean }) {
   const s = large ? THUMB_LARGE : THUMB
+  const { cards, decks, info } = useDeckStore()
+  const inDeck = cards.filter((c) => c.deckId === deckId && c.board !== 'maybe')
+  const price = (id: string) => info[id]?.priceEur ?? info[id]?.priceEurFoil ?? 0
+  const commander = inDeck.find((c) => isCommander(c, decks))?.cardId ?? null
+  const byPrice = [...new Set(inDeck.map((c) => c.cardId))].filter((id) => id !== commander).sort((a, b) => price(b) - price(a))
+  const image = (id: string | undefined | null) => (id ? info[id]?.image ?? null : null)
+
+  if (commander) {
+    return (
+      <View style={s.box}>
+        <ThumbCard style={[s.card, s.back]} uri={image(byPrice[1])} />
+        <ThumbCard style={[s.card, s.front]} uri={image(byPrice[0])} />
+        <ThumbCard style={[s.card, s.middle, s.raised]} uri={image(commander)} />
+      </View>
+    )
+  }
   return (
     <View style={s.box}>
-      <View style={[s.card, s.back]} />
-      <View style={[s.card, s.middle]} />
-      <View style={[s.card, s.front]} />
+      <ThumbCard style={[s.card, s.back]} uri={image(byPrice[2])} />
+      <ThumbCard style={[s.card, s.middle]} uri={image(byPrice[1])} />
+      <ThumbCard style={[s.card, s.front]} uri={image(byPrice[0])} />
+    </View>
+  )
+}
+
+// One card of the fan: its picture, or the card back.
+function ThumbCard({ style, uri }: { style: StyleProp<ViewStyle>; uri: string | null }) {
+  return (
+    <View style={style}>
+      {uri && (
+        <View style={styles.thumbImage}>
+          <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        </View>
+      )}
     </View>
   )
 }
@@ -182,6 +214,8 @@ const THUMB = StyleSheet.create({
   back: { left: 0, top: 6, transform: [{ rotate: '-9deg' }] },
   middle: { left: 9, top: 3, transform: [{ rotate: '-2deg' }] },
   front: { left: 18, top: 6, transform: [{ rotate: '7deg' }], boxShadow: '0 0 0 1px rgba(237,230,214,0.16), 0 6px 14px rgba(0,0,0,0.4)' },
+  // The commander: higher than the other two, upright.
+  raised: { top: -1, transform: [{ rotate: '0deg' }], boxShadow: '0 0 0 1px rgba(232,192,106,0.6), 0 6px 14px rgba(0,0,0,0.5)' },
 })
 
 const THUMB_LARGE = StyleSheet.create({
@@ -190,6 +224,7 @@ const THUMB_LARGE = StyleSheet.create({
   back: { left: 0, top: 8, transform: [{ rotate: '-10deg' }] },
   middle: { left: 11, top: 4, transform: [{ rotate: '-2deg' }] },
   front: { left: 22, top: 8, transform: [{ rotate: '8deg' }], boxShadow: '0 0 0 1px rgba(237,230,214,0.16), 0 8px 18px rgba(0,0,0,0.45)' },
+  raised: { top: -1, transform: [{ rotate: '0deg' }], boxShadow: '0 0 0 1px rgba(232,192,106,0.6), 0 8px 18px rgba(0,0,0,0.5)' },
 })
 
 const styles = StyleSheet.create({
@@ -197,6 +232,12 @@ const styles = StyleSheet.create({
     width: 52,
     height: 34,
     marginRight: 2,
+  },
+  // The card picture, clipped to the card's corners (the card itself keeps its shadow).
+  thumbImage: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 5,
+    overflow: 'hidden',
   },
   fanCard: {
     position: 'absolute',

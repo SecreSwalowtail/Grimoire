@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -15,8 +16,6 @@ import {
   type Folder,
 } from '@/utils/deck-store';
 
-// Rows aren't tappable until the deck screen (its card list) is designed.
-
 // "Pioneer · 60 cards", or "Pioneer · No cards yet".
 export function deckMeta(deck: Deck, data: DeckData) {
   const n = deckCardCount(deck, data)
@@ -24,18 +23,26 @@ export function deckMeta(deck: Deck, data: DeckData) {
 }
 
 // One deck: fanned thumbnail, name, format and card count, value, and the ⋮ options button when given.
+// Tapping it opens the deck.
 export function DeckRow({ deck, onOptions, last }: { deck: Deck; onOptions?: () => void; last?: boolean }) {
   const data = useDeckStore()
   const meta = deckMeta(deck, data)
   const value = formatEur(deckValue(deck, data))
   return (
     <View style={[styles.row, !last && styles.rule]}>
-      <DeckThumb />
-      <View style={styles.text} accessible accessibilityLabel={`${deck.name}, ${meta}, ${value}`}>
-        <Text style={styles.name} numberOfLines={1}>{deck.name}</Text>
-        <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
-      </View>
-      <Text style={styles.value}>{value}</Text>
+      <Pressable
+        style={styles.open}
+        onPress={() => router.push({ pathname: '/decks/deck/[deckId]', params: { deckId: deck.id } })}
+        accessibilityRole="button"
+        accessibilityLabel={`${deck.name}, ${meta}, ${value}`}
+      >
+        <DeckThumb deckId={deck.id} />
+        <View style={styles.text}>
+          <Text style={styles.name} numberOfLines={1}>{deck.name}</Text>
+          <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
+        </View>
+        <Text style={styles.value}>{value}</Text>
+      </Pressable>
       {onOptions && (
         <TouchableOpacity
           style={styles.options}
@@ -100,6 +107,14 @@ export function FolderCard({
 const styles = StyleSheet.create({
   row: {
     height: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  open: {
+    flex: 1,
+    minWidth: 0,
+    height: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

@@ -11,6 +11,7 @@ export type DeckCardRow = {
   card_id: string;
   board: string;
   quantity: number;
+  commander: number;
   name: string;
   type_line: string | null;
   cmc: number | null;
@@ -27,7 +28,7 @@ export async function getDecksAndFolders(db: SQLiteDatabase) {
   );
   const decks = await db.getAllAsync<DeckRow>('SELECT id, name, format, folder_id FROM decks ORDER BY position');
   const cards = await db.getAllAsync<DeckCardRow>(
-    `SELECT dc.deck_id, dc.card_id, dc.board, dc.quantity,
+    `SELECT dc.deck_id, dc.card_id, dc.board, dc.quantity, dc.commander,
             c.name, c.type_line, c.cmc, c.price_eur, c.price_eur_foil, c.image_uri
      FROM deck_cards dc JOIN cards c ON c.id = dc.card_id
      ORDER BY dc.position`,
@@ -88,12 +89,14 @@ export async function saveDeckChanges(db: SQLiteDatabase, before: DeckSnapshot, 
     }
     for (const { item: c, position } of cards.upserts) {
       await db.runAsync(
-        `INSERT INTO deck_cards (deck_id, card_id, board, quantity, position) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (deck_id, card_id, board) DO UPDATE SET quantity = excluded.quantity, position = excluded.position`,
+        `INSERT INTO deck_cards (deck_id, card_id, board, quantity, commander, position) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (deck_id, card_id, board) DO UPDATE SET quantity = excluded.quantity, commander = excluded.commander,
+           position = excluded.position`,
         c.deckId,
         c.cardId,
         c.board,
         c.quantity,
+        c.commander ? 1 : 0,
         position,
       );
     }

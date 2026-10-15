@@ -21,17 +21,19 @@ import {
 
 const DANGER = '#EE8466'
 
-// "Deck options" sheet: rename, change format, move to a folder, duplicate, delete (asks first,
-// then the screen shows an Undo toast). Export is UI only for now.
+// "Deck options" sheet: rename, change format, move to a folder, duplicate, import a decklist,
+// delete (asks first, then the screen shows an Undo toast). Export is UI only for now.
 export function DeckOptionsSheet({
   deckId,
   onClose,
   onMove,
+  onImport,
   onDeleted,
 }: {
   deckId: string | null
   onClose: () => void
   onMove: (deckId: string) => void
+  onImport: (deckId: string) => void
   onDeleted: (name: string, undo: Undo) => void
 }) {
   const store = useDeckStore()
@@ -59,7 +61,7 @@ export function DeckOptionsSheet({
   return (
     <Sheet visible={deck != null} onClose={onClose}>
       <View style={styles.header}>
-        <DeckThumb large />
+        <DeckThumb deckId={deck?.id ?? ''} large />
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={2}>{name || deck?.name}</Text>
           <Text style={styles.meta}>
@@ -104,6 +106,14 @@ export function DeckOptionsSheet({
               if (deck) duplicateDecks([deck.id])
               onClose()
             }}
+          />
+          <Row
+            icon={{ ios: 'square.and.arrow.down', android: 'download' }}
+            label="Import decklist"
+            value="Manabox"
+            small
+            chevron
+            onPress={() => deck && onImport(deck.id)}
           />
           <Row icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} label="Export decklist" value="Arena, MTGO, text" small />
         </View>
