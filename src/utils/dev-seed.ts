@@ -17,10 +17,11 @@ import {
   type FolderColor,
 } from '@/utils/deck-store'
 
-// Test data for the performance pass (Settings → Developer tools): ~2,000 real cards spread over
-// your first binder and 3 test binders, from Scryfall (about 1 in 5 foil, 30 days of price history) and 50 decks of 100-200 cards in
-// 5 folders. Everything added is tracked in the `dev_seed` table (decks by their "seed-" ids),
-// so seeding twice is caught. Developer tools → Clear database erases everything (yours too).
+// Test data for the performance pass (Settings → Developer tools): ~2,000 real cards from
+// Scryfall spread over your first binder and 3 test binders (about 1 in 5 foil, 30 days of price
+// history), and 50 decks of 100-200 cards in 5 folders. Everything added is tracked in the
+// `dev_seed` table (decks by their "seed-" ids), so seeding twice is caught. Developer tools →
+// Clear database erases everything (yours too).
 
 const CARD_COUNT = 2000
 const DECKS = 50
@@ -33,7 +34,7 @@ const BINDERS = [
   { name: 'Bulk Rares', color: BINDER_PRESETS.slate.hex },
 ]
 
-export type SeedProgress = (text: string) => void
+type SeedProgress = (text: string) => void
 
 const random = (n: number) => Math.floor(Math.random() * n)
 const pick = <T,>(list: readonly T[]) => list[random(list.length)]
@@ -163,9 +164,9 @@ export async function seedTestData(db: SQLiteDatabase, progress: SeedProgress) {
   progress(`Done: ${seeded.length} cards, ${DECKS} decks with ${deckCards.length} card rows.`)
 }
 
-// Erases everything the app has saved: binders (back to one empty "My binder"), decks and folders, saved cards, price history and
-// test data. Children go before the tables they point at, so the foreign keys hold. VACUUM then
-// gives the space back.
+// Erases everything the app has saved: binders (back to one empty "My binder"), decks and
+// folders, saved cards, price history and test data. Children go before the tables they point at,
+// so the foreign keys hold. VACUUM then gives the space back.
 export async function clearDatabase(db: SQLiteDatabase) {
   await ensureTable(db)
   await db.withTransactionAsync(async () => {

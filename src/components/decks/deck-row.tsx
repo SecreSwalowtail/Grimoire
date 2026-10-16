@@ -1,29 +1,30 @@
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router'
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { DeckThumb, FolderFan, FolderIcon } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { useMoney } from '@/utils/money';
+import { DeckThumb, FolderFan, FolderIcon } from '@/components/decks/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { withAlpha } from '@/utils/color'
 import {
   deckCardCount,
   deckValue,
   FOLDER_COLORS,
   useDeckStore,
-  withAlpha,
   type Deck,
   type DeckData,
   type Folder,
-} from '@/utils/deck-store';
+} from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
 
 // "Pioneer · 60 cards", or "Pioneer · No cards yet".
 export function deckMeta(deck: Deck, data: DeckData) {
   const n = deckCardCount(deck, data)
-  return `${deck.format} · ${n === 0 ? 'No cards yet' : `${n} ${n === 1 ? 'card' : 'cards'}`}`
+  return `${deck.format} · ${n === 0 ? 'No cards yet' : plural(n, 'card')}`
 }
 
 // Selecting in the Decks screen's edit mode: whether it's selected, and tapping toggles that.
-export type RowEdit = { selected: boolean; onToggle: () => void }
+type RowEdit = { selected: boolean; onToggle: () => void }
 
 // One deck: fanned thumbnail, name, format and card count, value, and the ⋮ options button when given.
 // Tapping it opens the deck. `onHold`: holding it (outside edit mode). With `edit`, tapping
@@ -74,7 +75,7 @@ export function DeckRow({
           accessibilityRole="button"
           accessibilityLabel={`Options for ${deck.name}`}
         >
-          <SymbolView name={{ ios: 'ellipsis', android: 'more_vert' }} size={20} tintColor={Colors.textSecondary} />
+          <Icon name={{ ios: 'ellipsis', android: 'more_vert' }} size={20} tintColor={Colors.textSecondary} />
         </TouchableOpacity>
       )}
     </View>
@@ -99,7 +100,7 @@ export function FolderCard({
   onHold?: () => void
 }) {
   const hex = FOLDER_COLORS[folder.color].hex
-  const decksText = `${count} ${count === 1 ? 'deck' : 'decks'}`
+  const decksText = plural(count, 'deck')
   return (
     <View style={styles.folder}>
       <Pressable
@@ -132,7 +133,7 @@ export function FolderCard({
           accessibilityRole="button"
           accessibilityLabel={`Folder options for ${folder.name}`}
         >
-          <SymbolView name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.textSecondary} />
+          <Icon name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.textSecondary} />
         </TouchableOpacity>
       )}
     </View>

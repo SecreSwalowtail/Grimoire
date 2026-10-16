@@ -1,12 +1,12 @@
-import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite'
+import { useEffect, useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
-import type { Tilt } from '@/components/card-effects/tilt';
-import { CardThumb } from '@/components/card/card-thumb';
-import { PrimaryButton, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import { getBinders, type Binder } from '@/db/binders';
+import { CardThumb } from '@/components/card/card-thumb'
+import type { Tilt } from '@/components/card-effects/tilt'
+import { PrimaryButton, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls'
+import { Colors, Fonts } from '@/constants/theme'
+import { getBinders, type Binder } from '@/db/binders'
 import {
   addToCollection,
   removeEntry,
@@ -14,12 +14,12 @@ import {
   type CollectionEntry,
   type Condition,
   type Finish,
-} from '@/db/collection';
-import { cardThumb, type ScryfallCard } from '@/db/scryfall';
-import { CONDITIONS, COPY_LANGUAGES, LANGUAGE_NAMES } from '@/rules/collection';
-import { FINISH_LABEL, printingLabel } from '@/rules/printings';
-import { mainFinish } from '@/utils/card-prices';
-import { currencyName, useMoney, type Money } from '@/utils/money';
+} from '@/db/collection'
+import { cardThumb, type ScryfallCard } from '@/db/scryfall'
+import { CONDITIONS, COPY_LANGUAGES, LANGUAGE_NAMES } from '@/rules/collection'
+import { FINISH_LABEL, printingLabel } from '@/rules/printings'
+import { mainFinish } from '@/utils/card-prices'
+import { currencyName, parsePaid, useMoney, type Money } from '@/utils/money'
 
 // C5 · Add / edit a copy. Adding uses the printing on show ("Change" goes to Printings to pick
 // another); editing keeps the copy's printing. Under it, the binder the copy goes in (your first
@@ -34,11 +34,6 @@ type Draft = {
   language: string
   paid: string
   forTrade: boolean
-}
-
-const parsePaid = (text: string) => {
-  const value = Number(text.replace(',', '.'))
-  return text.trim() && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 // What was paid, typed in the user's currency, kept in euros (to the cent).
@@ -574,7 +569,7 @@ const styles = StyleSheet.create({
   removeLabel: {
     fontSize: 15,
     fontFamily: Fonts.extraBold,
-    color: '#EE8466',
+    color: Colors.danger,
   },
   confirm: {
     marginTop: 18,

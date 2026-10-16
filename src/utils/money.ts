@@ -2,6 +2,7 @@ import { getLocales } from 'expo-localization'
 import Storage from 'expo-sqlite/kv-store'
 import { useSyncExternalStore } from 'react'
 
+import { createListeners } from '@/utils/listeners'
 import { getSettings, subscribeSettings } from '@/utils/settings'
 
 // Prices in the user's currency. Card prices arrive in euros (Cardmarket) and dollars (TCGplayer);
@@ -64,6 +65,12 @@ const LOCALES: Record<string, string> = {
   RON: 'ro-RO', PLN: 'pl-PL', HUF: 'hu-HU', CZK: 'cs-CZ', CHF: 'de-CH', SEK: 'sv-SE', NOK: 'nb-NO',
   DKK: 'da-DK', ISK: 'is-IS', TRY: 'tr-TR', GBP: 'en-GB', JPY: 'ja-JP', CNY: 'zh-CN', KRW: 'ko-KR',
   BRL: 'pt-BR', MXN: 'es-MX', INR: 'en-IN', IDR: 'id-ID', THB: 'th-TH', ILS: 'he-IL',
+}
+
+// A price typed in ("4,50" or "4.50"): the number, or null when it's empty or not a price.
+export function parsePaid(text: string) {
+  const value = Number(text.replace(',', '.'))
+  return text.trim() && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 // ---- Rates (euros -> other currencies) ----
@@ -157,12 +164,13 @@ function makeMoney(): Money {
 }
 
 let money = makeMoney()
-const listeners = new Set<() => void>()
+const changes = createListeners()
 
 function update() {
   money = makeMoney()
-  listeners.forEach((l) => l())
+  changes.notify()
 }
+
 // Only a change of currency matters (not the other settings).
 let chosen = getSettings().currency
 subscribeSettings(() => {
@@ -171,15 +179,6 @@ subscribeSettings(() => {
   update()
 })
 
-export const getMoney = () => money
-
 // Prices in the user's currency. A new object whenever the currency or the rates change, so
 // whatever formats with it shows the new amounts.
-export function useMoney() {
-  return useSyncExternalStore((listener) => {
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
-  }, getMoney)
-}
+export const useMoney = () => useSyncExternalStore(changes.subscribe, () => money)

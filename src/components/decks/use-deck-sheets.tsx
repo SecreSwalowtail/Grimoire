@@ -1,14 +1,15 @@
-import { useIsFocused } from 'expo-router';
-import { useState, useSyncExternalStore } from 'react';
+import { useIsFocused } from 'expo-router'
+import { useState, useSyncExternalStore } from 'react'
 
-import { DeckOptionsSheet } from '@/components/decks/deck-options-sheet';
-import { DeleteFolderDialog } from '@/components/decks/delete-folder-dialog';
-import { FolderEditSheet } from '@/components/decks/folder-edit-sheet';
-import { ImportSheet } from '@/components/decks/import-sheet';
-import { MoveSheet } from '@/components/decks/move-sheet';
-import { NewSheet, type NewKind } from '@/components/decks/new-sheet';
-import { UndoToast } from '@/components/decks/parts';
-import type { Undo } from '@/utils/deck-store';
+import { DeckOptionsSheet } from '@/components/decks/deck-options-sheet'
+import { DeleteFolderDialog } from '@/components/decks/delete-folder-dialog'
+import { FolderEditSheet } from '@/components/decks/folder-edit-sheet'
+import { ImportSheet } from '@/components/decks/import-sheet'
+import { MoveSheet } from '@/components/decks/move-sheet'
+import { NewSheet, type NewKind } from '@/components/decks/new-sheet'
+import { UndoToast } from '@/components/decks/parts'
+import type { Undo } from '@/utils/deck-store'
+import { createListeners } from '@/utils/listeners'
 
 type NewState = { kind: NewKind; folderId?: string | null; deckIds?: string[] }
 
@@ -16,19 +17,12 @@ type NewState = { kind: NewKind; folderId?: string | null; deckIds?: string[] }
 // from its own screen goes back to Decks, which then shows the toast.
 type Toast = { message: string; undo: Undo }
 let toast: Toast | null = null
-const toastListeners = new Set<() => void>()
+const toastChanges = createListeners()
 function setToast(next: Toast | null) {
   toast = next
-  toastListeners.forEach((listener) => listener())
+  toastChanges.notify()
 }
-function useToast() {
-  return useSyncExternalStore((listener) => {
-    toastListeners.add(listener)
-    return () => {
-      toastListeners.delete(listener)
-    }
-  }, () => toast)
-}
+const useToast = () => useSyncExternalStore(toastChanges.subscribe, () => toast)
 
 // The Decks sheets and Undo toast, shared by the Decks, Folder and Deck screens, and the
 // hand-offs between them (Deck options → Move, Move → New folder, Edit folder → Delete…).

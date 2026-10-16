@@ -1,9 +1,9 @@
-import { Image } from 'expo-image';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image } from 'expo-image'
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 
-import { HoloFoil } from '@/components/card-effects/holo-foil';
-import type { Tilt } from '@/components/card-effects/tilt';
-import { Colors } from '@/constants/theme';
+import { HoloFoil } from '@/components/card-effects/holo-foil'
+import type { Tilt } from '@/components/card-effects/tilt'
+import { Colors } from '@/constants/theme'
 
 // A small card picture for Card detail. With `foil` (a foil finish is picked) it gets the same
 // holographic layer as foil cards in the Binder, moving with `tilt`.

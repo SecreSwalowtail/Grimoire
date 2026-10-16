@@ -11,6 +11,8 @@ export const Colors = {
   onGold: '#1A1408',
   positive: '#7FC7A6',
   negative: '#E8866A',
+  // Delete and remove actions.
+  danger: '#EE8466',
   // Buttons on a sheet, and the selected part of a segmented control.
   surfaceRaised: '#221F17',
   selected: '#2B261C',

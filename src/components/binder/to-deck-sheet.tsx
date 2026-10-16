@@ -1,16 +1,17 @@
-import { SymbolView } from 'expo-symbols';
-import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite'
+import { useEffect, useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { useCommanderIdentity } from '@/components/card/add-to-deck-sheet';
-import { PrimaryButton, SectionLabel, Segmented, Sheet } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import { getCardRows } from '@/db/cards';
-import type { CollectionEntry } from '@/db/collection';
-import type { ScryfallCard } from '@/db/scryfall';
-import { copyRule, deckFit } from '@/rules/formats';
-import { addCardsToDecks, useDeckStore, type Board, type CardInfo, type DeckFormat, type Undo } from '@/utils/deck-store';
+import { useCommanderIdentity } from '@/components/card/add-to-deck-sheet'
+import { PrimaryButton, SectionLabel, Segmented, Sheet } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { getCardRows } from '@/db/cards'
+import type { CollectionEntry } from '@/db/collection'
+import type { ScryfallCard } from '@/db/scryfall'
+import { copyRule, deckFit } from '@/rules/formats'
+import { addCardsToDecks, useDeckStore, type Board, type CardInfo, type DeckFormat, type Undo } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
 
 // Add to deck, for the cards picked in a binder's edit mode: the part of the deck, one copy of each
 // card or every copy picked, then tap the decks to put them in (one or several). Like Card detail's
@@ -151,7 +152,8 @@ export function BinderToDeckSheet({
     : store.decks.map((deck) => {
         const here = inDecks.get(deck.id)
         const id = identity.get(deck.id)
-        // Cards that would break the format's rules: not legal, outside the commander's colors, too many copies.
+        // Cards that would break the format's rules: not legal, outside the commander's colors,
+        // too many copies.
         const broken = new Set<string>()
         const already = new Set<string>()
         for (const p of printings) {
@@ -200,7 +202,7 @@ export function BinderToDeckSheet({
           </Text>
         </View>
         <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-          <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+          <Icon name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -246,7 +248,7 @@ export function BinderToDeckSheet({
                     {r.note !== '' && <Text style={[styles.note, { color: r.noteColor }]} numberOfLines={2}>{r.note}</Text>}
                   </View>
                   <View style={[styles.box, on && styles.boxOn]}>
-                    {on && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
+                    {on && <Icon name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
                   </View>
                 </Pressable>
               )
@@ -255,13 +257,13 @@ export function BinderToDeckSheet({
         )}
 
         <TouchableOpacity style={styles.newDeck} onPress={() => onNewDeck(board, copies)} accessibilityRole="button">
-          <SymbolView name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
+          <Icon name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
           <Text style={styles.newDeckLabel}>New deck with these cards</Text>
         </TouchableOpacity>
       </ScrollView>
 
       <PrimaryButton
-        label={chosen.length === 0 ? 'Done' : `Add ${each} ${each === 1 ? 'card' : 'cards'} to ${chosen.length} ${chosen.length === 1 ? 'deck' : 'decks'}`}
+        label={chosen.length === 0 ? 'Done' : `Add ${plural(each, 'card')} to ${plural(chosen.length, 'deck')}`}
         onPress={add}
       />
     </Sheet>

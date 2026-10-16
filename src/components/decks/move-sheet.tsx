@@ -1,12 +1,14 @@
-import { SymbolView } from 'expo-symbols';
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { useState, type ReactNode } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import Svg, { Path } from 'react-native-svg'
 
-import { PrimaryButton, Sheet } from '@/components/controls';
-import { FolderIcon, RadioDot } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { FOLDER_COLORS, moveDecks, useDeckStore, withAlpha } from '@/utils/deck-store';
+import { PrimaryButton, Sheet } from '@/components/controls'
+import { FolderIcon, RadioDot } from '@/components/decks/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { withAlpha } from '@/utils/color'
+import { FOLDER_COLORS, moveDecks, useDeckStore } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
 
 // "Move to folder" sheet for one or more decks. "New folder…" hands the decks to the New folder
 // sheet instead.
@@ -47,7 +49,7 @@ export function MoveSheet({
           {moving.length > 1 && <Text style={styles.names} numberOfLines={2}>{moving.map((d) => d.name).join(', ')}</Text>}
         </View>
         <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-          <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+          <Icon name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -77,7 +79,7 @@ export function MoveSheet({
             <Destination
               key={f.id}
               name={f.name}
-              meta={current === f.id ? 'Current location' : `${n} ${n === 1 ? 'deck' : 'decks'}`}
+              meta={current === f.id ? 'Current location' : plural(n, 'deck')}
               icon={<FolderIcon color={hex} width={24} />}
               tint={withAlpha(hex, 0.14)}
               selected={dest === f.id}
@@ -87,7 +89,7 @@ export function MoveSheet({
         })}
         <TouchableOpacity style={styles.newFolder} onPress={() => deckIds && onNewFolder(deckIds)} accessibilityRole="button">
           <View style={styles.newIcon}>
-            <SymbolView name={{ ios: 'plus', android: 'add' }} size={20} tintColor={Colors.goldLight} />
+            <Icon name={{ ios: 'plus', android: 'add' }} size={20} tintColor={Colors.goldLight} />
           </View>
           <Text style={styles.newLabel}>New folder…</Text>
         </TouchableOpacity>

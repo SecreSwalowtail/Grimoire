@@ -1,11 +1,11 @@
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react'
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { ManaSymbol, symbolName, symbolValue } from '@/components/mana-symbol';
-import { SectionLabel, Segmented } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import type { CostMatch, MarketFilters } from '@/utils/market-filters';
+import { SectionLabel, Segmented } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { ManaSymbol, symbolName, symbolValue } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
+import type { CostMatch, MarketFilters } from '@/utils/market-filters'
 
 // Keypads: a top row of 5 columns and a bottom row of 6, as in the design.
 const PADS = [
@@ -59,7 +59,7 @@ export function CostTab({ filters, onChange }: { filters: MarketFilters; onChang
           accessibilityRole="button"
           accessibilityLabel="Delete last symbol"
         >
-          <SymbolView name={{ ios: 'delete.left', android: 'backspace' }} size={20} tintColor={Colors.text} />
+          <Icon name={{ ios: 'delete.left', android: 'backspace' }} size={20} tintColor={Colors.text} />
         </TouchableOpacity>
       </View>
       <View style={styles.readout}>

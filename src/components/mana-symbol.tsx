@@ -1,9 +1,9 @@
-import { Image } from 'expo-image';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image'
+import { StyleSheet, Text, View } from 'react-native'
 
-import { MANA_SVGS } from '@/constants/mana-svgs';
-import { Fonts, MANA_NEUTRAL, MANA_NEUTRAL_BORDER } from '@/constants/theme';
-import { capitalize } from '@/utils/format';
+import { MANA_SVGS } from '@/constants/mana-svgs'
+import { Fonts, MANA_NEUTRAL, MANA_NEUTRAL_BORDER } from '@/constants/theme'
+import { capitalize } from '@/utils/format'
 
 const COLOR_NAMES: Record<string, string> = {
   W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green', C: 'colorless',
@@ -53,7 +53,24 @@ export function ManaSymbol({ symbol, size = 17 }: { symbol: string; size?: numbe
   )
 }
 
+// A mana cost as a row of symbols, read out as words. Split cards show their first half.
+export function CostRow({ cost, size = 17, gap = 2 }: { cost: string; size?: number; gap?: number }) {
+  const symbols = parseManaCost(cost)
+  if (!symbols.length) return null
+  return (
+    <View style={[styles.cost, { gap }]} accessible accessibilityLabel={`Mana cost: ${symbols.map(symbolName).join(', ')}`}>
+      {symbols.map((symbol, i) => (
+        <ManaSymbol key={i} symbol={symbol} size={size} />
+      ))}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  cost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   tile: {
     backgroundColor: MANA_NEUTRAL,
     borderWidth: 1,

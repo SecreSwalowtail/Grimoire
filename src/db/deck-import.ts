@@ -1,16 +1,16 @@
-import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
-import type { SQLiteDatabase } from 'expo-sqlite';
+import * as DocumentPicker from 'expo-document-picker'
+import { File } from 'expo-file-system'
+import type { SQLiteDatabase } from 'expo-sqlite'
 
-import { upsertCard } from '@/db/cards';
-import { getCardsByIdentifiers, type CardIdentifier, type ScryfallCard } from '@/db/scryfall';
-import { commanderStatus } from '@/rules/commander';
-import { addDeckCards, cardInfoOf, type Board } from '@/utils/deck-store';
+import { upsertCard } from '@/db/cards'
+import { getCardsByIdentifiers, type CardIdentifier, type ScryfallCard } from '@/db/scryfall'
+import { commanderStatus } from '@/rules/commander'
+import { addDeckCards, cardInfoOf, type Board } from '@/utils/deck-store'
 
 // Decklists exported as text. Manabox writes "// SECTION" headers, then one "N Card Name" line per
 // card, sometimes with "(SET) 123" after the name and "*F*" for foils.
 
-export type DeckListRow = {
+type DeckListRow = {
   line: number
   quantity: number
   name: string
@@ -29,7 +29,7 @@ const SECTION_BOARD: Record<string, Board> = {
   considering: 'maybe',
 }
 
-export function parseDeckList(text: string) {
+function parseDeckList(text: string) {
   const rows: DeckListRow[] = []
   const skipped: { line: number; text: string }[] = []
   let board: Board = 'main'

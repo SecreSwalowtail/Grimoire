@@ -1,15 +1,17 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router, useLocalSearchParams } from 'expo-router'
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { DeckRow } from '@/components/decks/deck-row';
-import { FolderIcon } from '@/components/decks/parts';
-import { useDeckSheets } from '@/components/decks/use-deck-sheets';
-import { Colors, Fonts } from '@/constants/theme';
-import { deckValue, deleteDecks, FOLDER_COLORS, folderDecks, useDeckStore, withAlpha } from '@/utils/deck-store';
-import { useMoney } from '@/utils/money';
+import { DeckRow } from '@/components/decks/deck-row'
+import { FolderIcon } from '@/components/decks/parts'
+import { useDeckSheets } from '@/components/decks/use-deck-sheets'
+import { Icon, type IconName } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { withAlpha } from '@/utils/color'
+import { deckValue, deleteDecks, FOLDER_COLORS, folderDecks, useDeckStore } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
 
 // One folder's decks. Swipe a deck left for Move / Delete (with Undo).
 export default function FolderScreen() {
@@ -37,7 +39,7 @@ export default function FolderScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityRole="button">
-            <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
+            <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel}>Decks</Text>
           </TouchableOpacity>
           <View style={styles.actions}>
@@ -47,7 +49,7 @@ export default function FolderScreen() {
               accessibilityRole="button"
               accessibilityLabel="Folder options"
             >
-              <SymbolView name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.text} />
+              <Icon name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.text} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.add}
@@ -55,7 +57,7 @@ export default function FolderScreen() {
               accessibilityRole="button"
               accessibilityLabel={`New deck in ${folder.name}`}
             >
-              <SymbolView name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
+              <Icon name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
             </TouchableOpacity>
           </View>
         </View>
@@ -67,7 +69,7 @@ export default function FolderScreen() {
           <View style={styles.headerText}>
             <Text style={styles.title} numberOfLines={1}>{folder.name}</Text>
             <Text style={styles.summary}>
-              {inside.length} {inside.length === 1 ? 'deck' : 'decks'} · {value}
+              {plural(inside.length, 'deck')} · {value}
             </Text>
           </View>
         </View>
@@ -114,12 +116,12 @@ export default function FolderScreen() {
           onPress={() => deckSheets.openNew({ kind: 'deck', folderId: folder.id })}
           accessibilityRole="button"
         >
-          <SymbolView name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.goldLight} />
+          <Icon name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.goldLight} />
           <Text style={styles.addDeckLabel} numberOfLines={1}>Add a deck to {folder.name}</Text>
         </TouchableOpacity>
         {inside.length > 0 && (
           <View style={styles.hint}>
-            <SymbolView name={{ ios: 'arrow.left', android: 'arrow_back' }} size={16} tintColor={Colors.textMuted} />
+            <Icon name={{ ios: 'arrow.left', android: 'arrow_back' }} size={16} tintColor={Colors.textMuted} />
             <Text style={styles.hintText}>Swipe a deck left to move or delete it</Text>
           </View>
         )}
@@ -138,14 +140,14 @@ function SwipeAction({
   onPress,
 }: {
   label: string
-  icon: SymbolViewProps['name']
+  icon: IconName
   color: string
   background: string
   onPress: () => void
 }) {
   return (
     <TouchableOpacity style={[styles.swipeAction, { backgroundColor: background }]} onPress={onPress} accessibilityRole="button">
-      <SymbolView name={icon} size={20} tintColor={color} />
+      <Icon name={icon} size={20} tintColor={color} />
       <Text style={[styles.swipeLabel, { color }]}>{label}</Text>
     </TouchableOpacity>
   )

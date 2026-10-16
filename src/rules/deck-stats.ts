@@ -1,7 +1,6 @@
-import type { ScryfallCard } from '@/db/scryfall'
-import { hasCommander, type Board, type CardInfo, type DeckFormat } from '@/utils/deck-store'
-
-export { hasCommander }
+import { cardText, type ScryfallCard } from '@/db/scryfall'
+import type { Board, CardInfo, DeckFormat } from '@/utils/deck-store'
+import { capitalize } from '@/utils/format'
 
 // Everything the deck screen shows about its cards: grouping, filtering and the Stats tab.
 // Each copy counts (a 4-of is 4 cards), and the stats look at the main deck only.
@@ -17,6 +16,16 @@ export const COLOR_HEX: Record<Color | 'C', string> = {
   R: '#D8553A',
   G: '#7FB06A',
   C: '#B3AB9C',
+}
+
+// Colors as the cards table saves them ('["R","B"]') -> ['B', 'R'].
+export function parseColors(json: string): Color[] {
+  try {
+    const list = JSON.parse(json) as string[]
+    return WUBRG.filter((c) => list.includes(c))
+  } catch {
+    return []
+  }
 }
 
 // One card in the deck, with what the screen needs to know about it. `card` is the full Scryfall
@@ -84,7 +93,7 @@ export function primaryType(typeLine: string): CardType {
 }
 
 // "Legendary Creature — Human Wizard" -> ['Human', 'Wizard'].
-export function subtypes(typeLine: string) {
+function subtypes(typeLine: string) {
   const after = front(typeLine).split(' — ')[1]
   return after ? after.trim().split(/\s+/) : []
 }
@@ -117,7 +126,7 @@ export function lineFrom(
     set: card?.set ?? null,
     setName: card?.set_name ?? null,
     produced: card?.produced_mana ?? [],
-    text: card?.oracle_text ?? (card?.card_faces ?? []).map((f) => f.oracle_text ?? '').join('\n'),
+    text: card ? cardText(card) : '',
     keywords: card?.keywords ?? [],
     owned,
     commander,
@@ -129,7 +138,7 @@ export function lineFrom(
 
 // The colored and generic mana in a cost. Hybrid symbols count half for each color; Phyrexian and
 // "2/W" count as their color.
-export function pips(cost: string) {
+function pips(cost: string) {
   const colored: Record<Color, number> = { W: 0, U: 0, B: 0, R: 0, G: 0 }
   let generic = 0
   for (const [, sym] of cost.matchAll(/\{([^}]+)\}/g)) {
@@ -143,12 +152,9 @@ export function pips(cost: string) {
   return { colored, generic }
 }
 
-// "{2}{B}{R}" -> ['2', 'B', 'R'] (the first face of split cards).
-export const costSymbols = (cost: string) => [...cost.split(' // ')[0].matchAll(/\{([^}]+)\}/g)].map((m) => m[1])
-
-export const colorKey = (colors: Color[]) => WUBRG.filter((c) => colors.includes(c)).join('')
+const colorKey = (colors: Color[]) => WUBRG.filter((c) => colors.includes(c)).join('')
 // ['B', 'R'] -> "Black-Red".
-export const colorsName = (colors: Color[]) =>
+const colorsName = (colors: Color[]) =>
   colors.length === 0 ? 'Colorless' : WUBRG.filter((c) => colors.includes(c)).map((c) => COLOR_NAME[c]).join('-')
 
 // ---- Grouping ----
@@ -210,7 +216,7 @@ export function groupLines<L extends Groupable>(lines: L[], by: GroupBy): Group<
     } else if (by === 'rarity') {
       const r = l.rarity ?? 'unknown'
       const i = RARITIES.indexOf(r)
-      add(r, r === 'unknown' ? 'Unknown' : r.charAt(0).toUpperCase() + r.slice(1), { kind: 'rarity', rarity: r }, i < 0 ? 50 : i, l)
+      add(r, capitalize(r), { kind: 'rarity', rarity: r }, i < 0 ? 50 : i, l)
     } else {
       add(`s${l.set ?? '?'}`, l.setName ?? 'Unknown set', { kind: 'text', text: (l.set ?? '?').toUpperCase() }, 0, l)
     }
@@ -279,7 +285,8 @@ export const canBeCommander = (l: DeckLine) =>
 
 // ---- Stats ----
 
-const sum = (lines: DeckLine[]) => lines.reduce((n, l) => n + l.quantity, 0)
+// Cards in the lines, each copy counted.
+export const copyCount = (lines: DeckLine[]) => lines.reduce((n, l) => n + l.quantity, 0)
 
 // Each copy as its own entry, for medians and pip totals.
 function copies(lines: DeckLine[]) {
@@ -295,7 +302,7 @@ export function manaValueStats(lines: DeckLine[]) {
   const curve = Array.from({ length: 8 }, (_, mv) => {
     const here = spells.filter((l) => mvBucket(l.cmc) === mv)
     const creatures = here.filter((l) => l.type === 'Creature')
-    return { mv, creatures: sum(creatures), other: sum(here) - sum(creatures), lines: here }
+    return { mv, creatures: copyCount(creatures), other: copyCount(here) - copyCount(creatures), lines: here }
   })
   return { average, median, spells: n, curve }
 }
@@ -310,13 +317,13 @@ export function manaCostStats(lines: DeckLine[]) {
     generic += p.generic * l.quantity
   }
   const totalColored = WUBRG.reduce((n, c) => n + colored[c], 0)
-  const spellCount = sum(spells)
+  const spellCount = copyCount(spells)
 
   // Spells by color: each mono color, multicolor, colorless.
   const byColor = [
-    ...WUBRG.map((c) => ({ key: c as Color | 'M' | 'C', label: COLOR_NAME[c], n: sum(spells.filter((l) => l.colors.length === 1 && l.colors[0] === c)) })),
-    { key: 'M' as const, label: 'Multicolor', n: sum(spells.filter((l) => l.colors.length > 1)) },
-    { key: 'C' as const, label: 'Colorless', n: sum(spells.filter((l) => l.colors.length === 0)) },
+    ...WUBRG.map((c) => ({ key: c as Color | 'M' | 'C', label: COLOR_NAME[c], n: copyCount(spells.filter((l) => l.colors.length === 1 && l.colors[0] === c)) })),
+    { key: 'M' as const, label: 'Multicolor', n: copyCount(spells.filter((l) => l.colors.length > 1)) },
+    { key: 'C' as const, label: 'Colorless', n: copyCount(spells.filter((l) => l.colors.length === 0)) },
   ].filter((b) => b.n > 0)
 
   // Costs asking for two or more colored mana, grouped by what they ask: {B}{B}, {B}{R}…
@@ -327,7 +334,7 @@ export function manaCostStats(lines: DeckLine[]) {
     if (sig.length >= 2) heavy.set(sig, [...(heavy.get(sig) ?? []), l])
   }
   const heaviest = [...heavy.entries()]
-    .map(([sig, ls]) => ({ sig, n: sum(ls), lines: ls }))
+    .map(([sig, ls]) => ({ sig, n: copyCount(ls), lines: ls }))
     .sort((a, b) => b.sig.length - a.sig.length || b.n - a.n)
     .slice(0, 4)
 
@@ -370,11 +377,11 @@ export function productionStats(lines: DeckLine[]) {
   }
   const landOutputs = [...outputs.values()].sort((a, b) => b.n - a.n)
 
-  return { lands: sum(lands), rocks: sum(rocks), treasure: sum(treasure), make, landOutputs }
+  return { lands: copyCount(lands), rocks: copyCount(rocks), treasure: copyCount(treasure), make, landOutputs }
 }
 
 export function typeStats(lines: DeckLine[]) {
-  return TYPES.map((t) => ({ ...t, n: sum(lines.filter((l) => l.type === t.type)) })).filter((t) => t.n > 0)
+  return TYPES.map((t) => ({ ...t, n: copyCount(lines.filter((l) => l.type === t.type)) })).filter((t) => t.n > 0)
 }
 
 export type SubtypeTab = 'creature' | 'land' | 'artifact' | 'other'
@@ -400,7 +407,7 @@ export function subtypeStats(lines: DeckLine[], tab: SubtypeTab) {
   const restN = sorted.slice(7).reduce((n, [, c]) => n + c, 0)
   if (restN) rows.push({ label: 'Other', n: restN, rest: true })
   if (none) rows.push({ label: 'No type', n: none, rest: true })
-  return { cards: sum(here), rows }
+  return { cards: copyCount(here), rows }
 }
 
 // The deck's colors: from its spells' colors and lands' output.

@@ -1,4 +1,7 @@
-// Color identity names and sentences, for Card detail. Colors are Scryfall letters W U B R G.
+import { capitalize } from '@/utils/format'
+
+// Color identity names and sentences, for Card detail and deck checks. Colors are Scryfall letters
+// W U B R G.
 
 const ORDER = ['W', 'U', 'B', 'R', 'G']
 const WORDS: Record<string, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' }
@@ -28,7 +31,7 @@ export function colorWords(colors: string[]) {
 export function identityName(colors: string[]) {
   const sorted = sortColors(colors)
   if (sorted.length === 0) return 'Colorless'
-  if (sorted.length === 1) return WORDS[sorted[0]].charAt(0).toUpperCase() + WORDS[sorted[0]].slice(1)
+  if (sorted.length === 1) return capitalize(WORDS[sorted[0]])
   if (sorted.length === 5) return 'Five-color'
   return GROUP_NAMES[sorted.join('')] ?? colorWords(sorted)
 }

@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import { useFrameCallback, useSharedValue } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Colors, Fonts } from '@/constants/theme';
+import { Colors, Fonts } from '@/constants/theme'
 
 // Frame-rate meter for the performance pass (Settings → Developer tools). Counts frames on the UI
 // thread (scrolling, animations, tilt) and the JS thread (React work), and the slowest frame of

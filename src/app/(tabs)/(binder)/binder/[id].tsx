@@ -1,19 +1,17 @@
-import { BlurTargetView } from 'expo-blur';
-import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
-import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurTargetView } from 'expo-blur'
+import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useCallback, useRef, useState } from 'react'
+import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { BinderSheet } from '@/components/binder/binder-sheet';
-import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet';
-import { CardGrid, searchAndSort } from '@/components/binder/card-grid';
-import { setBinderGroupBy, useBinderGroupBy } from '@/components/binder/group-prefs';
-import { SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts';
-import { QuickLook } from '@/components/binder/quick-look';
-import { addEntriesToDecks, BinderToDeckSheet, type Copies } from '@/components/binder/to-deck-sheet';
-import { summarize, useCollection } from '@/components/binder/use-collection';
+import { BinderSheet } from '@/components/binder/binder-sheet'
+import { CardGrid, searchAndSort } from '@/components/binder/card-grid'
+import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet'
+import { SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts'
+import { QuickLook } from '@/components/binder/quick-look'
+import { addEntriesToDecks, BinderToDeckSheet, type Copies } from '@/components/binder/to-deck-sheet'
+import { summarize, useCollection } from '@/components/binder/use-collection'
 import {
   dragGesture,
   DragGhost,
@@ -24,20 +22,21 @@ import {
   useCardDrag,
   type CardDrag,
   type DropTarget,
-} from '@/components/deck/card-drag';
-import { GroupSheet } from '@/components/deck/group-sheet';
-import { NewSheet } from '@/components/decks/new-sheet';
-import { CARD_SORTS, SortMenu, type CardSort } from '@/components/sort-menu';
-import { Colors, Fonts } from '@/constants/theme';
-import { binderSpine, deleteEmptyBinder } from '@/db/binders';
-import { moveEntries, removeEntries, restoreEntries, type CollectionEntry } from '@/db/collection';
-import { GROUP_OPTIONS } from '@/rules/deck-stats';
-import type { Board } from '@/utils/deck-store';
+} from '@/components/deck/card-drag'
+import { GroupSheet } from '@/components/deck/group-sheet'
+import { NewSheet } from '@/components/decks/new-sheet'
+import { Icon, type IconName } from '@/components/icon'
+import { CARD_SORTS, SortMenu, type CardSort } from '@/components/sort-menu'
+import { Colors, Fonts } from '@/constants/theme'
+import { binderSpine, deleteEmptyBinder } from '@/db/binders'
+import { moveEntries, removeEntries, restoreEntries, type CollectionEntry } from '@/db/collection'
+import { GROUP_OPTIONS } from '@/rules/deck-stats'
+import type { Board } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { setBinderGroupBy, useBinderGroupBy } from '@/utils/group-prefs'
 
 // A change made in edit mode, undone with Undo.
 type Undo = () => Promise<unknown>
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 // One binder opened: its value, a search, and its cards in a 3-column grid, grouped as picked in
 // Group by (the button in the search field; the same groups as a deck's, saved per binder).
@@ -167,7 +166,7 @@ export default function BinderScreen() {
 
   // The cards went into decks: they stay in the binder.
   const addedToDecks = (undo: () => void, decks: number, copies: number) =>
-    changed(`Added ${plural(copies, 'card', 'cards')} to ${plural(decks, 'deck', 'decks')}`, async () => undo())
+    changed(`Added ${plural(copies, 'card')} to ${plural(decks, 'deck')}`, async () => undo())
   const movedToBinder = (newId: string, name: string) => {
     const ids = picked.map((e) => e.id)
     const from = id
@@ -194,7 +193,7 @@ export default function BinderScreen() {
             accessibilityRole="button"
             accessibilityHint={editing ? 'Leaves edit mode' : undefined}
           >
-            <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
+            <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel}>Binders</Text>
           </TouchableOpacity>
           {!editing && <SortButton label="Sort cards" onPress={() => setSortOpen(true)} />}
@@ -352,7 +351,7 @@ export default function BinderScreen() {
         onClose={() => setEditOpen(false)}
         onSaved={(undoEdit, n) => {
           reload()
-          changed(`Edited ${plural(n, 'card', 'cards')}`, undoEdit)
+          changed(`Edited ${plural(n, 'card')}`, undoEdit)
         }}
       />
     </BlurTargetView>
@@ -373,7 +372,7 @@ function EditAction({
   drag: CardDrag
   id: DropTarget
   label: string
-  icon: SymbolViewProps['name']
+  icon: IconName
   iconOnly?: boolean
   disabled: boolean
   onPress: () => void
@@ -388,7 +387,7 @@ function EditAction({
         accessibilityLabel={iconOnly ? `${label} the selected cards` : undefined}
         accessibilityHint="Or drag the selected cards onto it"
       >
-        <SymbolView name={icon} size={18} tintColor={Colors.goldLight} />
+        <Icon name={icon} size={18} tintColor={Colors.goldLight} />
         {!iconOnly && <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text>}
       </TouchableOpacity>
     </DropZone>

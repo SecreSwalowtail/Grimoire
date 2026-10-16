@@ -1,11 +1,11 @@
-import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite'
+import { useState } from 'react'
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { Toggle } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import { clearDatabase, hasTestData, seedTestData } from '@/utils/dev-seed';
-import { clearTimings, setFpsMeter, useFpsMeter, useTimings } from '@/utils/perf';
+import { Toggle } from '@/components/controls'
+import { Colors, Fonts } from '@/constants/theme'
+import { clearDatabase, hasTestData, seedTestData } from '@/utils/dev-seed'
+import { clearTimings, setFpsMeter, useFpsMeter, useTimings } from '@/utils/perf'
 
 // Developer tools for the performance pass (Settings: hold the title for a second): test data, the
 // frame-rate meter and recent timings. They work in release builds and stay hidden otherwise.

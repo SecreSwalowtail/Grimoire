@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 
 import { getDecksAndFolders, saveDeckChanges, type DeckSnapshot } from '@/db/decks'
 import { cardImage, type ScryfallCard } from '@/db/scryfall'
+import { createListeners } from '@/utils/listeners'
 
 // Decks, folders and the cards in each deck, saved in the app's database (tables `deck_folders`,
 // `decks` and `deck_cards`). loadDeckStore() reads them once at launch; after that the screens
@@ -112,7 +113,7 @@ export function cardInfoOf(card: ScryfallCard): CardInfo {
 type State = DeckSnapshot & { info: Record<string, CardInfo> }
 
 let state: State = { folders: [], decks: [], cards: [], info: {} }
-const listeners = new Set<() => void>()
+const changes = createListeners()
 
 let db: SQLiteDatabase | null = null
 // What the database holds, as far as we know: each save writes the difference from this.
@@ -122,7 +123,7 @@ let dirty = false
 
 function set(next: State) {
   state = next
-  listeners.forEach((listener) => listener())
+  changes.notify()
   save()
 }
 
@@ -189,20 +190,13 @@ export async function loadDeckStore(database: SQLiteDatabase) {
   db = database
   saved = loaded
   state = loaded
-  listeners.forEach((listener) => listener())
+  changes.notify()
 }
 
 // The decks as they are now, outside a component (e.g. in a callback made earlier).
 export const getDeckStore = () => state
 
-export function useDeckStore() {
-  return useSyncExternalStore((listener) => {
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
-  }, () => state)
-}
+export const useDeckStore = () => useSyncExternalStore(changes.subscribe, getDeckStore)
 
 const cardKey = (deckId: string, cardId: string, board: Board) => `${deckId}|${cardId}|${board}`
 
@@ -219,8 +213,8 @@ export function updateDeck(id: string, patch: Partial<Omit<Deck, 'id'>>) {
   set({ ...state, decks: state.decks.map((d) => (d.id === id ? { ...d, ...patch } : d)) })
 }
 
-// Copies go right after their originals, named "… copy", with the same cards.
-// Each copy goes right after its deck. The undo deletes the copies.
+// Copies go right after their originals, named "… copy", with the same cards. The undo deletes
+// the copies.
 export function duplicateDecks(ids: string[]): Undo {
   const decks: Deck[] = []
   const cards = [...state.cards]
@@ -265,7 +259,7 @@ export function addDeckCards(deckId: string, cardId: string, card: CardInfo, boa
 
 // Makes a main-deck card the deck's commander, or a regular card again. A third commander replaces
 // the earliest: a deck has one, or two with partners.
-export function setCommander(deckId: string, cardId: string, on: boolean) {
+function setCommander(deckId: string, cardId: string, on: boolean) {
   const id = cardKey(deckId, cardId, 'main')
   const others = state.cards.filter((c) => c.deckId === deckId && c.commander && c.id !== id)
   const drop = on && others.length >= 2 ? others[0].id : null
@@ -343,7 +337,7 @@ export function reorderDecks(ids: string[]) {
 export type Undo = () => void
 
 // A card in one part of a deck.
-export type DeckCardKey = { cardId: string; board: Board }
+type DeckCardKey = { cardId: string; board: Board }
 
 // Undo for an edit to one deck's cards: puts back the deck's cards as they were.
 function restoreDeck(deckId: string): Undo {
@@ -458,7 +452,7 @@ export function addTestDecks(add: { folders: Folder[]; decks: Deck[]; cards: Dec
 export function resetDeckStore() {
   state = { folders: [], decks: [], cards: [], info: {} }
   saved = state
-  listeners.forEach((listener) => listener())
+  changes.notify()
 }
 
 // Everything the deck numbers below read. Pass the snapshot from useDeckStore(), so a screen
@@ -514,10 +508,4 @@ export function cardUse(name: string, data: DeckData) {
     byDeck.set(c.deckId, counts)
   }
   return byDeck
-}
-
-// "#D4A64A" + 0.18 -> "rgba(212,166,74,0.18)", for folder tints and glows.
-export function withAlpha(hex: string, alpha: number) {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
 }

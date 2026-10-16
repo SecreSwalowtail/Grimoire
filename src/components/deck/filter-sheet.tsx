@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { Chip, PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls';
-import { ManaSymbol } from '@/components/mana-symbol';
-import { Colors, Fonts } from '@/constants/theme';
+import { Chip, PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls'
+import { ManaSymbol } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
 import {
   activeFilters,
   COLOR_NAME,
@@ -16,7 +16,8 @@ import {
   type DeckFilters,
   type DeckLine,
   type Ownership,
-} from '@/rules/deck-stats';
+} from '@/rules/deck-stats'
+import { plural } from '@/utils/format'
 
 const MVS = [0, 1, 2, 3, 4, 5, 6, 7]
 const OWN: { value: Ownership; label: string }[] = [
@@ -124,7 +125,7 @@ export function FilterSheet({
         <Segmented label="In your collection" options={OWN} value={draft.own} onChange={(own) => set({ own })} />
       </ScrollView>
       <PrimaryButton
-        label={active ? `Show ${left} ${left === 1 ? 'card' : 'cards'} · ${active} ${active === 1 ? 'filter' : 'filters'}` : `Show all ${total} cards`}
+        label={active ? `Show ${plural(left, 'card')} · ${plural(active, 'filter')}` : `Show all ${total} cards`}
         onPress={() => {
           onApply(draft)
           onClose()

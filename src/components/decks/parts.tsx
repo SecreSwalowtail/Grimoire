@@ -1,12 +1,13 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { Image } from 'expo-image'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native'
+import Svg, { Path } from 'react-native-svg'
 
-import { SectionLabel } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import { FOLDER_COLORS, isCommander, useDeckStore, withAlpha, type FolderColor } from '@/utils/deck-store';
+import { SectionLabel } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { withAlpha } from '@/utils/color'
+import { FOLDER_COLORS, isCommander, useDeckStore, type FolderColor } from '@/utils/deck-store'
 
 // Pieces shared by the Decks screens and sheets.
 
@@ -21,7 +22,7 @@ export function FolderIcon({ color, width = 28, fill = 0.18 }: { color: string; 
   )
 }
 
-// Stand-in "card art" until decks hold cards: a neutral card-back gradient.
+// A neutral card back, for fan slots without a card.
 const CARD_BACK = 'radial-gradient(circle at 50% 25%, #857C6C, #2D2A24 60%, #100F0D)'
 
 // Three fanned cards, the deck's thumbnail: its most valuable cards (deck and sideboard), the
@@ -102,7 +103,7 @@ export function UndoToast({
 
   return (
     <View style={[styles.toast, { bottom }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
-      <SymbolView name={{ ios: 'trash', android: 'delete' }} size={18} tintColor={Colors.textSecondary} />
+      <Icon name={{ ios: 'trash', android: 'delete' }} size={18} tintColor={Colors.textSecondary} />
       <Text style={styles.toastText} numberOfLines={1}>{message}</Text>
       <TouchableOpacity
         style={styles.undo}
@@ -192,7 +193,7 @@ export function ColorPicker<K extends string = FolderColor>({
 export function CheckBox({ checked, round }: { checked: boolean; round?: boolean }) {
   return (
     <View style={[styles.box, round && styles.boxRound, checked && styles.boxChecked]}>
-      {checked && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={round ? 13 : 14} tintColor={Colors.onGold} weight="bold" />}
+      {checked && <Icon name={{ ios: 'checkmark', android: 'check' }} size={round ? 13 : 14} tintColor={Colors.onGold} weight="bold" />}
     </View>
   )
 }

@@ -1,26 +1,27 @@
-import { BlurTargetView } from 'expo-blur';
-import { Link, router, useFocusEffect } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurTargetView } from 'expo-blur'
+import { Link, router, useFocusEffect } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useCallback, useRef, useState } from 'react'
+import { BackHandler, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { ScrollView } from 'react-native-gesture-handler'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { BinderCover, COVER_BOX } from '@/components/binder/binder-cover';
-import { MergeBindersDialog, RemoveBinderDialog } from '@/components/binder/binder-dialogs';
-import { BinderSheet } from '@/components/binder/binder-sheet';
-import { CardGrid, searchAndSort } from '@/components/binder/card-grid';
-import { SearchField, SortButton, ValueSummary } from '@/components/binder/parts';
-import { QuickLook } from '@/components/binder/quick-look';
-import { ReorderGrid } from '@/components/binder/reorder-grid';
-import { summarize, useCollection } from '@/components/binder/use-collection';
-import { SortMenu } from '@/components/sort-menu';
-import { Colors, Fonts } from '@/constants/theme';
-import { deleteBinder, mergeBinders, reorderBinders, type Binder } from '@/db/binders';
-import type { CollectionEntry } from '@/db/collection';
-import { forgetScanBinder } from '@/utils/scan-target';
-import { useMoney } from '@/utils/money';
+import { BinderCover, COVER_BOX } from '@/components/binder/binder-cover'
+import { MergeBindersDialog, RemoveBinderDialog } from '@/components/binder/binder-dialogs'
+import { BinderSheet } from '@/components/binder/binder-sheet'
+import { CardGrid, searchAndSort } from '@/components/binder/card-grid'
+import { SearchField, SortButton, ValueSummary } from '@/components/binder/parts'
+import { QuickLook } from '@/components/binder/quick-look'
+import { ReorderGrid } from '@/components/binder/reorder-grid'
+import { summarize, useCollection } from '@/components/binder/use-collection'
+import { Icon } from '@/components/icon'
+import { SortMenu } from '@/components/sort-menu'
+import { Colors, Fonts } from '@/constants/theme'
+import { deleteBinder, mergeBinders, reorderBinders, type Binder } from '@/db/binders'
+import type { CollectionEntry } from '@/db/collection'
+import { plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
+import { forgetScanBinder } from '@/utils/scan-target'
 
 type BinderSort = 'custom' | 'value' | 'valueAsc' | 'name'
 
@@ -31,7 +32,6 @@ const BINDER_SORTS: { value: BinderSort; label: string }[] = [
   { value: 'name', label: 'Name: A to Z' },
 ]
 
-const DANGER = '#EE8466'
 const COLUMN_GAP = 14
 const ROW_GAP = 18
 
@@ -155,7 +155,7 @@ export default function BindersScreen() {
         }}
         accessibilityRole="button"
         accessibilityState={editing ? { selected: isSelected } : undefined}
-        accessibilityLabel={`${editing ? 'Select' : 'Open'} ${binder.name}, ${cards} ${cards === 1 ? 'card' : 'cards'}, ${money.eur(value)}`}
+        accessibilityLabel={`${editing ? 'Select' : 'Open'} ${binder.name}, ${plural(cards, 'card')}, ${money.eur(value)}`}
         accessibilityHint={editing ? undefined : 'Hold to edit, reorder or merge binders'}
       >
         <BinderCover color={binder.color} scale={coverScale} />
@@ -175,7 +175,7 @@ export default function BindersScreen() {
               </Text>
             )}
           </View>
-          <Text style={styles.count}>{cards} {cards === 1 ? 'card' : 'cards'}</Text>
+          <Text style={styles.count}>{plural(cards, 'card')}</Text>
         </View>
       </Pressable>
     )
@@ -203,7 +203,7 @@ export default function BindersScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={one ? `Edit ${one.name}` : 'Edit binder'}
                 >
-                  <SymbolView name={{ ios: 'pencil', android: 'edit' }} size={20} tintColor={Colors.text} />
+                  <Icon name={{ ios: 'pencil', android: 'edit' }} size={20} tintColor={Colors.text} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -213,7 +213,7 @@ export default function BindersScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={selected.length ? `Remove ${selectionLabel}` : 'Remove binder'}
               >
-                <SymbolView name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={DANGER} />
+                <Icon name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={Colors.danger} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.done} onPress={stopEditing} accessibilityRole="button">
                 <Text style={styles.doneLabel}>Done</Text>
@@ -224,7 +224,7 @@ export default function BindersScreen() {
               <View style={styles.actions}>
                 <SortButton label="Sort binders" onPress={() => setSortOpen(true)} />
                 <TouchableOpacity style={styles.add} onPress={() => setNewOpen(true)} accessibilityRole="button" accessibilityLabel="New binder">
-                  <SymbolView name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
+                  <Icon name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
                 </TouchableOpacity>
               </View>
             )
@@ -250,7 +250,7 @@ export default function BindersScreen() {
 
         {editing ? (
           <View style={styles.hint}>
-            <SymbolView name={{ ios: 'hand.draw', android: 'drag_pan' }} size={18} tintColor={Colors.textSecondary} />
+            <Icon name={{ ios: 'hand.draw', android: 'drag_pan' }} size={18} tintColor={Colors.textSecondary} />
             <Text style={styles.hintText}>
               {selected.length > 1 ? `${selected.length} selected · ` : 'Tap to select · '}hold & drag to reorder or merge
             </Text>

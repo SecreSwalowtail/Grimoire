@@ -1,11 +1,11 @@
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls';
-import { PathIcon } from '@/components/deck/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { GROUP_OPTIONS, groupLines, type DeckLine, type GroupBy } from '@/rules/deck-stats';
+import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls'
+import { PathIcon } from '@/components/deck/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { GROUP_OPTIONS, groupLines, type DeckLine, type GroupBy } from '@/rules/deck-stats'
 
 // D2 · Group by: how the deck's cards are grouped, with a preview of the groups this deck would
 // get. "Group all" uses the choice for every deck.
@@ -70,40 +70,40 @@ export function GroupSheet({
         </View>
 
         {lines && (
-        <View style={styles.preview}>
-          <SectionLabel>Preview</SectionLabel>
-          <View style={styles.chips}>
-            {shown.map((g) => (
-              <View key={g.key} style={styles.chip}>
-                <Text style={styles.chipLabel} numberOfLines={1}>{g.name}</Text>
-                <Text style={styles.chipCount}>{g.count}</Text>
-              </View>
-            ))}
-            {preview.length > shown.length && (
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>+{preview.length - shown.length} more</Text>
-              </View>
-            )}
-            {preview.length === 0 && <Text style={styles.none}>No cards yet.</Text>}
+          <View style={styles.preview}>
+            <SectionLabel>Preview</SectionLabel>
+            <View style={styles.chips}>
+              {shown.map((g) => (
+                <View key={g.key} style={styles.chip}>
+                  <Text style={styles.chipLabel} numberOfLines={1}>{g.name}</Text>
+                  <Text style={styles.chipCount}>{g.count}</Text>
+                </View>
+              ))}
+              {preview.length > shown.length && (
+                <View style={styles.chip}>
+                  <Text style={styles.chipLabel}>+{preview.length - shown.length} more</Text>
+                </View>
+              )}
+              {preview.length === 0 && <Text style={styles.none}>No cards yet.</Text>}
+            </View>
           </View>
-        </View>
         )}
 
         {groupAll && (
-        <Pressable
-          style={styles.all}
-          onPress={() => setAll(!all)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: all }}
-        >
-          <View style={[styles.box, all && styles.boxOn]}>
-            {all && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
-          </View>
-          <View style={styles.optionText}>
-            <Text style={styles.allTitle}>Group all</Text>
-            <Text style={styles.allHint}>Use this grouping in every deck</Text>
-          </View>
-        </Pressable>
+          <Pressable
+            style={styles.all}
+            onPress={() => setAll(!all)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: all }}
+          >
+            <View style={[styles.box, all && styles.boxOn]}>
+              {all && <Icon name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
+            </View>
+            <View style={styles.optionText}>
+              <Text style={styles.allTitle}>Group all</Text>
+              <Text style={styles.allHint}>Use this grouping in every deck</Text>
+            </View>
+          </Pressable>
         )}
       </ScrollView>
       <PrimaryButton

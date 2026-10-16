@@ -1,31 +1,31 @@
-import { BlurTargetView } from 'expo-blur';
-import { useIsFocused, useLocalSearchParams } from 'expo-router';
-import { usePreventRemove } from 'expo-router/react-navigation';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurTargetView } from 'expo-blur'
+import { useIsFocused, useLocalSearchParams } from 'expo-router'
+import { usePreventRemove } from 'expo-router/react-navigation'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSharedValue } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AddToDeckSheet, copiesNeeded } from '@/components/card/add-to-deck-sheet';
-import { TiltSensor } from '@/components/card-effects/tilt';
-import { CardTabs, TOP_BAR, TopBar, type CardTab } from '@/components/card/card-chrome';
-import { CardZoom, type ZoomFrom } from '@/components/card/card-zoom';
-import { CopySheet } from '@/components/card/copy-sheet';
-import { ACTIONS_HEIGHT, CardHero, HeroBackdrop, OverviewActions, OverviewTab } from '@/components/card/overview-tab';
-import { PricesTab } from '@/components/card/prices-tab';
-import { PrintingsTab } from '@/components/card/printings-tab';
-import { RulesTab } from '@/components/card/rules-tab';
-import { NewSheet } from '@/components/decks/new-sheet';
-import { Colors, Fonts } from '@/constants/theme';
-import { upsertCard } from '@/db/cards';
-import type { CollectionEntry, Finish } from '@/db/collection';
-import type { ScryfallCard } from '@/db/scryfall';
-import { mainFinish } from '@/utils/card-prices';
-import { useCard, useLocalCardData, useOracleData } from '@/utils/use-card-detail';
-import { cardInfoOf, cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store';
-import { record } from '@/utils/perf';
-import { useAnimationsOff } from '@/utils/motion';
+import { AddToDeckSheet, copiesNeeded } from '@/components/card/add-to-deck-sheet'
+import { CardTabs, TOP_BAR, TopBar, type CardTab } from '@/components/card/card-chrome'
+import { CardZoom, type ZoomFrom } from '@/components/card/card-zoom'
+import { CopySheet } from '@/components/card/copy-sheet'
+import { ACTIONS_HEIGHT, CardHero, HeroBackdrop, OverviewActions, OverviewTab } from '@/components/card/overview-tab'
+import { PricesTab } from '@/components/card/prices-tab'
+import { PrintingsTab } from '@/components/card/printings-tab'
+import { RulesTab } from '@/components/card/rules-tab'
+import { TiltSensor } from '@/components/card-effects/tilt'
+import { NewSheet } from '@/components/decks/new-sheet'
+import { Colors, Fonts } from '@/constants/theme'
+import { upsertCard } from '@/db/cards'
+import type { CollectionEntry, Finish } from '@/db/collection'
+import type { ScryfallCard } from '@/db/scryfall'
+import { mainFinish } from '@/utils/card-prices'
+import { cardInfoOf, cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store'
+import { useAnimationsOff } from '@/utils/motion'
+import { record } from '@/utils/perf'
+import { useCard, useLocalCardData, useOracleData } from '@/utils/use-card-detail'
 
 // Card detail (design C1–C6): opened from a Binder card or a Market row with the printing's
 // Scryfall id. Overview / Prices / Printings / Rules are tabs on one screen; picking another
@@ -126,64 +126,65 @@ export default function CardScreen() {
   return (
     <View style={styles.root}>
       <BlurTargetView ref={page} style={styles.page}>
-      <ScrollView showsVerticalScrollIndicator={false}
-        ref={scroll}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + TOP_BAR,
-            paddingBottom: tab === 'overview' ? ACTIONS_HEIGHT + insets.bottom + 24 : insets.bottom + 40,
-          },
-        ]}
-      >
-        {/* Every tab shows the same hero; a foil finish picked on Prices makes the card holographic. */}
-        <HeroBackdrop card={card} face={face} />
-        <CardHero
-          card={card}
-          face={face}
-          tilt={tilt}
-          foil={headerFoil}
-          hidden={zoom != null}
-          onFlip={() => setFace(face === 0 ? 1 : 0)}
-          onZoom={(from) => setZoom({ from, closing: false })}
-        />
-        <View style={styles.tabs}>
-          <CardTabs tab={tab} onChange={openTab} />
-        </View>
+        <ScrollView
+          ref={scroll}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + TOP_BAR,
+              paddingBottom: tab === 'overview' ? ACTIONS_HEIGHT + insets.bottom + 24 : insets.bottom + 40,
+            },
+          ]}
+        >
+          {/* Every tab shows the same hero; a foil finish picked on Prices makes the card holographic. */}
+          <HeroBackdrop card={card} face={face} />
+          <CardHero
+            card={card}
+            face={face}
+            tilt={tilt}
+            foil={headerFoil}
+            hidden={zoom != null}
+            onFlip={() => setFace(face === 0 ? 1 : 0)}
+            onZoom={(from) => setZoom({ from, closing: false })}
+          />
+          <View style={styles.tabs}>
+            <CardTabs tab={tab} onChange={openTab} />
+          </View>
 
+          {tab === 'overview' && (
+            <OverviewTab
+              card={card}
+              copies={copies}
+              history={history}
+              decksUsing={decksUsing}
+              copiesNeeded={copiesNeeded(store, card.name)}
+              onTab={openTab}
+              onAddToDeck={() => setDeckSheet(true)}
+            />
+          )}
+          {tab === 'prices' && (
+            <PricesTab card={card} history={history} copies={copies} finish={finish} onFinish={setPriceFinish} />
+          )}
+          {tab === 'printings' && (
+            <PrintingsTab
+              card={card}
+              printings={printings}
+              loadMore={loadMore}
+              loadingMore={loadingMore}
+              copies={copies}
+              onPick={pickPrinting}
+              onEditCopy={(entry) => setCopySheet({ entry })}
+              onAddCopy={() => setCopySheet({ entry: null })}
+            />
+          )}
+          {tab === 'rules' && <RulesTab card={card} rulings={rulings} firstPrinting={firstPrinting} />}
+        </ScrollView>
+
+        <TopBar />
         {tab === 'overview' && (
-          <OverviewTab
-            card={card}
-            copies={copies}
-            history={history}
-            decksUsing={decksUsing}
-            copiesNeeded={copiesNeeded(store, card.name)}
-            onTab={openTab}
-            onAddToDeck={() => setDeckSheet(true)}
-          />
+          <OverviewActions onAddToDeck={() => setDeckSheet(true)} onAddCopy={() => setCopySheet({ entry: null })} />
         )}
-        {tab === 'prices' && (
-          <PricesTab card={card} history={history} copies={copies} finish={finish} onFinish={setPriceFinish} />
-        )}
-        {tab === 'printings' && (
-          <PrintingsTab
-            card={card}
-            printings={printings}
-            loadMore={loadMore}
-            loadingMore={loadingMore}
-            copies={copies}
-            onPick={pickPrinting}
-            onEditCopy={(entry) => setCopySheet({ entry })}
-            onAddCopy={() => setCopySheet({ entry: null })}
-          />
-        )}
-        {tab === 'rules' && <RulesTab card={card} rulings={rulings} firstPrinting={firstPrinting} />}
-      </ScrollView>
-
-      <TopBar />
-      {tab === 'overview' && (
-        <OverviewActions onAddToDeck={() => setDeckSheet(true)} onAddCopy={() => setCopySheet({ entry: null })} />
-      )}
       </BlurTargetView>
 
       {/* The hero card tilts with the phone on every tab, and so does the held-out card. */}

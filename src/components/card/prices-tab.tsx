@@ -1,21 +1,21 @@
-import { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react'
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { PriceChart } from '@/components/card/price-chart';
-import { Segmented } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import type { CollectionEntry, Finish, PricePoint } from '@/db/collection';
-import type { ScryfallCard } from '@/db/scryfall';
-import { FINISH_LABEL, printingLabel } from '@/rules/printings';
-import { useMoney } from '@/utils/money';
-import { getSettings } from '@/utils/settings';
+import { PriceChart } from '@/components/card/price-chart'
+import { Segmented } from '@/components/controls'
+import { Colors, Fonts } from '@/constants/theme'
+import type { CollectionEntry, Finish, PricePoint } from '@/db/collection'
+import type { ScryfallCard } from '@/db/scryfall'
+import { FINISH_LABEL, printingLabel } from '@/rules/printings'
 import {
   formatPrice,
   priceOf,
   pricesWithin,
   type PriceSource,
   SHOW_HISTORY,
-} from '@/utils/card-prices';
+} from '@/utils/card-prices'
+import { useMoney } from '@/utils/money'
+import { getSettings } from '@/utils/settings'
 
 // C2 · Card — Prices. Today's price comes from Scryfall; the chart, average, low and high come
 // from the published daily prices (see remote-prices.ts) and the days saved on the

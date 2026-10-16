@@ -1,5 +1,5 @@
-import { createContext, useContext } from 'react';
-import { Platform } from 'react-native';
+import { createContext, useContext } from 'react'
+import { Platform } from 'react-native'
 import {
   makeMutable,
   SensorType,
@@ -7,7 +7,7 @@ import {
   useFrameCallback,
   useSharedValue,
   type SharedValue,
-} from 'react-native-reanimated';
+} from 'react-native-reanimated'
 
 // Phone tilt shared by every card on a screen: x/y in -1..1, 0 = how you're currently holding it.
 export type Tilt = { x: SharedValue<number>; y: SharedValue<number> }
@@ -28,7 +28,8 @@ const SMOOTHING = 0.25 // output smoothing, removes sensor jitter
 // toward its target forever, and every card would re-render its transform on every frame.
 const EPSILON = 0.003
 
-const clamp = (v: number) => {
+// A tilt value kept within -1..1.
+export const clamp = (v: number) => {
   'worklet'
   return Math.max(-1, Math.min(1, v))
 }

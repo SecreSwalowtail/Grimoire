@@ -1,62 +1,60 @@
-import { Image } from 'expo-image';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useState } from 'react';
-import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useCallback, useState } from 'react'
+import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Segmented } from '@/components/controls';
+import { Segmented } from '@/components/controls'
 import {
   dragGesture,
   DragGhost,
+  DragScrollView,
   DropZone,
   EDIT_BAR,
   EditBar,
   TrashBubble,
   useCardDrag,
   type DropTarget,
-} from '@/components/deck/card-drag';
-import { CardsTab } from '@/components/deck/cards-tab';
-import { CROWN, ICON, PathIcon } from '@/components/deck/parts';
-import { FilterSheet } from '@/components/deck/filter-sheet';
-import { setGroupBy, useGroupBy } from '@/components/deck/group-prefs';
-import { GroupSheet } from '@/components/deck/group-sheet';
-import { LegalTab } from '@/components/deck/legal-tab';
-import { StatsTab } from '@/components/deck/stats-tab';
-import { useDeckLines } from '@/components/deck/use-deck-lines';
-import { canShareCommand } from '@/rules/commander';
-import { useDeckSheets } from '@/components/decks/use-deck-sheets';
-import { ManaSymbol } from '@/components/mana-symbol';
-import { Colors, Fonts } from '@/constants/theme';
-import { useMoney } from '@/utils/money';
+} from '@/components/deck/card-drag'
+import { CardsTab } from '@/components/deck/cards-tab'
+import { FilterSheet } from '@/components/deck/filter-sheet'
+import { GroupSheet } from '@/components/deck/group-sheet'
+import { LegalTab } from '@/components/deck/legal-tab'
+import { CROWN, ICON, PathIcon } from '@/components/deck/parts'
+import { StatsTab } from '@/components/deck/stats-tab'
+import { useDeckLines } from '@/components/deck/use-deck-lines'
+import { useDeckSheets } from '@/components/decks/use-deck-sheets'
+import { Icon } from '@/components/icon'
+import { ManaSymbol } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
+import { canShareCommand } from '@/rules/commander'
 import {
   canBeCommander,
   COLOR_HEX,
   deckColors,
   exactSize,
-  hasCommander,
   missingCopies,
   NO_FILTERS,
   type DeckFilters,
   type DeckLine,
-} from '@/rules/deck-stats';
+} from '@/rules/deck-stats'
+import { withAlpha } from '@/utils/color'
 import {
+  hasCommander,
   moveDeckCards,
   removeDeckCards,
   setCommanders,
   useDeckStore,
-  withAlpha,
   type Board,
   type Deck,
   type Undo,
-} from '@/utils/deck-store';
+} from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { setGroupBy, useGroupBy } from '@/utils/group-prefs'
+import { useMoney } from '@/utils/money'
 
 type Tab = 'cards' | 'stats' | 'legal'
-
-// Gesture-handler's scroll view, animatable so a drag can scroll it.
-const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView)
 
 const keyOf = (l: DeckLine) => `${l.cardId}|${l.board}`
 
@@ -73,13 +71,13 @@ function coverLine(deck: Deck, main: DeckLine[]) {
 }
 
 // D1–D8 · One deck: its cover card, colors, size and value, then Cards (grouped, filtered, by part
-// of the deck) or Stats. Cards are added from the Cards tab's search (it searches the Market when
-// the deck has nothing for it); ⋯ opens Deck options (which can import a decklist).
-// Hold a card to edit: it's selected (not picked up). Tap cards to select more; holding any selected
-// card then picks up the whole selection (unselected cards don't drag). It can be
-// dropped on the Main deck / Sideboard / Maybe chips, on the commander (the cover card or the
-// Commander group; one card that can lead the deck, anything else turns it red), or dragged down
-// into the trash bubble. ⋯ and Filter hide meanwhile; the bar at the bottom has Undo and Done.
+// of the deck), Stats or Legal. Cards are added from the Cards tab's search (it searches the Market
+// when the deck has nothing for it); ⋯ opens Deck options (which can import a decklist).
+// Hold a card to edit: it's selected (not picked up). Tap cards to select more; holding any
+// selected card then picks up the whole selection (unselected cards don't drag). It can be dropped
+// on the Main deck / Sideboard / Maybe chips, on the commander (the cover card or the Commander
+// group; one card that can lead the deck, anything else turns it red), or dragged down into the
+// trash bubble. ⋯ and Filter hide meanwhile; the bar at the bottom has Undo and Done.
 export default function DeckScreen() {
   const money = useMoney()
   const insets = useSafeAreaInsets()
@@ -211,7 +209,8 @@ export default function DeckScreen() {
           },
         ]}
       />
-      <AnimatedScrollView showsVerticalScrollIndicator={false}
+      <DragScrollView
+        showsVerticalScrollIndicator={false}
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -222,45 +221,45 @@ export default function DeckScreen() {
       >
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityRole="button">
-            <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
+            <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel} numberOfLines={1}>{folder?.name ?? 'Decks'}</Text>
           </TouchableOpacity>
           {!editing && (
-          <View style={styles.topActions}>
-            <TouchableOpacity
-              style={styles.more}
-              onPress={() => deckSheets.openDeckOptions(deck.id)}
-              accessibilityRole="button"
-              accessibilityLabel="Deck options"
-            >
-              <PathIcon d={ICON.more} color={Colors.text} size={22} weight={3} />
-            </TouchableOpacity>
-          </View>
+            <View style={styles.topActions}>
+              <TouchableOpacity
+                style={styles.more}
+                onPress={() => deckSheets.openDeckOptions(deck.id)}
+                accessibilityRole="button"
+                accessibilityLabel="Deck options"
+              >
+                <PathIcon d={ICON.more} color={Colors.text} size={22} weight={3} />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
         <View style={styles.header}>
           {cover ? (
             <DropZone drag={drag} id="commander">
-            <Pressable
-              style={styles.cover}
-              onPress={() => router.push({ pathname: '/card/[id]', params: { id: cover.cardId, fromDeck: deck.id } })}
-              accessibilityRole="button"
-              accessibilityLabel={`${cover.commander ? 'Commander: ' : 'Open '}${cover.name}`}
-            >
-              <View style={styles.coverCard}>
-                <Image source={{ uri: cover.image ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" />
-              </View>
-              {cover.commander && (
-                <View style={styles.crown} accessibilityLabel="Commander">
-                  <PathIcon d={CROWN} color={Colors.onGold} size={14} />
+              <Pressable
+                style={styles.cover}
+                onPress={() => router.push({ pathname: '/card/[id]', params: { id: cover.cardId, fromDeck: deck.id } })}
+                accessibilityRole="button"
+                accessibilityLabel={`${cover.commander ? 'Commander: ' : 'Open '}${cover.name}`}
+              >
+                <View style={styles.coverCard}>
+                  <Image source={{ uri: cover.image ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" />
                 </View>
-              )}
-            </Pressable>
+                {cover.commander && (
+                  <View style={styles.crown} accessibilityLabel="Commander">
+                    <PathIcon d={CROWN} color={Colors.onGold} size={14} />
+                  </View>
+                )}
+              </Pressable>
             </DropZone>
           ) : (
             <View style={[styles.cover, styles.coverEmpty]}>
-              <SymbolView name={{ ios: 'rectangle.stack', android: 'style' }} size={26} tintColor={Colors.textMuted} />
+              <Icon name={{ ios: 'rectangle.stack', android: 'style' }} size={26} tintColor={Colors.textMuted} />
             </View>
           )}
           <View style={styles.headerText}>
@@ -274,7 +273,7 @@ export default function DeckScreen() {
                 </View>
               )}
               <Text style={styles.meta} numberOfLines={1}>
-                {deck.format} · <Text style={styles.metaStrong}>{size ? `${mainCount} / ${size}` : `${mainCount} ${mainCount === 1 ? 'card' : 'cards'}`}</Text>
+                {deck.format} · <Text style={styles.metaStrong}>{size ? `${mainCount} / ${size}` : plural(mainCount, 'card')}</Text>
               </Text>
             </View>
             <Text style={styles.valueLine}>
@@ -328,7 +327,7 @@ export default function DeckScreen() {
         ) : (
           tab === 'stats' ? <StatsTab lines={lines} /> : <LegalTab format={deck.format} lines={lines} />
         )}
-      </AnimatedScrollView>
+      </DragScrollView>
 
       {editing && tab === 'cards' && (
         <>

@@ -1,8 +1,8 @@
-import type { Legality, ScryfallCard } from '@/db/scryfall'
+import { cardText, frontTypeLine, type Legality, type ScryfallCard } from '@/db/scryfall'
 import type { DeckFormat } from '@/utils/deck-store'
 
 // Formats as Scryfall names them (keys of card.legalities), in the order the Rules tab lists them.
-export type FormatInfo = { key: string; label: string }
+type FormatInfo = { key: string; label: string }
 
 // Played with paper cards (and on Magic Online).
 export const PAPER_FORMATS: FormatInfo[] = [
@@ -108,10 +108,6 @@ const NUMBER_WORDS: Record<string, number> = {
   eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
 }
 
-const frontType = (card: ScryfallCard) => (card.type_line ?? card.card_faces?.[0]?.type_line ?? '').split(' // ')[0]
-const allText = (card: ScryfallCard) =>
-  card.oracle_text ?? (card.card_faces ?? []).map((f) => f.oracle_text ?? '').join('\n')
-
 // The name players use: a double-faced or adventure card goes by its front face ("Bonecrusher
 // Giant"); split cards keep both halves ("Fire // Ice").
 export function shortName(card: ScryfallCard) {
@@ -120,7 +116,7 @@ export function shortName(card: ScryfallCard) {
 }
 
 // Whether a card can go in a deck of this format, and why not.
-export type DeckFit = { allowed: boolean; reason: string | null }
+type DeckFit = { allowed: boolean; reason: string | null }
 
 export function deckFit(card: ScryfallCard, format: DeckFormat): DeckFit {
   const key = DECK_FORMAT_KEY[format]
@@ -132,11 +128,12 @@ export function deckFit(card: ScryfallCard, format: DeckFormat): DeckFit {
 }
 
 // How many copies one deck may hold. `max` null: any number.
-export type CopyRule = { max: number | null; label: string }
+type CopyRule = { max: number | null; label: string }
 
 export function copyRule(card: ScryfallCard, format: DeckFormat): CopyRule {
-  const text = allText(card)
-  if (/\bBasic\b/.test(frontType(card)) && /\bLand\b/.test(frontType(card))) {
+  const text = cardText(card)
+  const type = frontTypeLine(card)
+  if (/\bBasic\b/.test(type) && /\bLand\b/.test(type)) {
     return { max: null, label: 'Basic land · any number' }
   }
   if (/A deck can have any number of cards named/i.test(text)) {

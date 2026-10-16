@@ -1,13 +1,13 @@
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image'
+import { router } from 'expo-router'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { ManaSymbol, parseManaCost } from '@/components/mana-symbol';
-import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import { cardImage, cardManaCost, cardThumb, rememberCard, type ScryfallCard } from '@/db/scryfall';
-import type { PriceSource } from '@/utils/card-prices';
-import { capitalize } from '@/utils/format';
-import { useMoney, type Money } from '@/utils/money';
+import { ManaSymbol, parseManaCost } from '@/components/mana-symbol'
+import { Colors, Fonts, RarityColors } from '@/constants/theme'
+import { cardImage, cardManaCost, cardThumb, rememberCard, type ScryfallCard } from '@/db/scryfall'
+import type { PriceSource } from '@/utils/card-prices'
+import { capitalize } from '@/utils/format'
+import { useMoney, type Money } from '@/utils/money'
 
 // Rows and tiles open Card detail; it gets the card from memory, so it opens without a request.
 // The design's weekly ▲/▼ % under the price needs price history we don't have for search results yet.

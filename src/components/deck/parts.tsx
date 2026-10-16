@@ -1,10 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { StyleSheet, Text, View } from 'react-native'
+import Svg, { Path } from 'react-native-svg'
 
-import { ManaSymbol, symbolName } from '@/components/mana-symbol';
-import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import { costSymbols, TYPE_INFO, type GroupHead } from '@/rules/deck-stats';
-import { withAlpha } from '@/utils/deck-store';
+import { ManaSymbol } from '@/components/mana-symbol'
+import { Colors, Fonts, RarityColors } from '@/constants/theme'
+import { TYPE_INFO, type GroupHead } from '@/rules/deck-stats'
+import { withAlpha } from '@/utils/color'
 
 // Drawn icons, centered in their 24 × 24 box (the system icon font sits slightly off center).
 export const ICON = {
@@ -75,19 +75,6 @@ export function GroupIcon({ head }: { head: GroupHead }) {
   )
 }
 
-// A card's mana cost as symbols, read out as words.
-export function CostRow({ cost, size = 17 }: { cost: string; size?: number }) {
-  const symbols = costSymbols(cost)
-  if (!symbols.length) return null
-  return (
-    <View style={styles.cost} accessible accessibilityLabel={`Mana cost ${symbols.map(symbolName).join(', ')}`}>
-      {symbols.map((s, i) => (
-        <ManaSymbol key={i} symbol={s} size={size} />
-      ))}
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   tile: {
     width: 28,
@@ -115,9 +102,5 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-  },
-  cost: {
-    flexDirection: 'row',
-    gap: 2,
   },
 })

@@ -1,6 +1,6 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native'
 
-import { binderCover, binderShades, binderSpine } from '@/db/binders';
+import { binderCover, binderShades, binderSpine } from '@/db/binders'
 
 // The binder is drawn at the design's size and scaled to the column width.
 export const COVER_BOX = { width: 168, height: 182 }

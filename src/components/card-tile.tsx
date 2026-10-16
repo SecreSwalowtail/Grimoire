@@ -1,18 +1,18 @@
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
-import Animated, { css, cubicBezier, useAnimatedStyle } from 'react-native-reanimated';
+import { Image } from 'expo-image'
+import { router } from 'expo-router'
+import type { ReactNode } from 'react'
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler'
+import Animated, { css, cubicBezier, useAnimatedStyle } from 'react-native-reanimated'
 
-import { HoloFoil } from '@/components/card-effects/holo-foil';
-import { FLAT, useTilt, type Tilt } from '@/components/card-effects/tilt';
-import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import { entryPrice, type CollectionEntry } from '@/db/collection';
-import { capitalize } from '@/utils/format';
-import { useAnimationsOff } from '@/utils/motion';
-import { useMoney } from '@/utils/money';
+import { HoloFoil } from '@/components/card-effects/holo-foil'
+import { FLAT, useTilt, type Tilt } from '@/components/card-effects/tilt'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts, RarityColors } from '@/constants/theme'
+import { entryPrice, type CollectionEntry } from '@/db/collection'
+import { capitalize, plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
+import { useAnimationsOff } from '@/utils/motion'
 
 // Magic cards are 63 × 88 mm.
 const CARD_RATIO = 63 / 88
@@ -45,17 +45,17 @@ const PULSE = css.keyframes({
   to: { opacity: 1 },
 })
 
-// One card in the 3-column Binder grid (tap to open Card detail): full card image with quantity / foil badges,
-// name, and set code + price. Rarity is shown by the dot (and spoken by screen readers).
-// The card tilts in 3D with the phone, catches a moving glare, foils get a holographic layer,
-// and expensive cards shimmer.
+// One card in the 3-column Binder grid (tap to open Card detail): full card image with quantity /
+// foil badges, name, and set code + price. Rarity is shown by the dot (and spoken by screen
+// readers). The card tilts in 3D with the phone, catches a moving glare, foils get a holographic
+// layer, and expensive cards shimmer.
 //
 // `active` = the card is on screen. Off-screen cards bind to the never-changing FLAT tilt, so
 // their animated styles and foil shader don't re-run while the phone moves.
 //
 // `edit` (a binder in edit mode): the card lies still (no tilt, shimmer or pulse), a tap selects
 // it instead of opening it, and `gesture` drags it. Hold it outside edit mode for `edit.onHold`.
-export type TileEdit = {
+type TileEdit = {
   editing: boolean
   selected: boolean
   onToggle: () => void
@@ -88,14 +88,14 @@ export function CardTile({ entry, active, edit, onOpen }: { entry: CollectionEnt
       accessibilityRole={editing ? 'checkbox' : 'button'}
       accessibilityState={editing ? { checked: selected } : undefined}
       accessibilityHint={edit && !editing ? 'Hold to select and drag' : undefined}
-      accessibilityLabel={`${entry.name}, ${entry.quantity} ${entry.quantity === 1 ? 'copy' : 'copies'}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? money.eur(price) : 'no price'}`}
+      accessibilityLabel={`${entry.name}, ${plural(entry.quantity, 'copy', 'copies')}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? money.eur(price) : 'no price'}`}
     >
       <CardFace entry={entry} tilt={active && !editing ? screenTilt : FLAT} still={editing}>
         {selected && (
           <>
             <View pointerEvents="none" style={styles.selectedFrame} />
             <View pointerEvents="none" style={styles.check}>
-              <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={13} tintColor={Colors.onGold} weight="bold" />
+              <Icon name={{ ios: 'checkmark', android: 'check' }} size={13} tintColor={Colors.onGold} weight="bold" />
             </View>
           </>
         )}
@@ -211,7 +211,7 @@ export function CardFace({
         {entry.quantity > 1 && <Text style={[styles.badge, styles.qty]}>×{entry.quantity}</Text>}
         {foil && (
           <View style={[styles.badge, styles.foil]}>
-            <SymbolView name={{ ios: 'sparkle', android: 'auto_awesome' }} size={11} tintColor={Colors.goldLight} />
+            <Icon name={{ ios: 'sparkle', android: 'auto_awesome' }} size={11} tintColor={Colors.goldLight} />
           </View>
         )}
       </Animated.View>
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(232,192,106,0.8)',
   },
-  // 140% of the card (was 200%): half the area to draw, same visible highlight.
+  // 140% of the card: enough room for the highlight to travel, without drawing far off the card.
   glare: {
     position: 'absolute',
     left: '-20%',

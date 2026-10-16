@@ -1,13 +1,13 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls';
-import { ColorsTab } from '@/components/market/filters/colors-tab';
-import { CostTab } from '@/components/market/filters/cost-tab';
-import { FormatTab } from '@/components/market/filters/format-tab';
-import { LanguageTab } from '@/components/market/filters/language-tab';
-import { SetTab } from '@/components/market/filters/set-tab';
-import { Colors, Fonts } from '@/constants/theme';
-import { activeTabs, resetTab, type FilterTab, type MarketFilters } from '@/utils/market-filters';
+import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls'
+import { ColorsTab } from '@/components/market/filters/colors-tab'
+import { CostTab } from '@/components/market/filters/cost-tab'
+import { FormatTab } from '@/components/market/filters/format-tab'
+import { LanguageTab } from '@/components/market/filters/language-tab'
+import { SetTab } from '@/components/market/filters/set-tab'
+import { Colors, Fonts } from '@/constants/theme'
+import { activeTabs, resetTab, type FilterTab, type MarketFilters } from '@/utils/market-filters'
 
 const TABS: { key: FilterTab; label: string }[] = [
   { key: 'format', label: 'Format' },

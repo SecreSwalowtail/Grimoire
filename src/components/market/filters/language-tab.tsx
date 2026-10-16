@@ -1,9 +1,9 @@
-import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { SectionLabel } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import type { MarketFilters } from '@/utils/market-filters';
+import { SectionLabel } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import type { MarketFilters } from '@/utils/market-filters'
 
 // Scryfall language codes, with each language's own name.
 const LANGUAGES = [
@@ -55,7 +55,7 @@ export function LanguageTab({ filters, onChange }: { filters: MarketFilters; onC
                 <Text style={styles.english}>{language.english} · {language.code.toUpperCase()}</Text>
               </View>
               <View style={[styles.box, selected && styles.boxChecked]}>
-                {selected && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} />}
+                {selected && <Icon name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} />}
               </View>
             </Pressable>
           )

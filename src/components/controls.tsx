@@ -1,5 +1,4 @@
-import { SymbolView } from 'expo-symbols';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Dimensions,
   Modal,
@@ -10,8 +9,8 @@ import {
   View,
   type StyleProp,
   type ViewStyle,
-} from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+} from 'react-native'
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
   SlideInDown,
   useAnimatedStyle,
@@ -19,12 +18,13 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { scheduleOnRN } from 'react-native-worklets';
+} from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { scheduleOnRN } from 'react-native-worklets'
 
-import { Colors, Fonts } from '@/constants/theme';
-import { useAnimationsOff, useModalAnimation } from '@/utils/motion';
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { useAnimationsOff, useModalAnimation } from '@/utils/motion'
 
 // Building blocks shared by the bottom sheets (Market sort & filters, Decks).
 
@@ -160,7 +160,7 @@ export function SheetHeader({ title, onClose, onReset }: { title: string; onClos
         )}
         {onClose && (
           <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-            <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+            <Icon name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
           </TouchableOpacity>
         )}
       </View>
@@ -176,7 +176,7 @@ export function SectionLabel({ children, style }: { children: ReactNode; style?:
   )
 }
 
-export type SegmentOption<T> = { value: T; label: string; dot?: string }
+type SegmentOption<T> = { value: T; label: string; dot?: string }
 
 // Pill-shaped radio group. `small` is the compact version used next to a section label, sized to
 // its labels; `fill` makes a small one share out the full width instead.
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   gestureRoot: {
     flex: 1,
   },
-  // A taller strip than the handle itself, so it's easy to grab. Same spacing as before.
+  // A taller strip than the handle itself, so it's easy to grab.
   handleArea: {
     marginTop: -10,
     paddingTop: 10,

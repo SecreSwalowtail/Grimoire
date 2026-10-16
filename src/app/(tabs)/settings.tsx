@@ -1,18 +1,19 @@
-import Constants from 'expo-constants';
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Constants from 'expo-constants'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useState, type ReactNode } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { Chip, SectionLabel, Segmented, Toggle } from '@/components/controls';
-import { DevTools } from '@/components/dev/dev-tools';
-import { CurrencySheet } from '@/components/settings/currency-sheet';
-import { Colors, Fonts } from '@/constants/theme';
-import { exportCollection, importCollection } from '@/db/import-export';
-import { CONDITIONS } from '@/rules/collection';
-import { currencyName, phoneCurrency, useMoney } from '@/utils/money';
-import { setSettings, useSettings } from '@/utils/settings';
+import { Chip, SectionLabel, Segmented, Toggle } from '@/components/controls'
+import { DevTools } from '@/components/dev/dev-tools'
+import { Icon, type IconName } from '@/components/icon'
+import { CurrencySheet } from '@/components/settings/currency-sheet'
+import { Colors, Fonts } from '@/constants/theme'
+import { exportCollection, importCollection } from '@/db/import-export'
+import { CONDITIONS, conditionName } from '@/rules/collection'
+import { plural } from '@/utils/format'
+import { currencyName, phoneCurrency, useMoney } from '@/utils/money'
+import { setSettings, useSettings } from '@/utils/settings'
 
 type Tab = 'settings' | 'tools'
 
@@ -50,14 +51,14 @@ export default function SettingsScreen() {
   const exportCsv = () =>
     run(async () => {
       const { exported } = await exportCollection(db)
-      return `Exported ${exported} ${exported === 1 ? 'card' : 'cards'}.`
+      return `Exported ${plural(exported, 'card')}.`
     })
   const importCsv = () =>
     run(async () => {
       const result = await importCollection(db)
       if (result.canceled) return null
       const failed = result.failed.length ? ` ${result.failed.length} not found (${result.failed.slice(0, 3).map((f) => f.name).join(', ')}${result.failed.length > 3 ? '…' : ''}).` : ''
-      return `Imported ${result.imported} ${result.imported === 1 ? 'card' : 'cards'}.${failed}`
+      return `Imported ${plural(result.imported, 'card')}.${failed}`
     })
 
   return (
@@ -80,7 +81,7 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.content}>
         {tab === 'tools' ? (
           <View style={styles.soon}>
-            <SymbolView name={{ ios: 'wrench.and.screwdriver', android: 'build' }} size={30} tintColor={Colors.goldLight} />
+            <Icon name={{ ios: 'wrench.and.screwdriver', android: 'build' }} size={30} tintColor={Colors.goldLight} />
             <Text style={styles.soonTitle}>More tools in future versions</Text>
             <Text style={styles.soonText}>Handy tools for your collection and decks will show up here.</Text>
           </View>
@@ -92,7 +93,7 @@ export default function SettingsScreen() {
                 title="Currency"
                 subtitle={currencyText}
                 onPress={() => setCurrencyOpen(true)}
-                trailing={<SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />}
+                trailing={<Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />}
               />
               <View style={[styles.item, styles.rule]}>
                 <Text style={styles.itemTitle}>Prices from</Text>
@@ -119,7 +120,7 @@ export default function SettingsScreen() {
             <View style={styles.group}>
               <View style={styles.item}>
                 <Text style={styles.itemTitle}>Condition of scanned cards</Text>
-                <Text style={styles.itemSubtitle}>{CONDITIONS.find((c) => c.code === settings.scanCondition)?.name}. You can change a card&apos;s condition later.</Text>
+                <Text style={styles.itemSubtitle}>{conditionName(settings.scanCondition)}. You can change a card&apos;s condition later.</Text>
                 <View style={[styles.control, styles.chips]}>
                   {CONDITIONS.map((c) => (
                     <Chip key={c.code} label={c.code} selected={settings.scanCondition === c.code} onPress={() => setSettings({ scanCondition: c.code })} />
@@ -203,8 +204,8 @@ function Row({
   )
 }
 
-function Action({ icon }: { icon: SymbolViewProps['name'] }) {
-  return <SymbolView name={icon} size={20} tintColor={Colors.goldLight} />
+function Action({ icon }: { icon: IconName }) {
+  return <Icon name={icon} size={20} tintColor={Colors.goldLight} />
 }
 
 const styles = StyleSheet.create({

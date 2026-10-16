@@ -1,7 +1,7 @@
-import { Platform, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type TextStyle } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type TextStyle } from 'react-native'
 
-import { ManaSymbol, symbolName } from '@/components/mana-symbol';
-import { Colors, Fonts } from '@/constants/theme';
+import { ManaSymbol, symbolName } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
 
 // Card rules text as printed: {symbols} drawn as our mana symbols in the line, reminder text
 // (in parentheses) in muted italics, and a keyword that starts a line ("Deathtouch") in bold.
@@ -32,18 +32,6 @@ export function SymbolText({ text, style, size = 15 }: { text: string; style?: S
         ),
       )}
     </Text>
-  )
-}
-
-// A mana cost as a row of symbols: "{2}{B}{B}". Split cards pass each half separately.
-export function CostRow({ cost, size }: { cost: string; size: number }) {
-  const symbols = [...cost.matchAll(/{([^}]+)}/g)].map((m) => m[1])
-  return (
-    <View style={[styles.cost, { gap: Math.round(size / 6) }]} accessible accessibilityLabel={`Mana cost: ${symbols.map(symbolName).join(', ')}`}>
-      {symbols.map((symbol, i) => (
-        <ManaSymbol key={i} symbol={symbol} size={size} />
-      ))}
-    </View>
   )
 }
 
@@ -101,9 +89,5 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     fontStyle: 'italic',
     color: Colors.textSecondary,
-  },
-  cost: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
 })

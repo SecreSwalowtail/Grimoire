@@ -3,10 +3,11 @@ import { useSyncExternalStore } from 'react'
 
 import type { Condition } from '@/db/collection'
 import type { PriceSource } from '@/utils/card-prices'
+import { createListeners } from '@/utils/listeners'
 
 // The user's settings (Settings screen), kept on the phone and read synchronously at start.
 
-export type Settings = {
+type Settings = {
   // The currency prices show in; null: from the phone's language (see money.ts).
   currency: string | null
   // Whose prices the Market and Card detail show first.
@@ -40,13 +41,13 @@ function load(): Settings {
 }
 
 let settings: Settings = load()
-const listeners = new Set<() => void>()
+const changes = createListeners()
 
 export const getSettings = () => settings
 
 export function setSettings(patch: Partial<Settings>) {
   settings = { ...settings, ...patch }
-  listeners.forEach((l) => l())
+  changes.notify()
   try {
     Storage.setItemSync(KEY, JSON.stringify(settings))
   } catch (e) {
@@ -54,11 +55,6 @@ export function setSettings(patch: Partial<Settings>) {
   }
 }
 
-export function subscribeSettings(listener: () => void) {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
+export const subscribeSettings = changes.subscribe
 
 export const useSettings = () => useSyncExternalStore(subscribeSettings, getSettings)

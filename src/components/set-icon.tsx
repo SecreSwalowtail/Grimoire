@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { SvgXml } from 'react-native-svg';
+import { useEffect, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import { SvgXml } from 'react-native-svg'
 
-import { Fonts } from '@/constants/theme';
+import { Fonts } from '@/constants/theme'
 
 // A set's symbol (Scryfall's SVG), drawn in `color`. Until it has loaded, or if it can't, the set
 // code shows instead. `uri`: the set's icon_svg_uri (some sets share another set's symbol); without

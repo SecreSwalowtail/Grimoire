@@ -1,29 +1,29 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { cubicBezier, useAnimatedStyle } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image'
+import { useRef, useState } from 'react'
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import Animated, { cubicBezier, useAnimatedStyle } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { HoloFoil } from '@/components/card-effects/holo-foil';
-import type { Tilt } from '@/components/card-effects/tilt';
-import type { CardTab } from '@/components/card/card-chrome';
-import type { ZoomFrom } from '@/components/card/card-zoom';
-import { CostRow, OracleText } from '@/components/card/oracle-text';
-import { ManaSymbol } from '@/components/mana-symbol';
-import { NavIcon } from '@/components/nav-icon';
-import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import type { CollectionEntry, PricePoint } from '@/db/collection';
-import { cardArt, faceImage, type CardFace, type ScryfallCard } from '@/db/scryfall';
-import { identityName, sortColors } from '@/rules/colors';
-import { commanderStatus } from '@/rules/commander';
-import { isPlayable, PAPER_FORMATS } from '@/rules/formats';
-import { FLIPPABLE } from '@/rules/printings';
-import { mainFinish, priceChange, priceOf, SHOW_HISTORY } from '@/utils/card-prices';
-import { withAlpha } from '@/utils/deck-store';
-import { capitalize } from '@/utils/format';
-import { thump } from '@/utils/motion';
-import { useMoney } from '@/utils/money';
+import type { CardTab } from '@/components/card/card-chrome'
+import type { ZoomFrom } from '@/components/card/card-zoom'
+import { OracleText } from '@/components/card/oracle-text'
+import { HoloFoil } from '@/components/card-effects/holo-foil'
+import type { Tilt } from '@/components/card-effects/tilt'
+import { Icon } from '@/components/icon'
+import { CostRow, ManaSymbol } from '@/components/mana-symbol'
+import { NavIcon } from '@/components/nav-icon'
+import { Colors, Fonts, RarityColors } from '@/constants/theme'
+import type { CollectionEntry, PricePoint } from '@/db/collection'
+import { cardArt, faceImage, type CardFace, type ScryfallCard } from '@/db/scryfall'
+import { identityName, sortColors } from '@/rules/colors'
+import { commanderStatus } from '@/rules/commander'
+import { isPlayable, PAPER_FORMATS } from '@/rules/formats'
+import { FLIPPABLE } from '@/rules/printings'
+import { mainFinish, priceChange, priceOf, SHOW_HISTORY } from '@/utils/card-prices'
+import { withAlpha } from '@/utils/color'
+import { capitalize, plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
+import { thump } from '@/utils/motion'
 
 // C1 · Card — Overview: the hero (art backdrop, tilted card, name, cost, type), then at a glance,
 // card text, facts and legality. The bottom bar (Add to deck / Add to binder) is the screen's.
@@ -44,7 +44,7 @@ const PRESS_TRANSITION = {
 
 // The face on show: double-faced cards flip between faces; split, adventure and flip cards show
 // the whole card.
-export function shownFace(card: ScryfallCard, face: number): CardFace | ScryfallCard {
+function shownFace(card: ScryfallCard, face: number): CardFace | ScryfallCard {
   return FLIPPABLE.includes(card.layout ?? '') ? card.card_faces?.[face] ?? card : card
 }
 
@@ -143,7 +143,7 @@ export function CardHero({
         </AnimatedPressable>
         {flippable && (
           <TouchableOpacity style={styles.flip} onPress={onFlip} accessibilityRole="button" accessibilityLabel="Show the other face">
-            <SymbolView name={{ ios: 'arrow.triangle.2.circlepath', android: 'cached' }} size={18} tintColor={Colors.text} />
+            <Icon name={{ ios: 'arrow.triangle.2.circlepath', android: 'cached' }} size={18} tintColor={Colors.text} />
           </TouchableOpacity>
         )}
       </View>
@@ -164,7 +164,7 @@ export function CardHero({
             {halves.map((half, h) => (
               <View key={h} style={styles.costHalf}>
                 {h > 0 && <Text style={styles.costSlash}>{'//'}</Text>}
-                <CostRow cost={half} size={24} />
+                <CostRow cost={half} size={24} gap={4} />
               </View>
             ))}
           </View>
@@ -199,7 +199,7 @@ export function OverviewTab({
   const money = useMoney()
   const finish = mainFinish(card)
   const price = priceOf(card, finish, 'cardmarket')
-  // Past prices are off for now, so no change over time either.
+  // A change over time needs the published price history.
   const change = SHOW_HISTORY ? priceChange(history, 30, finish, 'cardmarket') : null
   const owned = copies.reduce((n, c) => n + c.quantity, 0)
   const short = Math.max(copiesNeeded - owned, 0)
@@ -233,9 +233,9 @@ export function OverviewTab({
           <Text style={styles.glanceNote}>in your binder</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.glanceCell, styles.glanceRule]} onPress={onAddToDeck} accessibilityRole="button">
-          <Text style={styles.glanceValue}>{decksUsing} {decksUsing === 1 ? 'deck' : 'decks'}</Text>
+          <Text style={styles.glanceValue}>{plural(decksUsing, 'deck')}</Text>
           {short > 0 ? (
-            <Text style={[styles.glanceNote, styles.goldBold]}>{short} {short === 1 ? 'copy' : 'copies'} short</Text>
+            <Text style={[styles.glanceNote, styles.goldBold]}>{plural(short, 'copy', 'copies')} short</Text>
           ) : (
             <Text style={styles.glanceNote}>{decksUsing ? 'you have enough' : 'not in a deck'}</Text>
           )}
@@ -250,7 +250,7 @@ export function OverviewTab({
               {withNames && (
                 <View style={styles.faceHead}>
                   <Text style={styles.faceName}>{f.name}</Text>
-                  {f.mana_cost ? <CostRow cost={f.mana_cost} size={16} /> : null}
+                  {f.mana_cost ? <CostRow cost={f.mana_cost} size={16} gap={3} /> : null}
                 </View>
               )}
               {withNames && f.type_line != null && <Text style={styles.faceType}>{f.type_line}</Text>}
@@ -295,7 +295,7 @@ export function OverviewTab({
       </View>
 
       <View style={styles.legalHead}>
-        <Text style={styles.label}>Legal in {legal.length} {legal.length === 1 ? 'format' : 'formats'}</Text>
+        <Text style={styles.label}>Legal in {plural(legal.length, 'format')}</Text>
         <TouchableOpacity style={styles.link} onPress={() => onTab('rules')} accessibilityRole="button">
           <Text style={styles.linkLabel}>All formats</Text>
         </TouchableOpacity>
@@ -337,7 +337,7 @@ export function OverviewActions({ onAddToDeck, onAddCopy }: { onAddToDeck: () =>
         <Text style={styles.secondaryLabel}>Add to deck</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.primary} onPress={onAddCopy} accessibilityRole="button">
-        <SymbolView name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.onGold} weight="bold" />
+        <Icon name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.onGold} weight="bold" />
         <Text style={styles.primaryLabel}>Add to binder</Text>
       </TouchableOpacity>
     </View>

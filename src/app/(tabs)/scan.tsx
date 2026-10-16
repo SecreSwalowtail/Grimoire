@@ -1,11 +1,10 @@
-import TextRecognition from '@react-native-ml-kit/text-recognition';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { useIsFocused } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { LayoutRectangle, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import TextRecognition from '@react-native-ml-kit/text-recognition'
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
+import { useIsFocused } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { LayoutRectangle, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   Camera,
   CameraRef,
@@ -14,20 +13,21 @@ import {
   useCameraPermission,
   useFrameOutput,
   usePhotoOutput,
-} from 'react-native-vision-camera';
+} from 'react-native-vision-camera'
 
-import { scanDecks, ScanTargetSheet, scanTargetLabel } from '@/components/scan-target-sheet';
-import { ScanToast, ScanToastData } from '@/components/scan-toast';
-import { Colors, Fonts } from '@/constants/theme';
-import { getBinders, type Binder } from '@/db/binders';
-import { addToCollection, removeOneCopy, type Condition } from '@/db/collection';
-import { cardImage, getCardBySetNumber, getSets, type ScryfallCard } from '@/db/scryfall';
-import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button';
-import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan';
-import { ocrRows, parseCollectorLine } from '@/utils/collector-line';
-import { addCardsToDecks, cardInfoOf, getDeckStore, useDeckStore, type Undo } from '@/utils/deck-store';
-import { getScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target';
-import { getSettings } from '@/utils/settings';
+import { Icon } from '@/components/icon'
+import { scanDecks, ScanTargetSheet, scanTargetLabel } from '@/components/scan-target-sheet'
+import { ScanToast, ScanToastData } from '@/components/scan-toast'
+import { Colors, Fonts } from '@/constants/theme'
+import { getBinders, type Binder } from '@/db/binders'
+import { addToCollection, removeOneCopy, type Condition } from '@/db/collection'
+import { cardImage, getCardBySetNumber, getSets, type ScryfallCard } from '@/db/scryfall'
+import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button'
+import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan'
+import { ocrRows, parseCollectorLine } from '@/utils/collector-line'
+import { addCardsToDecks, cardInfoOf, getDeckStore, useDeckStore, type Undo } from '@/utils/deck-store'
+import { getScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target'
+import { getSettings } from '@/utils/settings'
 
 // Where the set code + collector number sit on a card, as fractions of the card: the bottom-left
 // corner, with room around it (it reaches past the card's edges) because the card found in the
@@ -141,7 +141,8 @@ export default function ScanScreen() {
     try {
       const { filePath } = await photoOutput.capturePhotoToFile({}, {})
 
-      // Load the real bitmap (EXIF rotation applied). The card, in its pixels, from the frame-relative rect.
+      // Load the real bitmap (EXIF rotation applied), and find the card in its pixels from the
+      // frame-relative rect.
       const full = await ImageManipulator.manipulate(`file://${filePath}`).renderAsync()
       const cardX = full.width * rect.x
       const cardY = full.height * rect.y
@@ -257,7 +258,7 @@ export default function ScanScreen() {
     'worklet'
     try {
       if (cardCameraPoints != null) {
-        processCardFrame(frame, cardCameraPoints, 0, autoCapture, onStatus, onReady)
+        processCardFrame(frame, cardCameraPoints, autoCapture, onStatus, onReady)
       }
     } catch (e) {
       console.log(`[scan-error] ${String(e)}`)
@@ -334,7 +335,7 @@ export default function ScanScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Scanning into ${scanTargetLabel(target, binders, decks)}. Tap to change`}
           >
-            <SymbolView
+            <Icon
               name={target.decks && !target.binder ? { ios: 'rectangle.stack', android: 'style' } : { ios: 'books.vertical', android: 'collections_bookmark' }}
               size={15}
               tintColor={Colors.goldLight}
@@ -342,7 +343,7 @@ export default function ScanScreen() {
             <Text style={styles.targetPillLabel} numberOfLines={1}>
               {scanTargetLabel(target, binders, decks)}
             </Text>
-            <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={Colors.goldLight} />
+            <Icon name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={Colors.goldLight} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, torch && styles.iconBtnOn]}
@@ -352,7 +353,7 @@ export default function ScanScreen() {
             accessibilityLabel={torch ? 'Turn off flash' : 'Turn on flash'}
             accessibilityState={{ selected: torch }}
           >
-            <SymbolView
+            <Icon
               name={torch ? { ios: 'bolt.fill', android: 'flash_on' } : { ios: 'bolt', android: 'flash_off' }}
               size={20}
               tintColor={torch ? Colors.onGold : Colors.text}
@@ -388,7 +389,6 @@ export default function ScanScreen() {
         </View>
 
         <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>
-
 
         {toast && (
           <View style={styles.toastWrap}>

@@ -1,9 +1,10 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image'
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { Colors, Fonts } from '@/constants/theme';
-import { useMoney } from '@/utils/money';
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { capitalize } from '@/utils/format'
+import { useMoney } from '@/utils/money'
 
 export type ScanToastData =
   | {
@@ -32,7 +33,7 @@ export function ScanToast({ data, where = 'Binder', onUndo }: { data: ScanToastD
     )
   }
 
-  const rarity = data.rarity.charAt(0).toUpperCase() + data.rarity.slice(1)
+  const rarity = capitalize(data.rarity)
   return (
     <View style={styles.toast} accessibilityLabel={`Added ${data.name} to ${where}`}>
       {data.image ? (
@@ -42,7 +43,7 @@ export function ScanToast({ data, where = 'Binder', onUndo }: { data: ScanToastD
       )}
       <View style={styles.body}>
         <View style={styles.labelRow}>
-          <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={13} tintColor={Colors.positive} />
+          <Icon name={{ ios: 'checkmark', android: 'check' }} size={13} tintColor={Colors.positive} />
           <Text style={[styles.label, styles.where, { color: Colors.positive }]} numberOfLines={1}>Added to {where}</Text>
         </View>
         <Text style={styles.name} numberOfLines={1}>{data.name}</Text>

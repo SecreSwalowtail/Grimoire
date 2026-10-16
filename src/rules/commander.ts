@@ -1,4 +1,4 @@
-import type { ScryfallCard } from '@/db/scryfall'
+import { cardText, frontTypeLine, type ScryfallCard } from '@/db/scryfall'
 import { colorWords, identityAllows, identityPhrase } from '@/rules/colors'
 
 // Whether a card can lead a Commander deck, with the texts the Overview facts and the Rules tab's
@@ -7,7 +7,7 @@ import { colorWords, identityAllows, identityPhrase } from '@/rules/colors'
 // commander. Partner-style abilities and Backgrounds allow a second commander.
 
 export type CommanderTone = 'yes' | 'partial' | 'no'
-export type CommanderStatus = { tone: CommanderTone; short: string; title: string; text: string }
+type CommanderStatus = { tone: CommanderTone; short: string; title: string; text: string }
 
 const PAIRINGS: Record<string, string> = {
   'partner': 'It has partner, so it can share command with another commander that has partner.',
@@ -17,14 +17,9 @@ const PAIRINGS: Record<string, string> = {
   'choose a background': 'It can choose a Background: a legendary Background enchantment can be your second commander.',
 }
 
-const front = (card: ScryfallCard) => card.card_faces?.[0] ?? card
-const frontType = (card: ScryfallCard) => (card.type_line ?? front(card).type_line ?? '').split(' // ')[0]
-const allText = (card: ScryfallCard) =>
-  card.oracle_text ?? (card.card_faces ?? []).map((f) => f.oracle_text ?? '').join('\n')
-
 export function commanderStatus(card: ScryfallCard): CommanderStatus {
   const identity = card.color_identity ?? []
-  const type = frontType(card)
+  const type = frontTypeLine(card)
   const legendary = /\bLegendary\b/.test(type)
   const keywords = (card.keywords ?? []).map((k) => k.toLowerCase())
   const pairing = Object.keys(PAIRINGS).find((k) => keywords.includes(k))
@@ -42,14 +37,14 @@ export function commanderStatus(card: ScryfallCard): CommanderStatus {
     return {
       tone: 'no',
       short: 'Not legal',
-      title: "Not allowed in Commander",
+      title: 'Not allowed in Commander',
       text: "This card isn't part of Commander's card pool (for example a digital-only or joke card).",
     }
   }
 
-  const sayso = /can be your commander/i.test(allText(card))
+  const sayso = /can be your commander/i.test(cardText(card))
   const creature = /\bCreature\b/.test(type)
-  const vehicle = /\b(Vehicle|Spacecraft)\b/.test(type) && front(card).power != null
+  const vehicle = /\b(Vehicle|Spacecraft)\b/.test(type) && (card.card_faces?.[0] ?? card).power != null
   const lead = (legendary && (creature || vehicle)) || sayso
 
   if (lead) {
@@ -98,7 +93,7 @@ export function commanderStatus(card: ScryfallCard): CommanderStatus {
 }
 
 // What deciding a commander pair needs to know about a card.
-export type PairCard = { name: string; typeLine: string; text: string; keywords: string[] }
+type PairCard = { name: string; typeLine: string; text: string; keywords: string[] }
 
 const has = (c: PairCard, keyword: string) => c.keywords.some((k) => k.toLowerCase() === keyword)
 const frontName = (c: PairCard) => c.name.split(' // ')[0]

@@ -1,16 +1,16 @@
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 
-import { SymbolText } from '@/components/card/oracle-text';
-import { Segmented } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import type { Legality, Ruling, ScryfallCard } from '@/db/scryfall';
-import { commanderStatus, type CommanderTone } from '@/rules/commander';
-import { ARENA_FORMATS, formatsFor, LEGALITY_HINT, LEGALITY_LABEL, PAPER_FORMATS } from '@/rules/formats';
-import { explainKeyword, KEYWORD_KIND_LABEL } from '@/rules/keywords';
-import { layoutText } from '@/rules/printings';
-import { capitalize } from '@/utils/format';
+import { SymbolText } from '@/components/card/oracle-text'
+import { Segmented } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { cardText, type Legality, type Ruling, type ScryfallCard } from '@/db/scryfall'
+import { commanderStatus, type CommanderTone } from '@/rules/commander'
+import { ARENA_FORMATS, formatsFor, LEGALITY_HINT, LEGALITY_LABEL, PAPER_FORMATS } from '@/rules/formats'
+import { explainKeyword, KEYWORD_KIND_LABEL } from '@/rules/keywords'
+import { layoutText } from '@/rules/printings'
+import { capitalize, plural } from '@/utils/format'
 
 // C4 · Card — Rules & legality: where it's legal, whether it can lead a Commander deck, what its
 // keywords mean, official rulings and card data.
@@ -40,7 +40,7 @@ export function RulesTab({ card, rulings, firstPrinting }: { card: ScryfallCard;
   const formats = formatsFor(card, mode === 'arena' && onArena ? ARENA_FORMATS : PAPER_FORMATS)
   const commander = commanderStatus(card)
   const tone = TONES[commander.tone]
-  const allText = card.oracle_text ?? (card.card_faces ?? []).map((f) => f.oracle_text ?? '').join('\n')
+  const allText = cardText(card)
   const keywords = card.keywords ?? []
   const layout = layoutText(card.layout)
   const first = firstPrinting ?? card
@@ -89,7 +89,7 @@ export function RulesTab({ card, rulings, firstPrinting }: { card: ScryfallCard;
 
       <View style={[styles.commander, { backgroundColor: tone.bg, borderColor: tone.border }]}>
         <View style={[styles.commanderIcon, { backgroundColor: tone.iconBg }]}>
-          <SymbolView name={{ ios: 'crown', android: 'workspace_premium' }} size={22} tintColor={tone.icon} />
+          <Icon name={{ ios: 'crown', android: 'workspace_premium' }} size={22} tintColor={tone.icon} />
         </View>
         <View style={styles.commanderText}>
           <Text style={styles.commanderTitle}>{commander.title}</Text>
@@ -128,7 +128,7 @@ export function RulesTab({ card, rulings, firstPrinting }: { card: ScryfallCard;
 
       <View style={[styles.sectionHead, styles.gap]}>
         <Text style={styles.label}>Official rulings</Text>
-        {rulings && <Text style={styles.count}>{rulings.length} {rulings.length === 1 ? 'ruling' : 'rulings'}</Text>}
+        {rulings && <Text style={styles.count}>{plural(rulings.length, 'ruling')}</Text>}
       </View>
       {rulings == null ? (
         <ActivityIndicator color={Colors.gold} />
@@ -141,7 +141,7 @@ export function RulesTab({ card, rulings, firstPrinting }: { card: ScryfallCard;
           {rulings.map((r, i) => (
             <View key={i} style={styles.panel}>
               <View style={styles.rulingHead}>
-                <SymbolView name={{ ios: 'calendar', android: 'calendar_today' }} size={14} tintColor={Colors.goldLight} />
+                <Icon name={{ ios: 'calendar', android: 'calendar_today' }} size={14} tintColor={Colors.goldLight} />
                 <Text style={styles.rulingDate}>{longDate(r.published_at)}</Text>
                 {r.source === 'wotc' && <Text style={styles.rulingSource}>Wizards of the Coast</Text>}
               </View>

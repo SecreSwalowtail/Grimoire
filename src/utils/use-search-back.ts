@@ -1,5 +1,5 @@
-import { useEffect, type RefObject } from 'react';
-import { Keyboard, Platform, type TextInput } from 'react-native';
+import { useEffect, type RefObject } from 'react'
+import { Keyboard, Platform, type TextInput } from 'react-native'
 
 // Back while typing a search closes the keyboard and leaves the search box (the text stays).
 // Android's back button closes the keyboard by itself but keeps the box focused, so the next tap

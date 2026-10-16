@@ -1,8 +1,8 @@
-import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { SectionLabel, Segmented } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
+import { SectionLabel, Segmented } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
 
 // One way to sort. Order labels depend on what is sorted, e.g. "Cheapest first" for price.
 export type SortOption<T extends string> = { value: T; label: string; glyph: string; asc: string; desc: string }
@@ -41,7 +41,7 @@ export function SortPicker<T extends string>({
                 <Text style={[styles.glyphLabel, selected && styles.glyphLabelSelected]}>{option.glyph}</Text>
               </View>
               <Text style={styles.sortLabel} numberOfLines={1}>{option.label}</Text>
-              {selected && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={16} tintColor={Colors.goldLight} />}
+              {selected && <Icon name={{ ios: 'checkmark', android: 'check' }} size={16} tintColor={Colors.goldLight} />}
             </Pressable>
           )
         })}

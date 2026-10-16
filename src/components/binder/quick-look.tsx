@@ -1,10 +1,9 @@
-import { BlurView } from 'expo-blur';
-import { router } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BlurView } from 'expo-blur'
+import { router } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
   Extrapolation,
   interpolate,
@@ -12,25 +11,28 @@ import Animated, {
   useSharedValue,
   withSpring,
   type SharedValue,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { scheduleOnRN } from 'react-native-worklets';
+} from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { scheduleOnRN } from 'react-native-worklets'
 
-import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet';
-import { FLAT, TiltSensor, type Tilt } from '@/components/card-effects/tilt';
-import { CardFace } from '@/components/card-tile';
-import { CostRow, PathIcon } from '@/components/deck/parts';
-import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import type { Binder } from '@/db/binders';
-import { getSavedCard } from '@/db/cards';
-import { entryPrice, setQuantity, type CollectionEntry } from '@/db/collection';
-import { cardManaCost, faceImage, type ScryfallCard } from '@/db/scryfall';
-import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection';
-import { COLOR_HEX, WUBRG, type Color } from '@/rules/deck-stats';
-import { cardUse, useDeckStore, withAlpha } from '@/utils/deck-store';
-import { capitalize } from '@/utils/format';
-import { tick, useAnimationsOff, useModalAnimation } from '@/utils/motion';
-import { useMoney } from '@/utils/money';
+import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet'
+import { FLAT, TiltSensor, type Tilt } from '@/components/card-effects/tilt'
+import { CardFace } from '@/components/card-tile'
+import { PathIcon } from '@/components/deck/parts'
+import { Icon } from '@/components/icon'
+import { CostRow } from '@/components/mana-symbol'
+import { Colors, Fonts, RarityColors } from '@/constants/theme'
+import type { Binder } from '@/db/binders'
+import { getSavedCard } from '@/db/cards'
+import { entryPrice, setQuantity, type CollectionEntry } from '@/db/collection'
+import { cardManaCost, faceImage, type ScryfallCard } from '@/db/scryfall'
+import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection'
+import { COLOR_HEX, parseColors } from '@/rules/deck-stats'
+import { withAlpha } from '@/utils/color'
+import { cardUse, useDeckStore } from '@/utils/deck-store'
+import { capitalize, plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
+import { tick, useAnimationsOff, useModalAnimation } from '@/utils/motion'
 
 // 1b · Card quick look: a card from a binder held up over the blurred binder, alive like in the
 // grid (it tilts with the phone, foils shine, expensive cards shimmer), with what a player wants at
@@ -49,15 +51,6 @@ const FLICK = 450
 const CARD_RATIO = 63 / 88
 
 type OldPrice = { price_eur: number | null; price_eur_foil: number | null }
-
-function colorsOf(entry: CollectionEntry): Color[] {
-  try {
-    const list = JSON.parse(entry.colors) as string[]
-    return WUBRG.filter((c) => list.includes(c))
-  } catch {
-    return []
-  }
-}
 
 // "3/4", a planeswalker's loyalty or a battle's defense (the front face's for double-faced cards).
 function statsOf(card: ScryfallCard | null | undefined) {
@@ -234,7 +227,7 @@ export function QuickLook({
   const typeLine = card?.type_line ?? card?.card_faces?.[0]?.type_line ?? entry.type_line ?? ''
   const stats = statsOf(card)
   const cost = card ? cardManaCost(card) : ''
-  const colors = colorsOf(entry)
+  const colors = parseColors(entry.colors)
   const glow = withAlpha(colors.length ? COLOR_HEX[colors[0]] : Colors.gold, 0.3)
 
   const changeQty = (next: number) => {
@@ -275,7 +268,7 @@ export function QuickLook({
             </Text>
           </View>
           <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-            <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+            <Icon name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -309,7 +302,7 @@ export function QuickLook({
             accessibilityRole="button"
             accessibilityLabel="Previous card"
           >
-            <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={20} tintColor={Colors.text} />
+            <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={20} tintColor={Colors.text} />
           </TouchableOpacity>
         )}
         {index < last && (
@@ -319,7 +312,7 @@ export function QuickLook({
             accessibilityRole="button"
             accessibilityLabel="Next card"
           >
-            <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={20} tintColor={Colors.text} />
+            <Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={20} tintColor={Colors.text} />
           </TouchableOpacity>
         )}
 
@@ -373,7 +366,7 @@ export function QuickLook({
                 {elsewhere > 0 ? ` · ${elsewhere} more elsewhere` : ''}
               </Text>
               <Text style={styles.copiesValue} numberOfLines={1}>
-                {qty} {qty === 1 ? 'copy' : 'copies'}
+                {plural(qty, 'copy', 'copies')}
                 {price != null ? ` · ${money.eur(price * qty)}` : ''}
               </Text>
             </View>
@@ -401,7 +394,7 @@ export function QuickLook({
             {entry.traded === 1 && <Chip label="Traded" />}
             {entry.purchase_price != null && <Chip label={`Paid ${money.eur(entry.purchase_price)}`} />}
             {entry.for_trade === 1 && <Chip label="For trade" gold />}
-            <Chip label={decks ? `In ${decks} ${decks === 1 ? 'deck' : 'decks'}` : 'In no deck'} gold={decks > 0} />
+            <Chip label={decks ? `In ${plural(decks, 'deck')}` : 'In no deck'} gold={decks > 0} />
           </View>
 
           <View style={styles.actions}>
@@ -415,7 +408,7 @@ export function QuickLook({
             </TouchableOpacity>
             <TouchableOpacity style={styles.details} onPress={openDetails} accessibilityRole="button">
               <Text style={styles.detailsLabel}>Full details</Text>
-              <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.onGold} weight="bold" />
+              <Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.onGold} weight="bold" />
             </TouchableOpacity>
           </View>
         </View>

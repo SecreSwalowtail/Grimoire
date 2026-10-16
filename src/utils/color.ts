@@ -1,9 +1,9 @@
-// Color math for the binder color picker: hex <-> HSV (what the picker edits) and HSL shades
-// (how a binder's cover, spine and zipper are made from the one color picked).
+// Color math: hex <-> HSV (what the binder color picker edits), HSL shades (how a binder's cover,
+// spine and zipper are made from the one color picked) and see-through tints.
 
 export type Hsv = { h: number; s: number; v: number } // h 0-360, s and v 0-1
 
-const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
+export const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 
 function hexToRgb(hex: string) {
   const n = parseInt(hex.replace('#', '').slice(0, 6), 16)
@@ -61,4 +61,10 @@ function hslToHex(h: number, s: number, l: number) {
 export function shade(hex: string, factor: number) {
   const { h, s, l } = hexToHsl(hex)
   return hslToHex(h, s, clamp01(l * factor))
+}
+
+// "#D4A64A" + 0.18 -> "rgba(212,166,74,0.18)", for tints and glows.
+export function withAlpha(hex: string, alpha: number) {
+  const { r, g, b } = hexToRgb(hex)
+  return `rgba(${r},${g},${b},${alpha})`
 }

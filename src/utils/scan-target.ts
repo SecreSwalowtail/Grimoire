@@ -1,11 +1,12 @@
 import { useSyncExternalStore } from 'react'
 
 import type { Board } from '@/utils/deck-store'
+import { createListeners } from '@/utils/listeners'
 
 // Where scanned cards go, picked on the Scan screen: a binder, decks, or both (decks only with
 // none picked: the scan says so and adds nothing). Starts as the first binder only; kept until
-// the app restarts. "Create & start scanning"
-// on a new binder points the binder there; on a new deck it adds that deck's main deck too.
+// the app restarts. "Create & start scanning" on a new binder points the binder there; on a new
+// deck it adds that deck's main deck too.
 
 export type ScanTarget = {
   binder: boolean
@@ -18,24 +19,16 @@ export type ScanTarget = {
 }
 
 let target: ScanTarget = { binder: true, binderId: null, decks: false, deckIds: [], board: 'main' }
-const listeners = new Set<() => void>()
+const changes = createListeners()
 
 export const getScanTarget = () => target
 
 export function setScanTarget(next: ScanTarget) {
   target = next
-  listeners.forEach((l) => l())
+  changes.notify()
 }
 
-export function useScanTarget() {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    getScanTarget,
-  )
-}
+export const useScanTarget = () => useSyncExternalStore(changes.subscribe, getScanTarget)
 
 // A new binder to scan into.
 export function setScanBinder(binderId: string) {

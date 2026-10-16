@@ -1,14 +1,12 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useState } from 'react'
+import { Pressable, StyleSheet, TextInput, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 
-import { Colors, Fonts } from '@/constants/theme';
-import { hexToHsv, hsvToHex, isHex, type Hsv } from '@/utils/color';
+import { Colors, Fonts } from '@/constants/theme'
+import { clamp01, hexToHsv, hsvToHex, isHex, type Hsv } from '@/utils/color'
 
 const HUES = 'linear-gradient(to right, #FF0000, #FFFF00, #00FF00, #00FFFF, #0000FF, #FF00FF, #FF0000)'
 const THUMB = 26
-
-const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 
 // Any color: drag in the square for how light and how strong, along the bar for the hue, type a
 // hex, or tap one of the `presets`. `onDragging` reports a drag in progress, so a scroll view

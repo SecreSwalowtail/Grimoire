@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react'
+import { ScrollView, StyleSheet, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Sheet, SheetHeader, ToggleRow } from '@/components/controls';
-import { SortPicker, type SortOption } from '@/components/sort-picker';
-import { Colors } from '@/constants/theme';
-import type { SearchOrder } from '@/db/scryfall';
-import { useMoney } from '@/utils/money';
+import { PrimaryButton, SectionLabel, Sheet, SheetHeader, ToggleRow } from '@/components/controls'
+import { SortPicker, type SortOption } from '@/components/sort-picker'
+import { Colors } from '@/constants/theme'
+import type { SearchOrder } from '@/db/scryfall'
+import { useMoney } from '@/utils/money'
 
 export type MarketSort = {
   by: SearchOrder
@@ -15,7 +15,7 @@ export type MarketSort = {
 
 export const DEFAULT_SORT: MarketSort = { by: 'eur', desc: true, groupPrintings: true }
 
-export const SORTS: SortOption<SearchOrder>[] = [
+const SORTS: SortOption<SearchOrder>[] = [
   { value: 'name', label: 'Name', glyph: 'Aa', asc: 'A → Z', desc: 'Z → A' },
   { value: 'cmc', label: 'Mana value', glyph: 'MV', asc: 'Low → High', desc: 'High → Low' },
   { value: 'power', label: 'Power', glyph: 'P', asc: 'Low → High', desc: 'High → Low' },

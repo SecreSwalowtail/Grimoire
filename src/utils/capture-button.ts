@@ -1,41 +1,27 @@
 import { useSyncExternalStore } from 'react'
 
+import { createListeners } from '@/utils/listeners'
+
 // Shared between the Scan screen (owns the camera) and the tab bar, whose center button
 // becomes the "Capture" shutter on the Scan tab in Single mode.
 
 // Single: tap Capture for each card. Bulk: hands-free auto-capture, no Capture button.
-export type ScanMode = 'single' | 'bulk'
+type ScanMode = 'single' | 'bulk'
 
 let mode: ScanMode = 'single'
-const modeListeners = new Set<() => void>()
+const modeChanges = createListeners()
 
 export function setScanMode(next: ScanMode) {
   mode = next
-  modeListeners.forEach((listener) => listener())
+  modeChanges.notify()
 }
 
-export function getScanMode() {
-  return mode
-}
+export const getScanMode = () => mode
 
-export function useScanMode() {
-  return useSyncExternalStore((listener) => {
-    modeListeners.add(listener)
-    return () => {
-      modeListeners.delete(listener)
-    }
-  }, getScanMode)
-}
+export const useScanMode = () => useSyncExternalStore(modeChanges.subscribe, getScanMode)
 
-const captureListeners = new Set<() => void>()
+const presses = createListeners()
 
-export function onCapturePress(listener: () => void) {
-  captureListeners.add(listener)
-  return () => {
-    captureListeners.delete(listener)
-  }
-}
+export const onCapturePress = presses.subscribe
 
-export function pressCapture() {
-  captureListeners.forEach((listener) => listener())
-}
+export const pressCapture = presses.notify

@@ -1,6 +1,5 @@
-import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   BackHandler,
@@ -13,16 +12,17 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { FilterSheet } from '@/components/market/filter-sheet';
-import { MarketRow, MarketTile } from '@/components/market/market-row';
-import { DEFAULT_SORT, sortSummary, SortSheet, type MarketSort } from '@/components/market/sort-sheet';
-import { SortMenu } from '@/components/sort-menu';
-import { Colors, Fonts } from '@/constants/theme';
-import { autocomplete, searchCards, type ScryfallCard, type SearchOptions } from '@/db/scryfall';
-import { timed } from '@/utils/perf';
+import { Icon } from '@/components/icon'
+import { FilterSheet } from '@/components/market/filter-sheet'
+import { MarketRow, MarketTile } from '@/components/market/market-row'
+import { DEFAULT_SORT, sortSummary, SortSheet, type MarketSort } from '@/components/market/sort-sheet'
+import { SortMenu } from '@/components/sort-menu'
+import { Colors, Fonts } from '@/constants/theme'
+import { autocomplete, searchCards, type ScryfallCard, type SearchOptions } from '@/db/scryfall'
+import type { PriceSource } from '@/utils/card-prices'
 import {
   activeFilterCount,
   DEFAULT_FILTERS,
@@ -31,10 +31,10 @@ import {
   trendingQuery,
   type FilterTab,
   type MarketFilters,
-} from '@/utils/market-filters';
-import type { PriceSource } from '@/utils/card-prices';
-import { useSearchBack } from '@/utils/use-search-back';
-import { getSettings } from '@/utils/settings';
+} from '@/utils/market-filters'
+import { timed } from '@/utils/perf'
+import { getSettings } from '@/utils/settings'
+import { useSearchBack } from '@/utils/use-search-back'
 
 // Cards per row in grid view, same as the Binder.
 const COLUMNS = 3
@@ -196,12 +196,12 @@ export default function MarketScreen() {
           accessibilityLabel={`Prices from ${MARKET_NAME[source]}. Tap to change`}
         >
           <Text style={styles.sourceLabel}>{MARKET_NAME[source]}</Text>
-          <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={Colors.textSecondary} />
+          <Icon name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={Colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
       <View style={[styles.search, focused && styles.searchFocused]}>
-        <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
+        <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
         <TextInput
           ref={searchInput}
           style={styles.searchInput}
@@ -230,7 +230,7 @@ export default function MarketScreen() {
           accessibilityRole="button"
           accessibilityLabel={filterCount > 0 ? `Filters, ${filterCount} active` : 'Filters'}
         >
-          <SymbolView name={{ ios: 'slider.horizontal.3', android: 'tune' }} size={20} tintColor={Colors.onGold} />
+          <Icon name={{ ios: 'slider.horizontal.3', android: 'tune' }} size={20} tintColor={Colors.onGold} />
           <Text style={styles.filtersLabel}>Filters</Text>
           {filterCount > 0 && (
             <View style={styles.badge}>
@@ -244,7 +244,7 @@ export default function MarketScreen() {
           accessibilityRole="button"
           accessibilityLabel={`Sort, ${sortSummary(sort)}`}
         >
-          <SymbolView name={{ ios: 'arrow.up.arrow.down', android: 'swap_vert' }} size={20} tintColor={Colors.goldLight} />
+          <Icon name={{ ios: 'arrow.up.arrow.down', android: 'swap_vert' }} size={20} tintColor={Colors.goldLight} />
           <View style={styles.sortText}>
             <Text style={styles.sortLabel}>Sort</Text>
             <Text style={styles.sortValue} numberOfLines={1}>{sortSummary(sort)}</Text>
@@ -277,7 +277,7 @@ export default function MarketScreen() {
               accessibilityLabel={v === 'list' ? 'List view' : 'Grid view'}
               accessibilityState={{ checked: view === v }}
             >
-              <SymbolView
+              <Icon
                 name={v === 'list' ? { ios: 'list.bullet', android: 'view_list' } : { ios: 'square.grid.2x2', android: 'grid_view' }}
                 size={17}
                 tintColor={view === v ? Colors.text : Colors.textMuted}
@@ -318,7 +318,7 @@ export default function MarketScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.suggestContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {(suggestions?.names ?? []).slice(0, MAX_SUGGESTIONS).map((name) => (
             <TouchableOpacity key={name} style={styles.suggestion} onPress={() => pickName(name)} accessibilityRole="button">
-              <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={16} tintColor={Colors.textMuted} />
+              <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={16} tintColor={Colors.textMuted} />
               <Text style={styles.suggestionText} numberOfLines={1}>{name}</Text>
             </TouchableOpacity>
           ))}
@@ -328,7 +328,8 @@ export default function MarketScreen() {
           </TouchableOpacity>
         </ScrollView>
       ) : view === 'list' ? (
-        <FlatList showsVerticalScrollIndicator={false}
+        <FlatList
+          showsVerticalScrollIndicator={false}
           key="list"
           data={loading ? [] : results}
           keyExtractor={(card) => card.id}
@@ -339,7 +340,8 @@ export default function MarketScreen() {
           keyboardDismissMode="on-drag"
         />
       ) : (
-        <FlatList<ScryfallCard | null> showsVerticalScrollIndicator={false}
+        <FlatList<ScryfallCard | null>
+          showsVerticalScrollIndicator={false}
           key="grid"
           // Empty slots fill the last row, so its cards keep the same width instead of stretching.
           data={loading ? [] : [...results, ...Array<null>((COLUMNS - (results.length % COLUMNS)) % COLUMNS).fill(null)]}

@@ -1,11 +1,11 @@
-import { useFocusEffect } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useCallback, useRef, useState } from 'react'
 
-import { getBinders, type Binder } from '@/db/binders';
-import { entryPrice, getCollection, getOwnedPricesDaysAgo, type CollectionEntry } from '@/db/collection';
-import { collectionVersion } from '@/db/version';
-import { JS_START, recordOnce, timed } from '@/utils/perf';
+import { getBinders, type Binder } from '@/db/binders'
+import { entryPrice, getCollection, getOwnedPricesDaysAgo, type CollectionEntry } from '@/db/collection'
+import { collectionVersion } from '@/db/version'
+import { JS_START, recordOnce, timed } from '@/utils/perf'
 
 type OldPrice = { price_eur: number | null; price_eur_foil: number | null }
 

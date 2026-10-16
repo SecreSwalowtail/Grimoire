@@ -1,179 +1,181 @@
-import Constants from 'expo-constants';
+import Constants from 'expo-constants'
 
 // Scryfall API: https://scryfall.com/docs/api
 // Rules: send User-Agent + Accept on every request, and respect rate limits
 // (/cards/collection and /cards/search: 2/s, most others: 10/s). A 429 blocks the app for 30-60 s.
 
-const API = 'https://api.scryfall.com';
+const API = 'https://api.scryfall.com'
 const HEADERS = {
   'User-Agent': `Grimoire/${Constants.expoConfig?.version ?? '1.0.0'}`,
   Accept: 'application/json',
-};
+}
 
-export type ImageUris = { small?: string; normal?: string; large?: string; art_crop?: string };
+export type ImageUris = { small?: string; normal?: string; large?: string; art_crop?: string }
 
 // One side of a double-faced card, or one half of a split / adventure / flip card.
 export type CardFace = {
-  name: string;
-  type_line?: string;
-  mana_cost?: string;
-  oracle_text?: string;
-  colors?: string[];
-  power?: string;
-  toughness?: string;
-  loyalty?: string;
-  defense?: string;
-  flavor_text?: string;
-  artist?: string;
-  watermark?: string;
-  printed_name?: string;
-  image_uris?: ImageUris;
-};
+  name: string
+  type_line?: string
+  mana_cost?: string
+  oracle_text?: string
+  colors?: string[]
+  power?: string
+  toughness?: string
+  loyalty?: string
+  defense?: string
+  flavor_text?: string
+  artist?: string
+  watermark?: string
+  printed_name?: string
+  image_uris?: ImageUris
+}
 
 // 'legal' | 'not_legal' | 'banned' | 'restricted', per format key ('standard', 'commander'…).
-export type Legality = 'legal' | 'not_legal' | 'banned' | 'restricted';
+export type Legality = 'legal' | 'not_legal' | 'banned' | 'restricted'
 
 export type ScryfallCard = {
-  id: string;
-  oracle_id?: string;
-  name: string;
-  printed_name?: string;
-  set: string;
-  set_name: string;
-  collector_number: string;
-  rarity: string;
-  lang: string;
-  layout?: string;
-  released_at?: string;
-  type_line?: string;
-  mana_cost?: string;
-  cmc?: number;
-  oracle_text?: string;
-  power?: string;
-  toughness?: string;
-  loyalty?: string;
-  defense?: string;
-  colors?: string[];
-  color_identity?: string[];
+  id: string
+  oracle_id?: string
+  name: string
+  printed_name?: string
+  set: string
+  set_name: string
+  collector_number: string
+  rarity: string
+  lang: string
+  layout?: string
+  released_at?: string
+  type_line?: string
+  mana_cost?: string
+  cmc?: number
+  oracle_text?: string
+  power?: string
+  toughness?: string
+  loyalty?: string
+  defense?: string
+  colors?: string[]
+  color_identity?: string[]
   // Mana it can make: "W", "U", "B", "R", "G", "C".
-  produced_mana?: string[];
-  keywords?: string[];
-  legalities?: Record<string, Legality>;
-  games?: string[];
-  reserved?: boolean;
-  finishes?: string[];
-  frame_effects?: string[];
-  promo_types?: string[];
-  border_color?: string;
-  full_art?: boolean;
-  artist?: string;
-  flavor_text?: string;
-  watermark?: string;
-  image_uris?: ImageUris;
-  card_faces?: CardFace[];
-  prices: { eur: string | null; eur_foil: string | null; usd: string | null; usd_foil: string | null; usd_etched?: string | null; tix?: string | null };
-  purchase_uris?: { cardmarket?: string; tcgplayer?: string; cardhoarder?: string };
-  scryfall_uri?: string;
-};
+  produced_mana?: string[]
+  keywords?: string[]
+  legalities?: Record<string, Legality>
+  games?: string[]
+  reserved?: boolean
+  finishes?: string[]
+  frame_effects?: string[]
+  promo_types?: string[]
+  border_color?: string
+  full_art?: boolean
+  artist?: string
+  flavor_text?: string
+  watermark?: string
+  image_uris?: ImageUris
+  card_faces?: CardFace[]
+  prices: { eur: string | null; eur_foil: string | null; usd: string | null; usd_foil: string | null; usd_etched?: string | null; tix?: string | null }
+  purchase_uris?: { cardmarket?: string; tcgplayer?: string; cardhoarder?: string }
+  scryfall_uri?: string
+}
 
-export type Ruling = { source: string; published_at: string; comment: string };
+export type Ruling = { source: string; published_at: string; comment: string }
 
-export type CardIdentifier = { set: string; collector_number: string } | { name: string };
+export type CardIdentifier = { set: string; collector_number: string } | { name: string }
 
 // Space out request starts per rate-limit group (10/s, or 2/s for /cards/collection and
 // /cards/search). Requests may overlap: waiting for each to finish first made e.g. Card detail's
 // rulings sit behind its printings for no reason. Each call books the next free start time at
 // once, so order is kept.
-const nextStart: Record<string, number> = {};
+const nextStart: Record<string, number> = {}
 function throttled<T>(group: 'collection' | 'search' | 'default', fn: () => Promise<T>): Promise<T> {
-  const gap = group === 'default' ? 100 : 500;
-  const start = Math.max(Date.now(), nextStart[group] ?? 0);
-  nextStart[group] = start + gap;
-  const wait = start - Date.now();
-  return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)).then(fn) : fn();
+  const gap = group === 'default' ? 100 : 500
+  const start = Math.max(Date.now(), nextStart[group] ?? 0)
+  nextStart[group] = start + gap
+  const wait = start - Date.now()
+  return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)).then(fn) : fn()
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, { ...init, headers: { ...HEADERS, ...init?.headers } });
-  if (res.status === 429) throw new Error('Scryfall rate limit hit (429) - wait 30 seconds before retrying');
+  const res = await fetch(`${API}${path}`, { ...init, headers: { ...HEADERS, ...init?.headers } })
+  if (res.status === 429) throw new Error('Scryfall rate limit hit (429) - wait 30 seconds before retrying')
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(`Scryfall ${res.status}: ${body?.details ?? res.statusText}`);
+    const body = await res.json().catch(() => null)
+    throw new Error(`Scryfall ${res.status}: ${body?.details ?? res.statusText}`)
   }
-  return res.json() as Promise<T>;
+  return res.json() as Promise<T>
 }
+
+const isNotFound = (e: unknown) => e instanceof Error && e.message.startsWith('Scryfall 404')
 
 // One card by set code + collector number (what the OCR strip reads). Returns null if not found.
 export async function getCardBySetNumber(set: string, collectorNumber: string, lang?: string) {
-  const path = `/cards/${encodeURIComponent(set.toLowerCase())}/${encodeURIComponent(collectorNumber)}${lang ? `/${lang}` : ''}`;
+  const path = `/cards/${encodeURIComponent(set.toLowerCase())}/${encodeURIComponent(collectorNumber)}${lang ? `/${lang}` : ''}`
   try {
-    return await throttled('default', () => request<ScryfallCard>(path));
+    return await throttled('default', () => request<ScryfallCard>(path))
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return null;
-    throw e;
+    if (isNotFound(e)) return null
+    throw e
   }
 }
 
 // Many cards at once (75 per request). Returns found cards and the identifiers that matched nothing.
 export async function getCardsByIdentifiers(identifiers: CardIdentifier[]) {
-  const found: ScryfallCard[] = [];
-  const notFound: CardIdentifier[] = [];
+  const found: ScryfallCard[] = []
+  const notFound: CardIdentifier[] = []
   for (let i = 0; i < identifiers.length; i += 75) {
-    const batch = identifiers.slice(i, i + 75);
+    const batch = identifiers.slice(i, i + 75)
     const res = await throttled('collection', () =>
       request<{ data: ScryfallCard[]; not_found: CardIdentifier[] }>('/cards/collection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifiers: batch }),
       }),
-    );
-    found.push(...res.data);
-    notFound.push(...res.not_found);
+    )
+    found.push(...res.data)
+    notFound.push(...res.not_found)
   }
-  return { found, notFound };
+  return { found, notFound }
 }
 
 // 'edhrec' = popularity in Commander decks (most played first when ascending).
 // 'eur' / 'usd': by Cardmarket's / TCGplayer's price.
-export type SearchOrder = 'name' | 'cmc' | 'power' | 'toughness' | 'eur' | 'usd' | 'released' | 'edhrec';
+export type SearchOrder = 'name' | 'cmc' | 'power' | 'toughness' | 'eur' | 'usd' | 'released' | 'edhrec'
 
 export type SearchOptions = {
-  order: SearchOrder;
-  dir: 'asc' | 'desc';
-  unique: 'cards' | 'prints'; // one row per card, or one per printing
-  page?: number; // 1 = first 175 results
-};
+  order: SearchOrder
+  dir: 'asc' | 'desc'
+  unique: 'cards' | 'prints' // one row per card, or one per printing
+  page?: number // 1 = first 175 results
+}
 
-export type SearchResult = { data: ScryfallCard[]; total_cards: number; has_more: boolean };
+type SearchResult = { data: ScryfallCard[]; total_cards: number; has_more: boolean }
 
 // One page (up to 175 cards; the first unless `options.page`) of a search in Scryfall's syntax:
 // https://scryfall.com/docs/syntax
 // Scryfall answers "no cards" with a 404; that comes back here as an empty result.
 // Results are kept for the session (the last 20 searches): Scryfall takes 1-3 s for a search it
 // hasn't seen lately, so going back to one shouldn't ask again.
-const searches = new Map<string, SearchResult>();
-const MAX_SEARCHES = 20;
+const searches = new Map<string, SearchResult>()
+const MAX_SEARCHES = 20
 
 export async function searchCards(q: string, options: SearchOptions): Promise<SearchResult> {
-  const params = { q, ...options };
+  const params = { q, ...options }
   const query = Object.entries(params)
     .filter(([, value]) => value != null)
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-    .join('&');
-  const kept = searches.get(query);
-  if (kept) return kept;
-  let result: SearchResult;
+    .join('&')
+  const kept = searches.get(query)
+  if (kept) return kept
+  let result: SearchResult
   try {
-    result = await throttled('search', () => request<SearchResult>(`/cards/search?${query}`));
+    result = await throttled('search', () => request<SearchResult>(`/cards/search?${query}`))
   } catch (e) {
-    if (!(e instanceof Error && e.message.startsWith('Scryfall 404'))) throw e;
-    result = { data: [], total_cards: 0, has_more: false };
+    if (!isNotFound(e)) throw e
+    result = { data: [], total_cards: 0, has_more: false }
   }
   // Only first pages (all Market asks for): later pages are bulk reads, e.g. the test-data tool.
-  if ((options.page ?? 1) > 1) return result;
-  searches.set(query, result);
-  if (searches.size > MAX_SEARCHES) searches.delete(searches.keys().next().value!);
-  return result;
+  if ((options.page ?? 1) > 1) return result
+  searches.set(query, result)
+  if (searches.size > MAX_SEARCHES) searches.delete(searches.keys().next().value!)
+  return result
 }
 
 // Up to 20 card names starting with (or containing) the text, for suggestions while typing.
@@ -181,99 +183,109 @@ export async function searchCards(q: string, options: SearchOptions): Promise<Se
 export async function autocomplete(text: string) {
   const res = await throttled('default', () =>
     request<{ data: string[] }>(`/cards/autocomplete?q=${encodeURIComponent(text)}`),
-  );
-  return res.data;
+  )
+  return res.data
 }
 
 export type ScryfallSet = {
-  code: string;
-  name: string;
-  set_type: string;
-  released_at?: string;
-  card_count: number;
-  icon_svg_uri?: string;
-};
+  code: string
+  name: string
+  set_type: string
+  released_at?: string
+  card_count: number
+  icon_svg_uri?: string
+}
 
 // Every set (newest first), asked for once per session: about 1,000 sets, for the set filter.
-let sets: Promise<ScryfallSet[]> | null = null;
+let sets: Promise<ScryfallSet[]> | null = null
 
 export function getSets() {
-  sets ??= throttled('default', () => request<{ data: ScryfallSet[] }>('/sets')).then((res) => res.data);
+  sets ??= throttled('default', () => request<{ data: ScryfallSet[] }>('/sets')).then((res) => res.data)
   // A failed request is asked again next time.
   sets.catch(() => {
-    sets = null;
-  });
-  return sets;
+    sets = null
+  })
+  return sets
 }
 
 // Cards already fetched this session, by id, so Card detail opens at once from a list.
-const cache = new Map<string, ScryfallCard>();
+const cache = new Map<string, ScryfallCard>()
 
 export function rememberCard(card: ScryfallCard) {
-  cache.set(card.id, card);
+  cache.set(card.id, card)
 }
 
 export function cachedCard(id: string) {
-  return cache.get(id) ?? null;
+  return cache.get(id) ?? null
 }
 
 // One printing by its Scryfall id. Returns null if Scryfall doesn't know it.
 export async function getCard(id: string) {
   try {
-    const card = await throttled('default', () => request<ScryfallCard>(`/cards/${encodeURIComponent(id)}`));
-    rememberCard(card);
-    return card;
+    const card = await throttled('default', () => request<ScryfallCard>(`/cards/${encodeURIComponent(id)}`))
+    rememberCard(card)
+    return card
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return null;
-    throw e;
+    if (isNotFound(e)) return null
+    throw e
   }
 }
 
 // Every printing of a card (newest first), up to 175 a page. `page` starts at 1.
 export async function getPrintings(oracleId: string, page = 1) {
-  const query = `q=${encodeURIComponent(`oracleid:${oracleId}`)}&unique=prints&order=released&dir=desc&include_extras=true&page=${page}`;
+  const query = `q=${encodeURIComponent(`oracleid:${oracleId}`)}&unique=prints&order=released&dir=desc&include_extras=true&page=${page}`
   try {
-    const res = await throttled('search', () => request<SearchResult>(`/cards/search?${query}`));
-    res.data.forEach(rememberCard);
-    return res;
+    const res = await throttled('search', () => request<SearchResult>(`/cards/search?${query}`))
+    res.data.forEach(rememberCard)
+    return res
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('Scryfall 404')) return { data: [], total_cards: 0, has_more: false };
-    throw e;
+    if (isNotFound(e)) return { data: [], total_cards: 0, has_more: false }
+    throw e
   }
 }
 
 // Official rulings (Wizards' and Scryfall's notes), oldest first.
 export async function getRulings(id: string) {
-  const res = await throttled('default', () => request<{ data: Ruling[] }>(`/cards/${encodeURIComponent(id)}/rulings`));
-  return res.data;
+  const res = await throttled('default', () => request<{ data: Ruling[] }>(`/cards/${encodeURIComponent(id)}/rulings`))
+  return res.data
 }
 
 // Double-faced cards keep their image and colors on the faces instead of the card.
 export function cardImage(card: ScryfallCard) {
-  return card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null;
+  return card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null
 }
 
 // Small image (146 × 204) for list thumbnails.
 export function cardThumb(card: ScryfallCard) {
-  return card.image_uris?.small ?? card.card_faces?.[0]?.image_uris?.small ?? null;
+  return card.image_uris?.small ?? card.card_faces?.[0]?.image_uris?.small ?? null
 }
 
 // "{2}{G}{W}". Double-faced cards only have it on the faces: the front's is used.
 export function cardManaCost(card: ScryfallCard) {
-  return card.mana_cost ?? card.card_faces?.[0]?.mana_cost ?? '';
+  return card.mana_cost ?? card.card_faces?.[0]?.mana_cost ?? ''
 }
 
 // The art alone (no frame), for the Card detail backdrop.
 export function cardArt(card: ScryfallCard, face = 0) {
-  return card.card_faces?.[face]?.image_uris?.art_crop ?? card.image_uris?.art_crop ?? null;
+  return card.card_faces?.[face]?.image_uris?.art_crop ?? card.image_uris?.art_crop ?? null
 }
 
 // The full card image of one face: double-faced cards have an image per face.
 export function faceImage(card: ScryfallCard, face = 0) {
-  const own = card.card_faces?.[face]?.image_uris;
-  return own?.large ?? own?.normal ?? card.image_uris?.large ?? card.image_uris?.normal ?? null;
+  const own = card.card_faces?.[face]?.image_uris
+  return own?.large ?? own?.normal ?? card.image_uris?.large ?? card.image_uris?.normal ?? null
 }
 
 export function cardColors(card: ScryfallCard) {
-  return card.colors ?? card.card_faces?.[0]?.colors ?? [];
+  return card.colors ?? card.card_faces?.[0]?.colors ?? []
+}
+
+// The rules text of every face, one after the other.
+export function cardText(card: ScryfallCard) {
+  return card.oracle_text ?? (card.card_faces ?? []).map((f) => f.oracle_text ?? '').join('\n')
+}
+
+// The front face's type line: "Creature — Human" for "Creature — Human // Land".
+export function frontTypeLine(card: ScryfallCard) {
+  return (card.type_line ?? card.card_faces?.[0]?.type_line ?? '').split(' // ')[0]
 }

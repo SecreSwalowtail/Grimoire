@@ -1,12 +1,11 @@
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Sheet } from '@/components/controls';
-import { Option } from '@/components/decks/new-sheet';
-import { DeckThumb, NameField } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { useMoney } from '@/utils/money';
+import { PrimaryButton, SectionLabel, Sheet } from '@/components/controls'
+import { Option } from '@/components/decks/new-sheet'
+import { DeckThumb, NameField } from '@/components/decks/parts'
+import { Icon, type IconName } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
 import {
   deckCardCount,
   deckValue,
@@ -17,9 +16,9 @@ import {
   useDeckStore,
   type DeckFormat,
   type Undo,
-} from '@/utils/deck-store';
-
-const DANGER = '#EE8466'
+} from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
 
 // "Deck options" sheet: rename, change format, move to a folder, duplicate, import a decklist,
 // delete (asks first, then the screen shows an Undo toast). Export is UI only for now.
@@ -66,11 +65,11 @@ export function DeckOptionsSheet({
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={2}>{name || deck?.name}</Text>
           <Text style={styles.meta}>
-            {cardCount} {cardCount === 1 ? 'card' : 'cards'} · <Text style={styles.value}>{value}</Text>
+            {plural(cardCount, 'card')} · <Text style={styles.value}>{value}</Text>
           </Text>
         </View>
         <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-          <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+          <Icon name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -144,7 +143,7 @@ export function DeckOptionsSheet({
           </View>
         ) : (
           <TouchableOpacity style={styles.delete} onPress={() => setConfirming(true)} accessibilityRole="button">
-            <SymbolView name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={DANGER} />
+            <Icon name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={Colors.danger} />
             <Text style={styles.deleteLabel}>Delete deck</Text>
           </TouchableOpacity>
         )}
@@ -170,7 +169,7 @@ function Row({
   first,
   onPress,
 }: {
-  icon: SymbolViewProps['name']
+  icon: IconName
   label: string
   value?: string
   chevron?: boolean
@@ -180,10 +179,10 @@ function Row({
 }) {
   return (
     <Pressable style={[styles.row, !first && styles.rowRule]} onPress={onPress} accessibilityRole="button">
-      <SymbolView name={icon} size={20} tintColor="#CFC7B4" />
+      <Icon name={icon} size={20} tintColor="#CFC7B4" />
       <Text style={styles.rowLabel}>{label}</Text>
       {value != null && <Text style={[styles.rowValue, small && styles.rowValueSmall]}>{value}</Text>}
-      {chevron && <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />}
+      {chevron && <Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />}
     </Pressable>
   )
 }
@@ -297,7 +296,7 @@ const styles = StyleSheet.create({
   deleteLabel: {
     fontSize: 15,
     fontFamily: Fonts.extraBold,
-    color: DANGER,
+    color: Colors.danger,
   },
   confirm: {
     marginTop: 12,

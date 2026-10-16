@@ -1,13 +1,14 @@
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite'
+import { useState } from 'react'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls';
-import { RadioDot } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { importDeckList, type DeckImportResult } from '@/db/deck-import';
-import { useDeckStore } from '@/utils/deck-store';
+import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls'
+import { RadioDot } from '@/components/decks/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { importDeckList, type DeckImportResult } from '@/db/deck-import'
+import { useDeckStore } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
 
 type Source = 'manabox'
 const SOURCES: { value: Source; label: string; hint: string }[] = [
@@ -58,11 +59,11 @@ export function ImportSheet({ deckId, onClose }: { deckId: string | null; onClos
           <View>
             <View style={styles.done}>
               <View style={styles.doneIcon}>
-                <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={22} tintColor={Colors.onGold} weight="bold" />
+                <Icon name={{ ios: 'checkmark', android: 'check' }} size={22} tintColor={Colors.onGold} weight="bold" />
               </View>
               <View style={styles.doneText}>
                 <Text style={styles.doneTitle}>
-                  {result.copies} {result.copies === 1 ? 'card' : 'cards'} added to {deck?.name}
+                  {plural(result.copies, 'card')} added to {deck?.name}
                 </Text>
                 <Text style={styles.hint}>
                   {result.cards} different {result.cards === 1 ? 'card' : 'cards'}
@@ -192,7 +193,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 13,
     fontFamily: Fonts.bold,
-    color: '#EE8466',
+    color: Colors.danger,
   },
   done: {
     padding: 14,

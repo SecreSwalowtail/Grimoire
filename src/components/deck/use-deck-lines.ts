@@ -1,10 +1,10 @@
-import { useFocusEffect } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useCallback, useState } from 'react'
 
-import type { ScryfallCard } from '@/db/scryfall';
-import { lineFrom, type DeckLine } from '@/rules/deck-stats';
-import { isCommander, useDeckStore } from '@/utils/deck-store';
+import type { ScryfallCard } from '@/db/scryfall'
+import { lineFrom, type DeckLine } from '@/rules/deck-stats'
+import { isCommander, useDeckStore } from '@/utils/deck-store'
 
 type Extra = { cards: Map<string, ScryfallCard>; owned: Map<string, number> }
 

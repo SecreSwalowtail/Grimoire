@@ -1,13 +1,14 @@
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite'
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
-import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import { editEntries, type CollectionEntry, type Condition, type CopyEdits, type Finish } from '@/db/collection';
-import { CONDITIONS, FINISH_NAME } from '@/rules/collection';
-import { currencyName, useMoney } from '@/utils/money';
+import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { editEntries, type CollectionEntry, type Condition, type CopyEdits, type Finish } from '@/db/collection'
+import { CONDITIONS, FINISH_NAME } from '@/rules/collection'
+import { plural } from '@/utils/format'
+import { currencyName, parsePaid, useMoney } from '@/utils/money'
 
 // Edit cards: condition, finish, and whether you got them in a trade (checked, the price paid per
 // copy opens under it), for one card (the quick look) or every card picked in a binder's edit mode
@@ -15,11 +16,6 @@ import { currencyName, useMoney } from '@/utils/money';
 // pick something.
 
 const FINISHES: Finish[] = ['nonfoil', 'foil', 'etched']
-
-const parsePaid = (text: string) => {
-  const value = Number(text.replace(',', '.'))
-  return text.trim() && Number.isFinite(value) && value >= 0 ? value : null
-}
 
 // The value every card has, or undefined when they differ.
 function shared<T>(entries: CollectionEntry[], get: (e: CollectionEntry) => T): T | undefined {
@@ -108,7 +104,7 @@ export function EditCopiesSheet({
       <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Text style={styles.lead} numberOfLines={2}>
           {one
-            ? `${entries[0].name} · ${copies} ${copies === 1 ? 'copy' : 'copies'}`
+            ? `${entries[0].name} · ${plural(copies, 'copy', 'copies')}`
             : `${copies} copies · what you set here goes for all of them`}
         </Text>
 
@@ -167,7 +163,7 @@ export function EditCopiesSheet({
         >
           <View style={[styles.box, traded !== false && styles.boxOn]}>
             {traded != null ? (
-              traded && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />
+              traded && <Icon name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />
             ) : (
               <View style={styles.dash} />
             )}
@@ -205,7 +201,7 @@ export function EditCopiesSheet({
                   accessibilityRole="button"
                   accessibilityLabel="Clear the price paid"
                 >
-                  <SymbolView name={{ ios: 'xmark.circle.fill', android: 'cancel' }} size={18} tintColor={Colors.textMuted} />
+                  <Icon name={{ ios: 'xmark.circle.fill', android: 'cancel' }} size={18} tintColor={Colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>

@@ -1,7 +1,9 @@
+import { colorWords } from '@/rules/colors'
 import { canShareCommand, commanderStatus } from '@/rules/commander'
-import { canBeCommander, COLOR_NAME, exactSize, WUBRG, type Color, type DeckLine } from '@/rules/deck-stats'
+import { canBeCommander, copyCount, exactSize, type DeckLine } from '@/rules/deck-stats'
 import { copyRule, DECK_FORMAT_KEY, isPlayable, isSingleton, shortName } from '@/rules/formats'
 import { hasCommander, type DeckFormat } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
 
 // Whether a deck can be played in its format, as a list of checks. Each says what was checked, why
 // it passes or what's wrong, and what to do about it. Cards without their full data saved on the
@@ -20,17 +22,9 @@ export type LegalCheck = {
   cards?: string[]
 }
 
-export type LegalReport = { legal: boolean; checks: LegalCheck[]; problems: number }
+type LegalReport = { legal: boolean; checks: LegalCheck[]; problems: number }
 
-const sum = (lines: DeckLine[]) => lines.reduce((n, l) => n + l.quantity, 0)
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 const names = (lines: DeckLine[]) => [...new Set(lines.map((l) => l.name))]
-const colorList = (colors: string[]) => {
-  if (colors.length === 0) return 'colorless'
-  const words = WUBRG.filter((c) => colors.includes(c)).map((c) => COLOR_NAME[c as Color].toLowerCase())
-  // 'black and red', 'white, blue and black'
-  return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0]
-}
 
 const CONSTRUCTED_MIN = 60
 const SIDEBOARD_MAX = 15
@@ -39,8 +33,8 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
   const checks: LegalCheck[] = []
   const main = lines.filter((l) => l.board === 'main')
   const side = lines.filter((l) => l.board === 'side')
-  const mainCount = sum(main)
-  const sideCount = sum(side)
+  const mainCount = copyCount(main)
+  const sideCount = copyCount(side)
   const key = DECK_FORMAT_KEY[format]
   const commanderFormat = hasCommander(format)
   const size = exactSize(format)
@@ -132,7 +126,7 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
           status: 'fail',
           title: `${names(bad).join(', ')} can't lead a deck`,
           detail: `Only legendary creatures (and cards that say they can be your commander) can be a ${leader}.`,
-          fix: `Drag a legendary creature onto the commander slot to replace it.`,
+          fix: 'Drag a legendary creature onto the commander slot to replace it.',
           cards: names(bad),
         })
       } else if (!pairOk) {
@@ -151,8 +145,8 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
           title: `Led by ${who}`,
           detail:
             commanders.length === 2
-              ? `They can share command, so both lead the deck. Together their color identity is ${colorList([...identity])}.`
-              : `${who} can be your ${leader}. Its color identity is ${colorList([...identity])}, so every card in the deck must fit within it.`,
+              ? `They can share command, so both lead the deck. Together their color identity is ${colorWords([...identity])}.`
+              : `${who} can be your ${leader}. Its color identity is ${colorWords([...identity])}, so every card in the deck must fit within it.`,
         })
       }
       // A commander banned as a commander.
@@ -220,7 +214,7 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
     const card = ls.find((l) => l.card)?.card
     if (!card) continue
     const rule = copyRule(card, format)
-    const n = sum(ls)
+    const n = copyCount(ls)
     if (rule.max != null && n > rule.max) over.push({ name, n, max: rule.max, label: rule.label })
   }
   const singleton = isSingleton(format)
@@ -231,7 +225,7 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
           status: 'fail',
           title: `${plural(over.length, 'card')} over the copy limit`,
           detail: over.map((o) => `${o.name}: ${o.n} copies, ${o.max} allowed`).join('. ') + '.',
-          fix: `Take the extra copies out (move them to Maybe if you want to keep them).`,
+          fix: 'Take the extra copies out (move them to Maybe if you want to keep them).',
           cards: over.map((o) => o.name),
         }
       : {
@@ -253,7 +247,7 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
             id: 'identity',
             status: 'fail',
             title: `${plural(names(outside).length, 'card')} outside the commander's colors`,
-            detail: `Every card's color identity (the mana symbols anywhere on it) must be within ${colorList([...identity])}.`,
+            detail: `Every card's color identity (the mana symbols anywhere on it) must be within ${colorWords([...identity])}.`,
             fix: `Take ${names(outside).length === 1 ? 'it' : 'them'} out, or pick a commander whose colors cover ${names(outside).length === 1 ? 'it' : 'them'}.`,
             cards: names(outside),
           }
@@ -261,7 +255,7 @@ export function checkDeck(format: DeckFormat, lines: DeckLine[]): LegalReport {
             id: 'identity',
             status: 'pass',
             title: 'Every card fits the color identity',
-            detail: `All cards checked use only ${colorList([...identity])} mana symbols${identity.size < 5 ? ', the commander\'s colors' : ''}.`,
+            detail: `All cards checked use only ${colorWords([...identity])} mana symbols${identity.size < 5 ? ', the commander\'s colors' : ''}.`,
           },
     )
   }

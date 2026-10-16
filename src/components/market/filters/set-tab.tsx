@@ -1,12 +1,12 @@
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react'
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
-import { Chip, SectionLabel, Segmented, ToggleRow } from '@/components/controls';
-import { SetIcon } from '@/components/set-icon';
-import { Colors, Fonts, RarityColors } from '@/constants/theme';
-import { getSets, type ScryfallSet } from '@/db/scryfall';
-import type { MarketFilters } from '@/utils/market-filters';
+import { Chip, SectionLabel, Segmented, ToggleRow } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { SetIcon } from '@/components/set-icon'
+import { Colors, Fonts, RarityColors } from '@/constants/theme'
+import { getSets, type ScryfallSet } from '@/db/scryfall'
+import type { MarketFilters } from '@/utils/market-filters'
 
 // Scryfall's rarities. Special and Bonus have no dot elsewhere in the app yet.
 const RARITIES = [
@@ -79,7 +79,7 @@ export function SetTab({ filters, onChange }: { filters: MarketFilters; onChange
     <View>
       <SectionLabel style={styles.label}>Sets</SectionLabel>
       <View style={styles.search}>
-        <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={18} tintColor={Colors.textSecondary} />
+        <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={18} tintColor={Colors.textSecondary} />
         <TextInput
           style={styles.searchInput}
           value={text}
@@ -122,7 +122,7 @@ export function SetTab({ filters, onChange }: { filters: MarketFilters; onChange
                 <Text style={styles.setMeta}>{set.code.toUpperCase()} · {set.released_at?.slice(0, 4) ?? '—'} · {set.card_count} cards</Text>
               </View>
               <View style={styles.remove}>
-                <SymbolView name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} />
+                <Icon name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} />
               </View>
             </TouchableOpacity>
           ))
@@ -144,7 +144,7 @@ export function SetTab({ filters, onChange }: { filters: MarketFilters; onChange
             accessibilityRole="button"
             accessibilityLabel={`Remove ${set.name}`}
           >
-            <SymbolView name={{ ios: 'xmark', android: 'close' }} size={16} tintColor={Colors.textSecondary} />
+            <Icon name={{ ios: 'xmark', android: 'close' }} size={16} tintColor={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
       ))}

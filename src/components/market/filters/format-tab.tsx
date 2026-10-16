@@ -1,8 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native'
 
-import { Chip, SectionLabel, Segmented } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import type { LegalStatus, MarketFilters } from '@/utils/market-filters';
+import { Chip, SectionLabel, Segmented } from '@/components/controls'
+import { Colors, Fonts } from '@/constants/theme'
+import type { LegalStatus, MarketFilters } from '@/utils/market-filters'
 
 // Keys are Scryfall's legality names: only formats Scryfall tracks can be searched by.
 const FORMATS = [

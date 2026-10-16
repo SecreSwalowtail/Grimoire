@@ -1,13 +1,13 @@
-import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls';
-import { deckMeta } from '@/components/decks/deck-row';
-import { CheckBox, RadioDot } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { binderSpine, type Binder } from '@/db/binders';
-import { useDeckStore, type Board, type Deck } from '@/utils/deck-store';
-import { setScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target';
+import { SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls'
+import { deckMeta } from '@/components/decks/deck-row'
+import { CheckBox, RadioDot } from '@/components/decks/parts'
+import { Colors, Fonts } from '@/constants/theme'
+import { binderSpine, type Binder } from '@/db/binders'
+import { useDeckStore, type Board, type Deck } from '@/utils/deck-store'
+import { setScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target'
 
 const BOARDS: { value: Board; label: string }[] = [
   { value: 'main', label: 'Main deck' },

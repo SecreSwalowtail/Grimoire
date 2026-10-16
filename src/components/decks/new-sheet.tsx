@@ -1,12 +1,11 @@
-import { router } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router'
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls';
-import { CheckBox, ColorPicker, NameField } from '@/components/decks/parts';
-import { setScanDeck } from '@/utils/scan-target';
-import { Colors, Fonts } from '@/constants/theme';
+import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls'
+import { CheckBox, ColorPicker, NameField } from '@/components/decks/parts'
+import { Icon, type IconName } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
 import {
   createDeck,
   createFolder,
@@ -16,13 +15,14 @@ import {
   useDeckStore,
   type DeckFormat,
   type FolderColor,
-} from '@/utils/deck-store';
+} from '@/utils/deck-store'
+import { setScanDeck } from '@/utils/scan-target'
 
 // The formats behind "More formats".
 const MORE_FORMATS = FORMATS.filter((f) => !POPULAR_FORMATS.includes(f))
 
 export type Start = 'empty' | 'paste' | 'scan'
-const STARTS: { value: Start; label: string; icon: SymbolViewProps['name'] }[] = [
+const STARTS: { value: Start; label: string; icon: IconName }[] = [
   { value: 'empty', label: 'Empty', icon: { ios: 'plus', android: 'add' } },
   { value: 'paste', label: 'Paste list', icon: { ios: 'doc.on.clipboard', android: 'content_paste' } },
   { value: 'scan', label: 'Scan cards', icon: { ios: 'viewfinder', android: 'document_scanner' } },
@@ -147,7 +147,7 @@ export function NewSheet({
                   ? 'Fewer formats'
                   : MORE_FORMATS.includes(format) ? `More formats · ${format}` : `More formats (${MORE_FORMATS.length})`}
               </Text>
-              <SymbolView
+              <Icon
                 name={moreFormats ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
                 size={16}
                 tintColor={Colors.goldLight}
@@ -224,7 +224,7 @@ export function StartOptions({ value, onChange }: { value: Start; onChange: (val
             accessibilityState={{ checked: selected }}
           >
             <View style={[styles.startIcon, selected && styles.startIconSelected]}>
-              <SymbolView name={s.icon} size={18} tintColor={selected ? Colors.onGold : '#CFC7B4'} />
+              <Icon name={s.icon} size={18} tintColor={selected ? Colors.onGold : '#CFC7B4'} />
             </View>
             <Text style={styles.startLabel}>{s.label}</Text>
           </Pressable>

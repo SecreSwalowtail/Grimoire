@@ -1,16 +1,17 @@
-import { SymbolView } from 'expo-symbols';
-import { useRef, type ReactNode } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRef, type ReactNode } from 'react'
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
-import { PathIcon } from '@/components/deck/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { useSearchBack } from '@/utils/use-search-back';
-import { useMoney } from '@/utils/money';
+import { PathIcon } from '@/components/deck/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
+import { useSearchBack } from '@/utils/use-search-back'
 
 // "All binders  €1,284.60          ▲ €42.10 / this week · 312 cards"
 export function ValueSummary({ label, value, cards, change }: { label: string; value: number; cards: number; change: number | null }) {
   const money = useMoney()
-  const cardsText = `${cards} ${cards === 1 ? 'card' : 'cards'}`
+  const cardsText = plural(cards, 'card')
   return (
     <View style={styles.valueRow} accessible accessibilityLabel={`${label} ${money.eur(value)}, ${cardsText}`}>
       <View>
@@ -47,7 +48,7 @@ export function SearchField({
   useSearchBack(input)
   return (
     <View style={[styles.search, trailing != null && styles.searchWithTools]}>
-      <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
+      <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
       <TextInput
         ref={input}
         style={styles.searchInput}
@@ -78,7 +79,7 @@ export function SearchTool({ icon, label, onPress, accessibilityLabel }: { icon:
 export function SortButton({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.iconBtn} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
-      <SymbolView name={{ ios: 'arrow.up.arrow.down', android: 'sort' }} size={20} tintColor={Colors.text} />
+      <Icon name={{ ios: 'arrow.up.arrow.down', android: 'sort' }} size={20} tintColor={Colors.text} />
     </TouchableOpacity>
   )
 }

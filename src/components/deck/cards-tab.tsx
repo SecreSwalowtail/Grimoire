@@ -1,15 +1,16 @@
-import { router } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
+import { router } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler'
 
-import { DropZone, type CardDrag } from '@/components/deck/card-drag';
-import { CostRow, CROWN, GroupIcon, ICON, PathIcon } from '@/components/deck/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { upsertCard } from '@/db/cards';
-import { cardManaCost, searchCards, type ScryfallCard } from '@/db/scryfall';
+import { DropZone, type CardDrag } from '@/components/deck/card-drag'
+import { CROWN, GroupIcon, ICON, PathIcon } from '@/components/deck/parts'
+import { Icon } from '@/components/icon'
+import { CostRow } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
+import { upsertCard } from '@/db/cards'
+import { cardManaCost, searchCards, type ScryfallCard } from '@/db/scryfall'
 import {
   activeFilters,
   filterLines,
@@ -19,10 +20,10 @@ import {
   type DeckFilters,
   type DeckLine,
   type GroupBy,
-} from '@/rules/deck-stats';
-import { cardInfoOf, removeDeckCards, setDeckCardCount, useDeckStore, type Board, type CardInfo, type Undo } from '@/utils/deck-store';
-import { useSearchBack } from '@/utils/use-search-back';
-import { useMoney } from '@/utils/money';
+} from '@/rules/deck-stats'
+import { cardInfoOf, removeDeckCards, setDeckCardCount, useDeckStore, type Board, type CardInfo, type Undo } from '@/utils/deck-store'
+import { useMoney } from '@/utils/money'
+import { useSearchBack } from '@/utils/use-search-back'
 
 // A search the deck has nothing for asks the Market after this pause in typing, from this many
 // letters, and shows this many of its cards (most played first).
@@ -151,7 +152,6 @@ export function CardsTab({
   const nFilters = activeFilters(filters)
   const groupLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)!
   const noCommander = commanderFormat && board === 'main' && inBoard.length > 0 && !lines.some((l) => l.commander)
-  // While editing a Commander deck without one, an empty slot to drop it in.
   // While editing a Commander deck: the commander slot, always at the top whichever part of the
   // deck is on show, with the commander(s) in it. The one place a new commander is dropped.
   const commanders = lines.filter((l) => l.commander)
@@ -161,7 +161,7 @@ export function CardsTab({
     <View>
       <View style={styles.tools}>
         <View style={styles.search}>
-          <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={18} tintColor={Colors.textSecondary} />
+          <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={18} tintColor={Colors.textSecondary} />
           <TextInput
             ref={searchInput}
             style={styles.searchInput}
@@ -179,7 +179,7 @@ export function CardsTab({
             accessibilityRole="button"
             accessibilityLabel={desc ? 'Sorted by name Z to A. Tap for A to Z' : 'Sorted by name A to Z. Tap for Z to A'}
           >
-            <SymbolView
+            <Icon
               name={desc ? { ios: 'arrow.up', android: 'arrow_upward' } : { ios: 'arrow.down', android: 'arrow_downward' }}
               size={14}
               tintColor={Colors.goldLight}
@@ -263,13 +263,13 @@ export function CardsTab({
 
       {groups.length === 0 ? (
         !marketOn && (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>
-            {inBoard.length === 0
-              ? `No cards in the ${board === 'main' ? 'main deck' : board === 'side' ? 'sideboard' : 'maybe list'} yet.`
-              : 'No cards match.'}
-          </Text>
-        </View>
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>
+              {inBoard.length === 0
+                ? `No cards in the ${board === 'main' ? 'main deck' : board === 'side' ? 'sideboard' : 'maybe list'} yet.`
+                : 'No cards match.'}
+            </Text>
+          </View>
         )
       ) : (
         <View style={styles.groups}>
@@ -290,7 +290,7 @@ export function CardsTab({
                     <Text style={styles.groupCount}>{g.count}</Text>
                   </View>
                   <Text style={styles.groupValue}>{money.eur(g.value)}</Text>
-                  <SymbolView
+                  <Icon
                     name={open ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
                     size={16}
                     tintColor={Colors.textMuted}
@@ -303,30 +303,31 @@ export function CardsTab({
                     const on = selected.includes(key)
                     return (
                       <GestureDetector key={key} gesture={gestureFor(l)}>
-                      <Pressable
-                        style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
-                        onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId, fromDeck: deckId } }))}
-                        // A long press replaces the tap, so letting go doesn't open (or deselect) the card. It
-                        // stays set in edit mode: removed mid-press, letting go would count as a tap.
-                        onLongPress={() => !editing && onHold(l)}
-                        delayLongPress={300}
-                        accessibilityRole={editing ? 'checkbox' : 'button'}
-                        accessibilityState={editing ? { checked: on } : undefined}
-                        accessibilityHint={editing ? undefined : 'Hold to select and drag'}
-                        accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? money.eur(l.price * l.quantity) : 'no price'}`}
-                      >
-                        <CardText
-                          name={l.name}
-                          cost={l.manaCost}
-                          price={l.price != null ? money.eur(l.price * l.quantity) : '—'}
-                          tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
-                        />
-                        {editing ? (
-                          <Text style={styles.qty}>{l.quantity}×</Text>
-                        ) : (
-                          <Stepper name={l.name} count={l.quantity} onChange={(n) => setCount(l.cardId, lineInfo(l), n)} />
-                        )}
-                      </Pressable>
+                        <Pressable
+                          style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
+                          onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId, fromDeck: deckId } }))}
+                          // A long press replaces the tap, so letting go doesn't open (or deselect)
+                          // the card. It stays set in edit mode: removed mid-press, letting go would
+                          // count as a tap.
+                          onLongPress={() => !editing && onHold(l)}
+                          delayLongPress={300}
+                          accessibilityRole={editing ? 'checkbox' : 'button'}
+                          accessibilityState={editing ? { checked: on } : undefined}
+                          accessibilityHint={editing ? undefined : 'Hold to select and drag'}
+                          accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? money.eur(l.price * l.quantity) : 'no price'}`}
+                        >
+                          <CardText
+                            name={l.name}
+                            cost={l.manaCost}
+                            price={l.price != null ? money.eur(l.price * l.quantity) : '—'}
+                            tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
+                          />
+                          {editing ? (
+                            <Text style={styles.qty}>{l.quantity}×</Text>
+                          ) : (
+                            <Stepper name={l.name} count={l.quantity} onChange={(n) => setCount(l.cardId, lineInfo(l), n)} />
+                          )}
+                        </Pressable>
                       </GestureDetector>
                     )
                   })}
@@ -340,7 +341,7 @@ export function CardsTab({
         <View style={[styles.group, styles.marketGroup]}>
           <View style={styles.groupHead}>
             <View style={styles.marketIcon}>
-              <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={15} tintColor={Colors.goldLight} />
+              <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={15} tintColor={Colors.goldLight} />
             </View>
             <View style={styles.groupTitle}>
               <Text style={styles.groupName} numberOfLines={1}>From the Market</Text>

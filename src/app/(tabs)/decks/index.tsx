@@ -1,14 +1,14 @@
-import { router, useFocusEffect } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useCallback, useRef, useState } from 'react';
-import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { GestureDetector, ScrollView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router, useFocusEffect } from 'expo-router'
+import { useCallback, useRef, useState } from 'react'
+import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { GestureDetector } from 'react-native-gesture-handler'
+import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import {
   dragGesture,
   DragGhost,
+  DragScrollView,
   DropZone,
   EDIT_BAR,
   EditBar,
@@ -16,11 +16,12 @@ import {
   useCardDrag,
   type CardDrag,
   type DropTarget,
-} from '@/components/deck/card-drag';
-import { DeckRow, FolderCard } from '@/components/decks/deck-row';
-import { DEFAULT_DECK_SORT, DeckSortSheet, sortDecks, sortFolders, type DeckSort } from '@/components/decks/sort-sheet';
-import { useDeckSheets } from '@/components/decks/use-deck-sheets';
-import { Colors, Fonts } from '@/constants/theme';
+} from '@/components/deck/card-drag'
+import { DeckRow, FolderCard } from '@/components/decks/deck-row'
+import { DEFAULT_DECK_SORT, DeckSortSheet, sortDecks, sortFolders, type DeckSort } from '@/components/decks/sort-sheet'
+import { useDeckSheets } from '@/components/decks/use-deck-sheets'
+import { Icon, type IconName } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
 import {
   deckValue,
   deleteDecks,
@@ -31,16 +32,12 @@ import {
   useDeckStore,
   type DeckData,
   type Undo,
-} from '@/utils/deck-store';
-import { useSearchBack } from '@/utils/use-search-back';
-import { useMoney } from '@/utils/money';
+} from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { useMoney } from '@/utils/money'
+import { useSearchBack } from '@/utils/use-search-back'
 
 const NEW_FOLDER = 'new-folder'
-
-// Gesture-handler's scroll view, animatable so a drag can scroll it.
-const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView)
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 // [a, b, c] -> [[a, b], [c]], for the 2-column folder grid.
 function pairs<T>(items: T[]) {
@@ -186,13 +183,13 @@ export default function DecksScreen() {
 
   // Decks go straight away (with Undo); folders ask first what to do with their decks.
   const remove = () => {
-    if (pickedDecks.length) changed(`Deleted ${plural(pickedDecks.length, 'deck', 'decks')}`, deleteDecks(pickedDecks.map((d) => d.id)))
+    if (pickedDecks.length) changed(`Deleted ${plural(pickedDecks.length, 'deck')}`, deleteDecks(pickedDecks.map((d) => d.id)))
     if (pickedFolders.length) deckSheets.openDeleteFolders(pickedFolders.map((f) => f.id))
     setSelected([])
   }
   const duplicate = () => {
     if (!pickedDecks.length) return
-    changed(`Duplicated ${plural(pickedDecks.length, 'deck', 'decks')}`, duplicateDecks(pickedDecks.map((d) => d.id)))
+    changed(`Duplicated ${plural(pickedDecks.length, 'deck')}`, duplicateDecks(pickedDecks.map((d) => d.id)))
   }
   const newFolder = () => {
     if (!pickedDecks.length) return
@@ -204,19 +201,19 @@ export default function DecksScreen() {
     if (!folder || !folderTakes(folderId)) return
     if (pickedDecks.length) {
       const ids = pickedDecks.filter((d) => d.folderId !== folderId).map((d) => d.id)
-      const what = ids.length === 1 ? decks.find((d) => d.id === ids[0])!.name : plural(ids.length, 'deck', 'decks')
+      const what = ids.length === 1 ? decks.find((d) => d.id === ids[0])!.name : plural(ids.length, 'deck')
       changed(`Moved ${what} to ${folder.name}`, moveDecks(ids, folderId))
     } else {
       const before = folders.map((f) => f.id)
       reorderFolders(placed(shownFolders.map((f) => f.id), pickedFolders.map((f) => f.id), folderId))
-      changed(`Moved ${plural(pickedFolders.length, 'folder', 'folders')}`, () => reorderFolders(before))
+      changed(`Moved ${plural(pickedFolders.length, 'folder')}`, () => reorderFolders(before))
     }
   }
   const onDeck = (deckId: string) => {
     if (!decksTake) return
     const order = shownDecks.map((d) => d.id)
     reorderDecks(placed(order, pickedDecks.map((d) => d.id), deckId))
-    changed(`Moved ${plural(pickedDecks.length, 'deck', 'decks')}`, () => reorderDecks(order))
+    changed(`Moved ${plural(pickedDecks.length, 'deck')}`, () => reorderDecks(order))
   }
   const onDrop = (target: DropTarget | null) => {
     setDragging(false)
@@ -239,8 +236,8 @@ export default function DecksScreen() {
     ...pickedDecks.map((d) => ({ key: `deck:${d.id}`, name: d.name, image: coverImage(d.id, store), quantity: 1 })),
   ]
   const ghostLabel = [
-    pickedDecks.length ? plural(pickedDecks.length, 'deck', 'decks') : null,
-    pickedFolders.length ? plural(pickedFolders.length, 'folder', 'folders') : null,
+    pickedDecks.length ? plural(pickedDecks.length, 'deck') : null,
+    pickedFolders.length ? plural(pickedFolders.length, 'folder') : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -261,7 +258,7 @@ export default function DecksScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Sort decks"
               >
-                <SymbolView name={{ ios: 'arrow.up.arrow.down', android: 'swap_vert' }} size={20} tintColor={sorted ? Colors.goldLight : Colors.text} />
+                <Icon name={{ ios: 'arrow.up.arrow.down', android: 'swap_vert' }} size={20} tintColor={sorted ? Colors.goldLight : Colors.text} />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.add}
@@ -269,7 +266,7 @@ export default function DecksScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="New deck or folder"
               >
-                <SymbolView name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
+                <Icon name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
               </TouchableOpacity>
             </View>
           )}
@@ -281,9 +278,9 @@ export default function DecksScreen() {
             <Text style={styles.value}>{totalValue}</Text>
           </View>
           <View style={styles.counts}>
-            <Text style={styles.deckCount}>{decks.length} {decks.length === 1 ? 'deck' : 'decks'}</Text>
+            <Text style={styles.deckCount}>{plural(decks.length, 'deck')}</Text>
             <Text style={styles.countDetail}>
-              {folders.length} {folders.length === 1 ? 'folder' : 'folders'} · {loose.length} loose
+              {plural(folders.length, 'folder')} · {loose.length} loose
             </Text>
           </View>
         </View>
@@ -299,7 +296,7 @@ export default function DecksScreen() {
           />
         ) : (
           <View style={styles.search}>
-            <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
+            <Icon name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
             <TextInput
               ref={searchInput}
               style={styles.searchInput}
@@ -316,7 +313,8 @@ export default function DecksScreen() {
         )}
       </View>
 
-      <AnimatedScrollView showsVerticalScrollIndicator={false}
+      <DragScrollView
+        showsVerticalScrollIndicator={false}
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -340,7 +338,7 @@ export default function DecksScreen() {
                         accessibilityRole="button"
                         accessibilityHint={editing ? 'A new folder with the selected decks. Or drag them onto it' : undefined}
                       >
-                        <SymbolView name={{ ios: 'folder.badge.plus', android: 'create_new_folder' }} size={24} tintColor={Colors.goldLight} />
+                        <Icon name={{ ios: 'folder.badge.plus', android: 'create_new_folder' }} size={24} tintColor={Colors.goldLight} />
                         <Text style={styles.newFolderLabel}>New folder</Text>
                       </Pressable>
                     </DropZone>
@@ -396,7 +394,7 @@ export default function DecksScreen() {
             </Text>
           </View>
         )}
-      </AnimatedScrollView>
+      </DragScrollView>
 
       {editing && (
         <>
@@ -430,7 +428,7 @@ function EditAction({
   drag: CardDrag
   id: DropTarget
   label: string
-  icon: SymbolViewProps['name']
+  icon: IconName
   disabled: boolean
   onPress: () => void
 }) {
@@ -443,7 +441,7 @@ function EditAction({
         accessibilityRole="button"
         accessibilityHint="Or drag the selection onto it"
       >
-        <SymbolView name={icon} size={18} tintColor={Colors.goldLight} />
+        <Icon name={icon} size={18} tintColor={Colors.goldLight} />
         <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text>
       </TouchableOpacity>
     </DropZone>

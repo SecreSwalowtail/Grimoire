@@ -1,14 +1,14 @@
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useEffect, useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Segmented, Sheet } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import { getSavedCard, upsertCard } from '@/db/cards';
-import type { ScryfallCard } from '@/db/scryfall';
-import { copyRule, deckFit, shortName } from '@/rules/formats';
+import { PrimaryButton, SectionLabel, Segmented, Sheet } from '@/components/controls'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { getSavedCard, upsertCard } from '@/db/cards'
+import type { ScryfallCard } from '@/db/scryfall'
+import { copyRule, deckFit, shortName } from '@/rules/formats'
 import {
   addDeckCards,
   cardInfoOf,
@@ -19,7 +19,8 @@ import {
   type Deck,
   type DeckData,
   type DeckFormat,
-} from '@/utils/deck-store';
+} from '@/utils/deck-store'
+import { plural } from '@/utils/format'
 
 // C6 · Add to deck. Pick the part of the deck (main, sideboard, maybe) and how many copies, then tap
 // the decks to put them in (one or several), and the button adds them. Any card can go in any deck:
@@ -46,7 +47,7 @@ type Row = {
   noteColor: string
 }
 
-export type CommanderIdentity = Map<string, { colors: Set<string>; names: string[] }>
+type CommanderIdentity = Map<string, { colors: Set<string>; names: string[] }>
 
 // Each deck's commander colors and names (from the commanders' saved data), for decks that have
 // one. Read while `visible`.
@@ -173,7 +174,7 @@ export function AddToDeckSheet({
           </Text>
         </View>
         <TouchableOpacity style={styles.close} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-          <SymbolView name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
+          <Icon name={{ ios: 'xmark', android: 'close' }} size={18} tintColor={Colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -193,7 +194,7 @@ export function AddToDeckSheet({
               >
                 <Text style={[styles.stepLabel, amount <= 1 && styles.stepOff]}>−</Text>
               </TouchableOpacity>
-              <Text style={styles.count} accessibilityLiveRegion="polite" accessibilityLabel={`${amount} ${amount === 1 ? 'copy' : 'copies'}`}>
+              <Text style={styles.count} accessibilityLiveRegion="polite" accessibilityLabel={plural(amount, 'copy', 'copies')}>
                 {amount}
               </Text>
               <TouchableOpacity
@@ -231,7 +232,7 @@ export function AddToDeckSheet({
                     <Text style={[styles.note, { color: r.noteColor }]} numberOfLines={2}>{r.note}</Text>
                   </View>
                   <View style={[styles.box, styles.roundBox, on && styles.boxOn]}>
-                    {on && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
+                    {on && <Icon name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
                   </View>
                 </Pressable>
               )
@@ -240,13 +241,13 @@ export function AddToDeckSheet({
         )}
 
         <TouchableOpacity style={styles.newDeck} onPress={() => onNewDeck(board)} accessibilityRole="button">
-          <SymbolView name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
+          <Icon name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
           <Text style={styles.newDeckLabel}>New deck with this card</Text>
         </TouchableOpacity>
       </ScrollView>
 
       <PrimaryButton
-        label={chosen.length === 0 ? 'Done' : `Add ${amount} ${amount === 1 ? 'card' : 'cards'} to ${chosen.length} ${chosen.length === 1 ? 'deck' : 'decks'}`}
+        label={chosen.length === 0 ? 'Done' : `Add ${plural(amount, 'card')} to ${plural(chosen.length, 'deck')}`}
         onPress={add}
       />
     </Sheet>

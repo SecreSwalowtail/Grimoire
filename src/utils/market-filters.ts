@@ -1,5 +1,5 @@
-import { symbolValue } from '@/components/mana-symbol';
-import { LANGUAGES } from '@/utils/collector-line';
+import { symbolValue } from '@/components/mana-symbol'
+import { LANGUAGES } from '@/utils/collector-line'
 
 // State of the Market filter sheet; filterQuery() turns it into Scryfall search terms.
 

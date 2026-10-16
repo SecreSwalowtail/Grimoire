@@ -4,15 +4,15 @@
 // that isn't here (a brand-new mechanic, or a digital-only one) falls back to the card's own
 // reminder text: see explainKeyword().
 
-export type KeywordKind = 'ability' | 'action' | 'abilityWord'
-export type KeywordRule = { kind: KeywordKind; text: string }
+type KeywordKind = 'ability' | 'action' | 'abilityWord'
+type KeywordRule = { kind: KeywordKind; text: string }
 
 const ABILITIES: Record<string, string> = {
   // Evergreen: on cards in nearly every set.
   'deathtouch': 'Any amount of damage this deals to a creature is enough to destroy it. It works for any damage, not only combat damage.',
   'defender': "This creature can't attack. It can still block.",
   'double strike': 'This creature deals combat damage twice: once in a first-strike step, then again with everyone else.',
-  'enchant': "Says what this Aura can be attached to. If that stops being true, the Aura goes to the graveyard.",
+  'enchant': 'Says what this Aura can be attached to. If that stops being true, the Aura goes to the graveyard.',
   'equip': 'Pay the equip cost to attach this Equipment to a creature you control. Only as a sorcery: on your turn, in a main phase, with nothing waiting to resolve.',
   'first strike': 'This creature deals combat damage before creatures without first strike, so it can kill a blocker or attacker before that creature hits back.',
   'flash': 'You can cast this any time you could cast an instant, even on an opponent\'s turn.',
@@ -165,7 +165,7 @@ const ABILITIES: Record<string, string> = {
   'ravenous': 'Enters with X +1/+1 counters. If X is 5 or more, you draw a card when it enters.',
   'renown': 'When this deals combat damage to a player, if it isn\'t renowned, put N +1/+1 counters on it and it becomes renowned.',
   'riot': 'Choose as it enters: it gets a +1/+1 counter, or it gains haste.',
-  'shadow': "Can block or be blocked only by creatures with shadow.",
+  'shadow': 'Can block or be blocked only by creatures with shadow.',
   'skulk': "Can't be blocked by creatures with greater power.",
   'soulbond': 'Pair this with another unpaired creature you control when either enters; both get the bonus while you control both.',
   'soulshift': 'When this dies, you may return target Spirit card with mana value N or less from your graveyard to your hand.',
@@ -248,7 +248,7 @@ const ABILITIES: Record<string, string> = {
   'partner': 'You can have two commanders if both have partner.',
   'partner with': 'Pairs with the named card: they can be your two commanders. When it enters, target player may search their library for the named card.',
   'friends forever': 'You can have two commanders if both have friends forever.',
-  "doctor's companion": "Can be your second commander alongside a Doctor (a legendary Time Lord Doctor creature).",
+  "doctor's companion": 'Can be your second commander alongside a Doctor (a legendary Time Lord Doctor creature).',
   'choose a background': 'You can have a Background (a legendary enchantment) as your second commander.',
 }
 
@@ -406,7 +406,7 @@ const ABILITY_WORD_NAMES = [
 const ABILITY_WORD_INTRO = 'An ability word: a label with no rules of its own. The text after it says what happens.'
 
 // The rule for a keyword as Scryfall lists it on a card ("Deathtouch", "Landfall", "Scry"…).
-export function keywordRule(name: string): KeywordRule | null {
+function keywordRule(name: string): KeywordRule | null {
   const key = name.trim().toLowerCase()
   if (ABILITIES[key]) return { kind: 'ability', text: ABILITIES[key] }
   if (ACTIONS[key]) return { kind: 'action', text: ACTIONS[key] }
@@ -426,7 +426,7 @@ function reminderFor(name: string, oracleText: string) {
 // note pointing at the card text.
 export function explainKeyword(name: string, oracleText: string): KeywordRule {
   const rule = keywordRule(name)
-  if (rule && rule.text) return rule
+  if (rule?.text) return rule
   const reminder = reminderFor(name, oracleText)
   if (reminder) return { kind: 'ability', text: reminder }
   return { kind: 'ability', text: 'A newer mechanic: the card\'s text above says how it works.' }

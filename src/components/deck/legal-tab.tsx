@@ -1,17 +1,15 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { PathIcon } from '@/components/deck/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { checkDeck, type CheckStatus, type LegalCheck } from '@/rules/deck-legality';
-import type { DeckLine } from '@/rules/deck-stats';
-import type { DeckFormat } from '@/utils/deck-store';
-
-const DANGER = '#EE8466'
+import { PathIcon } from '@/components/deck/parts'
+import { Colors, Fonts } from '@/constants/theme'
+import { checkDeck, type CheckStatus, type LegalCheck } from '@/rules/deck-legality'
+import type { DeckLine } from '@/rules/deck-stats'
+import type { DeckFormat } from '@/utils/deck-store'
 
 const LOOK: Record<CheckStatus, { color: string; tint: string; icon: string; label: string }> = {
   pass: { color: Colors.positive, tint: 'rgba(127,199,166,0.14)', icon: 'M5 12.5l4.5 4.5L19 7.5', label: 'Passes' },
-  fail: { color: DANGER, tint: 'rgba(181,65,42,0.18)', icon: 'M7 7l10 10M17 7L7 17', label: 'Problem' },
+  fail: { color: Colors.danger, tint: 'rgba(181,65,42,0.18)', icon: 'M7 7l10 10M17 7L7 17', label: 'Problem' },
   warn: { color: Colors.goldLight, tint: 'rgba(212,166,74,0.16)', icon: 'M12 7v6M12 17h.01', label: 'Check' },
   info: { color: '#A9C4E2', tint: 'rgba(111,147,186,0.16)', icon: 'M12 11v6M12 7h.01', label: 'Note' },
 }
@@ -28,7 +26,7 @@ export function LegalTab({ format, lines }: { format: DeckFormat; lines: DeckLin
   return (
     <View style={styles.tab}>
       <View style={[styles.verdict, report.legal ? styles.verdictOk : styles.verdictBad]}>
-        <View style={[styles.verdictIcon, { backgroundColor: report.legal ? Colors.positive : DANGER }]}>
+        <View style={[styles.verdictIcon, { backgroundColor: report.legal ? Colors.positive : Colors.danger }]}>
           <PathIcon d={report.legal ? LOOK.pass.icon : LOOK.fail.icon} color={Colors.background} size={22} weight={2.6} />
         </View>
         <View style={styles.verdictText}>

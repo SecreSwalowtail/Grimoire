@@ -1,7 +1,7 @@
-import { Image } from 'expo-image';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Gesture } from 'react-native-gesture-handler';
+import { Image } from 'expo-image'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Gesture, ScrollView } from 'react-native-gesture-handler'
 import Animated, {
   scrollTo,
   useAnimatedStyle,
@@ -10,13 +10,13 @@ import Animated, {
   withTiming,
   type AnimatedRef,
   type SharedValue,
-} from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+} from 'react-native-reanimated'
+import { scheduleOnRN } from 'react-native-worklets'
 
-import { PathIcon } from '@/components/deck/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import type { DeckLine } from '@/rules/deck-stats';
-import type { Board } from '@/utils/deck-store';
+import { PathIcon } from '@/components/deck/parts'
+import { Colors, Fonts } from '@/constants/theme'
+import type { DeckLine } from '@/rules/deck-stats'
+import type { Board } from '@/utils/deck-store'
 
 // Dragging cards in edit mode. In the deck screen: onto the Main deck / Sideboard / Maybe chips,
 // onto the commander (cover card or Commander group), or down into the trash bubble that rises at
@@ -62,7 +62,8 @@ export type CardDrag = {
   rectMap: Map<DropTarget, Rect>
   // Every target's measuring, run again when a drag starts (the chips scroll with the list).
   measurers: Set<() => void>
-  // Whether the commander takes what's dragged, and the part of the deck on show (moving there does nothing).
+  // Whether the commander takes what's dragged, and the part of the deck on show (moving there
+  // does nothing).
   commanderOk: SharedValue<boolean>
   board: SharedValue<Board | null>
   // Targets that aren't targets for this drag (the things being dragged), and ones that turn it down.
@@ -140,6 +141,9 @@ const accepts = (drag: CardDrag, target: DropTarget) => {
   return true
 }
 
+// Gesture handler's scroll view, animatable so a drag can scroll it.
+export const DragScrollView = Animated.createAnimatedComponent(ScrollView)
+
 // Hold a card to pick it up (with whatever is selected); let go over a target to drop.
 // `onStart` gets the held card, `onDrop` the target under the finger (null: none). `topZone`: how
 // far down the screen (from the top) taking the cards scrolls the list to the top (0: never).
@@ -201,7 +205,7 @@ export function dragGesture<T>(
 // Makes a view a drop target: measures it on screen and lights it gold under the finger (red when
 // it won't take the cards). Spread `ref`, `onLayout` and `style` onto an Animated.View. `fixed`:
 // it stays put when the list scrolls.
-export function useDropTarget(drag: CardDrag, id: DropTarget, fixed = false) {
+function useDropTarget(drag: CardDrag, id: DropTarget, fixed = false) {
   const ref = useRef<View>(null)
   const { rects, rectMap, measurers, scrollY } = drag
   const measure = () =>
@@ -264,7 +268,7 @@ export function DropZone({
 // What follows the finger: up to 5 cards fanned out, more as a bundle with a count. Over the trash
 // it's pulled into the bubble and shrinks. `key`: unique among the dragged cards. `label`: what
 // the bundle says it holds (cards and copies by default).
-export type GhostCard = Pick<DeckLine, 'name' | 'image' | 'quantity'> & { key: string }
+type GhostCard = Pick<DeckLine, 'name' | 'image' | 'quantity'> & { key: string }
 
 export function DragGhost({ drag, lines, label }: { drag: CardDrag; lines: GhostCard[]; label?: string }) {
   const style = useAnimatedStyle(() => {

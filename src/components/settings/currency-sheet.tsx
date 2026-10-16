@@ -1,10 +1,10 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { Sheet, SheetHeader } from '@/components/controls';
-import { RadioDot } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { CURRENCIES, currencyName, phoneCurrency } from '@/utils/money';
-import { setSettings, useSettings } from '@/utils/settings';
+import { Sheet, SheetHeader } from '@/components/controls'
+import { RadioDot } from '@/components/decks/parts'
+import { Colors, Fonts } from '@/constants/theme'
+import { CURRENCIES, currencyName, phoneCurrency } from '@/utils/money'
+import { setSettings, useSettings } from '@/utils/settings'
 
 // Settings → Currency: Automatic (from the phone's language) or any currency the exchange rates
 // cover. Picking one closes the sheet.

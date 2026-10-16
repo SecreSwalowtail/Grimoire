@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { ManaSymbol } from '@/components/mana-symbol';
-import { SectionLabel, Segmented, ToggleRow } from '@/components/controls';
-import { Colors, Fonts } from '@/constants/theme';
-import type { ColorMatch, MarketFilters } from '@/utils/market-filters';
+import { SectionLabel, Segmented, ToggleRow } from '@/components/controls'
+import { ManaSymbol } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
+import { plural } from '@/utils/format'
+import type { ColorMatch, MarketFilters } from '@/utils/market-filters'
 
 const COLORS = [
   { key: 'W', name: 'White' },
@@ -36,7 +37,7 @@ export function ColorsTab({ filters, onChange }: { filters: MarketFilters; onCha
     : filters.colorMatch === 'atmost' ? `Cards that use only ${list}, or fewer of them — including colorless.`
     : `Cards that include ${list}, and may have other colors too.`
   if (list && filters.colorIdentity) helper += ' Mana symbols in rules text count too.'
-  const rangeLabel = min === max ? `${min} ${min === 1 ? 'color' : 'colors'}` : `${min} – ${max} colors`
+  const rangeLabel = min === max ? plural(min, 'color') : `${min} – ${max} colors`
 
   // Tapping a number moves whichever end of the range is closer to it.
   const pickCount = (n: number) => {

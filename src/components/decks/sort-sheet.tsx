@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react'
+import { ScrollView, StyleSheet, View } from 'react-native'
 
-import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls';
-import { SortPicker, type SortOption } from '@/components/sort-picker';
-import { deckManaValue, deckValue, type Deck, type DeckData, type Folder } from '@/utils/deck-store';
-import { useMoney } from '@/utils/money';
+import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls'
+import { SortPicker, type SortOption } from '@/components/sort-picker'
+import { deckManaValue, deckValue, type Deck, type DeckData, type Folder } from '@/utils/deck-store'
+import { useMoney } from '@/utils/money'
 
 export type DeckSortBy = 'name' | 'format' | 'value' | 'mana'
 // `by` null: no sort, decks and folders in your own order (as arranged by dragging in Decks).

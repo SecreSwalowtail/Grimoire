@@ -1,9 +1,9 @@
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router'
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Colors, Fonts } from '@/constants/theme';
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
 
 // The parts of Card detail shared by all four tabs: the floating back button and the tab row.
 
@@ -24,7 +24,7 @@ export function TopBar() {
   return (
     <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
       <TouchableOpacity style={styles.round} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
-        <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={20} tintColor={Colors.text} style={styles.backArrow} />
+        <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={20} tintColor={Colors.text} style={styles.backArrow} />
       </TouchableOpacity>
     </View>
   )

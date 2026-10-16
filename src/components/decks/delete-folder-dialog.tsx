@@ -1,13 +1,12 @@
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react'
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { RadioDot } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { deleteFolders, useDeckStore, type Undo } from '@/utils/deck-store';
-import { useModalAnimation } from '@/utils/motion';
-
-const DANGER = '#EE8466'
+import { RadioDot } from '@/components/decks/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { deleteFolders, useDeckStore, type Undo } from '@/utils/deck-store'
+import { plural } from '@/utils/format'
+import { useModalAnimation } from '@/utils/motion'
 
 // Centered "Delete folder?" dialog. When the folders hold decks, asks whether to keep them
 // (moved out of folders) or delete them too. The screen shows an Undo toast afterwards.
@@ -36,10 +35,10 @@ export function DeleteFolderDialog({
 
   const one = targets.length === 1
   const title = one ? `Delete “${targets[0].name}”?` : `Delete ${targets.length} folders?`
-  const decksText = `${inside} ${inside === 1 ? 'deck' : 'decks'}`
+  const decksText = plural(inside, 'deck')
   const choices = [
     { value: false, title: 'Keep the decks', sub: `Move ${inside === 1 ? 'it' : `all ${inside}`} to Decks, outside folders`, accent: Colors.gold, tint: 'rgba(212,166,74,0.08)' },
-    { value: true, title: 'Delete decks too', sub: `Remove the ${one ? 'folder' : 'folders'} and ${inside === 1 ? 'its deck' : `its ${inside} decks`}`, accent: DANGER, tint: 'rgba(181,65,42,0.12)' },
+    { value: true, title: 'Delete decks too', sub: `Remove the ${one ? 'folder' : 'folders'} and ${inside === 1 ? 'its deck' : `its ${inside} decks`}`, accent: Colors.danger, tint: 'rgba(181,65,42,0.12)' },
   ]
 
   return (
@@ -54,7 +53,7 @@ export function DeleteFolderDialog({
       <View style={styles.backdrop}>
         <View style={styles.dialog} accessibilityRole="alert" accessibilityViewIsModal>
           <View style={styles.icon}>
-            <SymbolView name={{ ios: 'trash', android: 'delete' }} size={26} tintColor={DANGER} />
+            <Icon name={{ ios: 'trash', android: 'delete' }} size={26} tintColor={Colors.danger} />
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>

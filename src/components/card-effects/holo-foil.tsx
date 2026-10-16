@@ -1,8 +1,8 @@
-import { Canvas, Fill, Image, Shader, Skia, useImage, type SkSize } from '@shopify/react-native-skia';
-import { StyleSheet, View } from 'react-native';
-import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import { Canvas, Fill, Image, Shader, Skia, useImage, type SkSize } from '@shopify/react-native-skia'
+import { StyleSheet, View } from 'react-native'
+import { useDerivedValue, useSharedValue } from 'react-native-reanimated'
 
-import type { Tilt } from '@/components/card-effects/tilt';
+import type { Tilt } from '@/components/card-effects/tilt'
 
 // Rainbow bands that slide with the phone's tilt, plus a bright spot that follows the light,
 // like the holographic layer of a real foil card. Output is premultiplied (rgb <= alpha).

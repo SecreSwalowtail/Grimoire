@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Svg, { Circle } from 'react-native-svg'
 
-import { Segmented, SectionLabel } from '@/components/controls';
-import { ManaSymbol } from '@/components/mana-symbol';
-import { Colors, Fonts } from '@/constants/theme';
+import { Segmented, SectionLabel } from '@/components/controls'
+import { ManaSymbol } from '@/components/mana-symbol'
+import { Colors, Fonts } from '@/constants/theme'
 import {
   COLOR_HEX,
   COLOR_NAME,
@@ -17,7 +17,7 @@ import {
   type Color,
   type DeckLine,
   type SubtypeTab,
-} from '@/rules/deck-stats';
+} from '@/rules/deck-stats'
 
 type Tab = 'mv' | 'cost' | 'prod' | 'types' | 'sub'
 const TABS: { value: Tab; label: string }[] = [

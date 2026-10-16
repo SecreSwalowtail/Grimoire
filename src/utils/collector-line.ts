@@ -6,9 +6,9 @@
 // letter to the number ("RO022") and the set code to the language ("WHOEN"), drops letters
 // ("FDN T" for "FDN • IT"), splits one line into pieces, and the strip may hold flavor text too.
 
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'mythic'
+type Rarity = 'common' | 'uncommon' | 'rare' | 'mythic'
 
-export type CollectorLine = {
+type CollectorLine = {
   set: string // lower case, as Scryfall uses it
   // Possible collector numbers, most likely first, without leading zeros (as Scryfall uses them).
   collectorNumbers: string[]
@@ -25,7 +25,7 @@ export const LANGUAGES: Record<string, string> = {
 const RARITIES: Record<string, Rarity> = { C: 'common', U: 'uncommon', R: 'rare', M: 'mythic' }
 
 // An OCR line and where it was found, as ML Kit gives it.
-export type OcrLine = { text: string; frame?: { left: number; top: number; width: number; height: number } }
+type OcrLine = { text: string; frame?: { left: number; top: number; width: number; height: number } }
 
 // OCR lines -> rows of text, top to bottom: pieces side by side (ML Kit sometimes splits one printed
 // line into several) are joined left to right. Without positions, the lines stay in their order.

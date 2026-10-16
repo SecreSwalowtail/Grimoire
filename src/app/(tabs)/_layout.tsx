@@ -1,10 +1,10 @@
-import { Tabs } from 'expo-router/js-tabs';
-import { CommonActions } from 'expo-router/react-navigation';
-import { StyleSheet, Text, View } from 'react-native';
+import { Tabs } from 'expo-router/js-tabs'
+import { CommonActions } from 'expo-router/react-navigation'
+import { StyleSheet, Text, View } from 'react-native'
 
-import { NavIcon } from '@/components/nav-icon';
-import { Colors, Fonts } from '@/constants/theme';
-import { getScanMode, pressCapture, useScanMode } from '@/utils/capture-button';
+import { NavIcon } from '@/components/nav-icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { getScanMode, pressCapture, useScanMode } from '@/utils/capture-button'
 
 export default function TabLayout() {
   // In Bulk mode the Scan tab keeps its normal button: cards are captured automatically.

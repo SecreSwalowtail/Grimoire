@@ -1,20 +1,20 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite'
 
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 8
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
 // Never edit a released step - add a new `if (version === N)` block and bump DATABASE_VERSION.
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
   // Foreign keys are off by default for every new connection, so enable them on every launch.
-  await db.execAsync('PRAGMA foreign_keys = ON');
+  await db.execAsync('PRAGMA foreign_keys = ON')
 
-  const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  let version = result?.user_version ?? 0;
+  const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version')
+  let version = result?.user_version ?? 0
   // A development build briefly had version 6 without its step, so version 6 also gets the binders
   // whenever their table is missing.
-  const hasBinders = await db.getFirstAsync("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'binders'");
-  if (version >= DATABASE_VERSION && hasBinders) return;
+  const hasBinders = await db.getFirstAsync("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'binders'")
+  if (version >= DATABASE_VERSION && hasBinders) return
 
   if (version === 0) {
     await db.execAsync(`
@@ -70,8 +70,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         price_usd_foil REAL,
         PRIMARY KEY (card_id, date)
       );
-    `);
-    version = 1;
+    `)
+    version = 1
   }
 
   // Version 2 could end up set without its tables (a half-applied edit during development), so
@@ -97,8 +97,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         position INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS decks_folder ON decks (folder_id);
-    `);
-    version = 3;
+    `)
+    version = 3
   }
 
   if (version === 3) {
@@ -120,8 +120,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         PRIMARY KEY (deck_id, card_id, board)
       );
       CREATE INDEX IF NOT EXISTS deck_cards_card ON deck_cards (card_id);
-    `);
-    version = 4;
+    `)
+    version = 4
   }
 
   if (version === 4) {
@@ -129,8 +129,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       -- The whole Scryfall card as JSON, so Card detail opens owned and recently seen cards from the
       -- phone instead of waiting for Scryfall (and works offline).
       ALTER TABLE cards ADD COLUMN data TEXT;
-    `);
-    version = 5;
+    `)
+    version = 5
   }
 
   if (version === 5 || (version === 6 && !hasBinders)) {
@@ -167,31 +167,26 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
         ALTER TABLE collection_new RENAME TO collection;
         CREATE INDEX collection_card ON collection (card_id);
         CREATE INDEX collection_binder ON collection (binder_id);
-      `);
-    });
-    version = 6;
+      `)
+    })
+    version = 6
   }
 
   if (version === 6) {
     await db.execAsync(`
       -- The deck's commander(s): a card of the main deck marked as such (two for partners).
       ALTER TABLE deck_cards ADD COLUMN commander INTEGER NOT NULL DEFAULT 0;
-    `);
-    version = 7;
+    `)
+    version = 7
   }
 
   if (version === 7) {
     await db.execAsync(`
       -- Copies got in a trade (as opposed to bought or opened).
       ALTER TABLE collection ADD COLUMN traded INTEGER NOT NULL DEFAULT 0;
-    `);
-    version = 8;
+    `)
+    version = 8
   }
 
-  // if (version === 8) {
-  //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 9;
-  // }
-
-  await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
+  await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`)
 }

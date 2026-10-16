@@ -1,15 +1,12 @@
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState, type ReactNode } from 'react'
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { RadioDot } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import type { Binder } from '@/db/binders';
-import { useModalAnimation } from '@/utils/motion';
-
-const DANGER = '#EE8466'
-
-const cardsText = (n: number) => `${n} ${n === 1 ? 'card' : 'cards'}`
+import { RadioDot } from '@/components/decks/parts'
+import { Icon, type IconName } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import type { Binder } from '@/db/binders'
+import { plural } from '@/utils/format'
+import { useModalAnimation } from '@/utils/motion'
 
 // Centered dialog in the style of Decks' "Delete folder?": icon, serif title, text, optional
 // choices, then the action and Cancel.
@@ -25,7 +22,7 @@ function Dialog({
   children,
 }: {
   visible: boolean
-  icon: SymbolViewProps['name']
+  icon: IconName
   danger?: boolean
   title: string
   body: string
@@ -40,7 +37,7 @@ function Dialog({
       <View style={styles.backdrop}>
         <View style={styles.dialog} accessibilityRole="alert" accessibilityViewIsModal>
           <View style={[styles.icon, danger ? styles.iconDanger : styles.iconGold]}>
-            <SymbolView name={icon} size={26} tintColor={danger ? DANGER : Colors.goldLight} />
+            <Icon name={icon} size={26} tintColor={danger ? Colors.danger : Colors.goldLight} />
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>{body}</Text>
@@ -83,8 +80,8 @@ export function RemoveBinderDialog({
   const one = binders.length === 1
 
   const choices = [
-    ...others.map((b) => ({ id: b.id as string | null, title: `Move to ${b.name}`, sub: `Keep the ${cardsText(cards)}`, dot: b.color, accent: Colors.gold })),
-    { id: null, title: 'Delete the cards too', sub: `Remove ${one ? 'the binder and its' : 'the binders and their'} ${cardsText(cards)}`, dot: null, accent: DANGER },
+    ...others.map((b) => ({ id: b.id as string | null, title: `Move to ${b.name}`, sub: `Keep the ${plural(cards, 'card')}`, dot: b.color, accent: Colors.gold })),
+    { id: null, title: 'Delete the cards too', sub: `Remove ${one ? 'the binder and its' : 'the binders and their'} ${plural(cards, 'card')}`, dot: null, accent: Colors.danger },
   ]
   const deleting = cards > 0 && moveTo == null
 
@@ -97,9 +94,9 @@ export function RemoveBinderDialog({
       body={
         cards === 0
           ? one ? 'This binder is empty.' : 'These binders are empty.'
-          : `${one ? 'It holds' : 'They hold'} ${cardsText(cards)}. What should happen to them?`
+          : `${one ? 'It holds' : 'They hold'} ${plural(cards, 'card')}. What should happen to them?`
       }
-      action={`Remove ${one ? 'binder' : `${binders.length} binders`}${deleting ? ` & ${cardsText(cards)}` : ''}`}
+      action={`Remove ${one ? 'binder' : `${binders.length} binders`}${deleting ? ` & ${plural(cards, 'card')}` : ''}`}
       onAction={() => onRemove(cards > 0 ? moveTo : null)}
       onClose={onClose}
     >
@@ -154,7 +151,7 @@ export function MergeBindersDialog({
       body={
         cards === 0
           ? `“${from?.name}” is empty, so it's just removed. “${into?.name}” stays as it is.`
-          : `The ${cardsText(cards)} in “${from?.name}” move into “${into?.name}”, and “${from?.name}” is removed. Copies of the same printing add up.`
+          : `The ${plural(cards, 'card')} in “${from?.name}” move into “${into?.name}”, and “${from?.name}” is removed. Copies of the same printing add up.`
       }
       action="Merge"
       onAction={onMerge}

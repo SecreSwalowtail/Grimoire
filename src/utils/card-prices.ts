@@ -28,7 +28,7 @@ export function mainFinish(card: ScryfallCard): Finish {
 export const formatPrice = (value: number, source: PriceSource, money: Money) =>
   source === 'cardmarket' ? money.eur(value) : money.usd(value)
 
-export function pointValue(point: PricePoint, finish: Finish, source: PriceSource) {
+function pointValue(point: PricePoint, finish: Finish, source: PriceSource) {
   if (source === 'cardmarket') return finish === 'nonfoil' ? point.price_eur : point.price_eur_foil
   return finish === 'nonfoil' ? point.price_usd : point.price_usd_foil
 }

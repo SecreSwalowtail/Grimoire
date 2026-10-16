@@ -1,8 +1,8 @@
-import { SymbolView } from 'expo-symbols';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { Colors, Fonts } from '@/constants/theme';
-import { useModalAnimation } from '@/utils/motion';
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { useModalAnimation } from '@/utils/motion'
 
 export type CardSort = 'recent' | 'price' | 'priceAsc' | 'name'
 
@@ -51,7 +51,7 @@ export function SortMenu<T extends string>({
               accessibilityState={{ selected }}
             >
               <Text style={[styles.label, selected && styles.labelSelected]}>{option.label}</Text>
-              {selected && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={16} tintColor={Colors.goldLight} />}
+              {selected && <Icon name={{ ios: 'checkmark', android: 'check' }} size={16} tintColor={Colors.goldLight} />}
             </Pressable>
           )
         })}

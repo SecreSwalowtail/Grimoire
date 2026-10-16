@@ -1,11 +1,11 @@
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls';
-import { ColorPicker, FolderIcon, NameField } from '@/components/decks/parts';
-import { Colors, Fonts } from '@/constants/theme';
-import { FOLDER_COLORS, updateFolder, useDeckStore, type FolderColor, type FolderSort } from '@/utils/deck-store';
+import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls'
+import { ColorPicker, FolderIcon, NameField } from '@/components/decks/parts'
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { FOLDER_COLORS, updateFolder, useDeckStore, type FolderColor, type FolderSort } from '@/utils/deck-store'
 
 // "Edit folder" sheet: name, color, how decks inside are sorted, pin to top. Changes are a draft
 // until Save. "Delete folder…" asks first.
@@ -36,7 +36,6 @@ export function FolderEditSheet({
   } else if (!folderId && loadedFor != null) {
     setLoadedFor(null)
   }
-
 
   return (
     <Sheet visible={folder != null} onClose={onClose}>
@@ -75,7 +74,7 @@ export function FolderEditSheet({
             onPress={() => folder && onDelete(folder.id)}
             accessibilityRole="button"
           >
-            <SymbolView name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={DANGER} />
+            <Icon name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={Colors.danger} />
             <Text style={styles.delete}>Delete folder…</Text>
           </Pressable>
         </View>
@@ -90,8 +89,6 @@ export function FolderEditSheet({
     </Sheet>
   )
 }
-
-const DANGER = '#EE8466'
 
 const styles = StyleSheet.create({
   body: {
@@ -137,6 +134,6 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     fontSize: 15,
     fontFamily: Fonts.extraBold,
-    color: DANGER,
+    color: Colors.danger,
   },
 })

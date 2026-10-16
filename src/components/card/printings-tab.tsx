@@ -1,14 +1,14 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image'
+import { useState } from 'react'
+import { ActivityIndicator, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
-import { Colors, Fonts } from '@/constants/theme';
-import { entryPrice, type CollectionEntry } from '@/db/collection';
-import { cardThumb, type ScryfallCard } from '@/db/scryfall';
-import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection';
-import { finishesText, printingLabel } from '@/rules/printings';
-import { useMoney } from '@/utils/money';
+import { Icon } from '@/components/icon'
+import { Colors, Fonts } from '@/constants/theme'
+import { entryPrice, type CollectionEntry } from '@/db/collection'
+import { cardThumb, type ScryfallCard } from '@/db/scryfall'
+import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection'
+import { finishesText, printingLabel } from '@/rules/printings'
+import { useMoney } from '@/utils/money'
 
 // C3 · Card — Printings & your copies. Tapping a printing shows it on every tab; tapping one of
 // your copies edits it.
@@ -16,7 +16,7 @@ import { useMoney } from '@/utils/money';
 const FIRST = 6
 type Filter = 'all' | 'owned' | 'cheap'
 
-export type PrintingsData = { list: ScryfallCard[]; total: number; more: boolean }
+type PrintingsData = { list: ScryfallCard[]; total: number; more: boolean }
 
 const eur = (value: string | null) => (value == null ? null : Number(value))
 
@@ -89,12 +89,12 @@ export function PrintingsTab({
               </Text>
             </View>
             <Text style={styles.copyPrice}>{price != null ? money.eur(price * entry.quantity) : '—'}</Text>
-            <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />
+            <Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />
           </TouchableOpacity>
         )
       })}
       <TouchableOpacity style={styles.addCopy} onPress={onAddCopy} accessibilityRole="button">
-        <SymbolView name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
+        <Icon name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} weight="bold" />
         <Text style={styles.addCopyLabel}>Add to binder</Text>
       </TouchableOpacity>
 

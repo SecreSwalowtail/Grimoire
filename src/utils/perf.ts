@@ -1,21 +1,23 @@
 import { useSyncExternalStore } from 'react'
 
+import { createListeners } from '@/utils/listeners'
+
 // Timings for the performance pass. Each one is kept in memory (the last 100, shown in Settings →
 // Developer tools) and logged as "[perf] name: 123 ms", which a release build prints to
 // `adb logcat` (filter on "perf"). Cheap enough to leave in.
 
-export type Timing = { name: string; ms: number; detail?: string; at: number }
+type Timing = { name: string; ms: number; detail?: string; at: number }
 
 // When the JavaScript bundle started running. Native start-up before that isn't counted.
 export const JS_START = Date.now()
 
 let timings: Timing[] = []
-const listeners = new Set<() => void>()
+const timingChanges = createListeners()
 
 export function record(name: string, ms: number, detail?: string) {
   timings = [{ name, ms: Math.round(ms), detail, at: Date.now() }, ...timings].slice(0, 100)
   console.log(`[perf] ${name}: ${Math.round(ms)} ms${detail ? ` (${detail})` : ''}`)
-  listeners.forEach((listener) => listener())
+  timingChanges.notify()
 }
 
 // Times an async step: `await timed('binder load', () => getCollection(db))`.
@@ -36,32 +38,18 @@ export function recordOnce(name: string, ms: number, detail?: string) {
 
 export function clearTimings() {
   timings = []
-  listeners.forEach((listener) => listener())
+  timingChanges.notify()
 }
 
-export function useTimings() {
-  return useSyncExternalStore((listener) => {
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
-  }, () => timings)
-}
+export const useTimings = () => useSyncExternalStore(timingChanges.subscribe, () => timings)
 
 // The frame-rate meter (components/dev/fps-meter.tsx), switched on in Developer tools.
 let fpsMeter = false
-const meterListeners = new Set<() => void>()
+const meterChanges = createListeners()
 
 export function setFpsMeter(on: boolean) {
   fpsMeter = on
-  meterListeners.forEach((listener) => listener())
+  meterChanges.notify()
 }
 
-export function useFpsMeter() {
-  return useSyncExternalStore((listener) => {
-    meterListeners.add(listener)
-    return () => {
-      meterListeners.delete(listener)
-    }
-  }, () => fpsMeter)
-}
+export const useFpsMeter = () => useSyncExternalStore(meterChanges.subscribe, () => fpsMeter)

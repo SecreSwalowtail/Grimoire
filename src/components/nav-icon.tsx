@@ -1,8 +1,8 @@
-import type { ColorValue } from 'react-native';
-import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
+import type { ColorValue } from 'react-native'
+import Svg, { Circle, G, Path, Rect } from 'react-native-svg'
 
 // Bottom tab icons from the "Element Icon Set" design canvas (NavIcon), drawn on a 24-unit grid.
-export type NavIconKind = 'binder' | 'market' | 'scan' | 'decks' | 'settings'
+type NavIconKind = 'binder' | 'market' | 'scan' | 'decks' | 'settings'
 
 // `bg` is the color behind the icon: Decks and Settings fill some shapes with it, so the lines
 // they overlap are hidden.

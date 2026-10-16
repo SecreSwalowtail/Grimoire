@@ -1,6 +1,6 @@
-import { useEffect, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useEffect, type ReactNode } from 'react'
+import { StyleSheet, View } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
   useAnimatedStyle,
   useFrameCallback,
@@ -8,11 +8,10 @@ import Animated, {
   withSpring,
   withTiming,
   type SharedValue,
-} from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+} from 'react-native-reanimated'
+import { scheduleOnRN } from 'react-native-worklets'
 
-// Dragged items sway with the drag speed, gently: these
-// items are big.
+// Dragged items sway with the drag speed, gently: these items are big.
 const SETTLE = { damping: 20, stiffness: 240 }
 const WOBBLE = { damping: 14, stiffness: 200 }
 const TILT = 0.0008
@@ -73,7 +72,7 @@ type Drag = {
 }
 
 // Where the merge glow is drawn in a cell, e.g. around just the picture of the item.
-export type GlowRect = { left: number; top: number; width: number; height: number; radius: number }
+type GlowRect = { left: number; top: number; width: number; height: number; radius: number }
 
 // A grid of same-size cells you can reorder by holding one and dragging it: it lifts and sways
 // with the drag speed while the others slide out of its way. Let go over the middle of another

@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Svg, { Circle, Line, Path } from 'react-native-svg'
 
-import { Colors, Fonts } from '@/constants/theme';
-import { tick } from '@/utils/motion';
+import { Colors, Fonts } from '@/constants/theme'
+import { tick } from '@/utils/motion'
 
 const HEIGHT = 160
 const TOP = 12
@@ -65,44 +65,44 @@ export function PriceChart({
 
   return (
     <GestureDetector gesture={drag}>
-    <View style={styles.chart} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessible accessibilityLabel={label}>
-      {width > 0 && (
-        <Svg width={width} height={HEIGHT}>
-          <Path d={`M0 ${TOP}H${width}M0 ${TOP + plot / 2}H${width}M0 ${TOP + plot}H${width}`} stroke="rgba(237,230,214,0.07)" strokeWidth={1} />
-          {enough && (
+      <View style={styles.chart} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessible accessibilityLabel={label}>
+        {width > 0 && (
+          <Svg width={width} height={HEIGHT}>
+            <Path d={`M0 ${TOP}H${width}M0 ${TOP + plot / 2}H${width}M0 ${TOP + plot}H${width}`} stroke="rgba(237,230,214,0.07)" strokeWidth={1} />
+            {enough && (
+              <>
+                <Path d={`${line} L${right} ${TOP + plot} L0 ${TOP + plot} Z`} fill="rgba(212,166,74,0.12)" />
+                <Path d={line} stroke={Colors.goldLight} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                {held ? (
+                  <>
+                    <Line x1={held[0]} y1={TOP - 6} x2={held[0]} y2={TOP + plot} stroke="rgba(237,230,214,0.35)" strokeWidth={1} />
+                    <Circle cx={held[0]} cy={held[1]} r={8} fill="rgba(232,192,106,0.20)" />
+                    <Circle cx={held[0]} cy={held[1]} r={3.75} fill={Colors.goldLight} />
+                  </>
+                ) : (
+                  <>
+                    <Circle cx={last[0]} cy={last[1]} r={8} fill="rgba(232,192,106,0.20)" />
+                    <Circle cx={last[0]} cy={last[1]} r={3.75} fill={Colors.goldLight} />
+                  </>
+                )}
+              </>
+            )}
+          </Svg>
+        )}
+        {enough ? (
+          hi !== lo && (
             <>
-              <Path d={`${line} L${right} ${TOP + plot} L0 ${TOP + plot} Z`} fill="rgba(212,166,74,0.12)" />
-              <Path d={line} stroke={Colors.goldLight} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              {held ? (
-                <>
-                  <Line x1={held[0]} y1={TOP - 6} x2={held[0]} y2={TOP + plot} stroke="rgba(237,230,214,0.35)" strokeWidth={1} />
-                  <Circle cx={held[0]} cy={held[1]} r={8} fill="rgba(232,192,106,0.20)" />
-                  <Circle cx={held[0]} cy={held[1]} r={3.75} fill={Colors.goldLight} />
-                </>
-              ) : (
-                <>
-                  <Circle cx={last[0]} cy={last[1]} r={8} fill="rgba(232,192,106,0.20)" />
-                  <Circle cx={last[0]} cy={last[1]} r={3.75} fill={Colors.goldLight} />
-                </>
-              )}
+              <Text style={[styles.axis, { top: -2 }]}>{format(hi)}</Text>
+              <Text style={[styles.axis, { top: TOP + plot + 3 }]}>{format(lo)}</Text>
             </>
-          )}
-        </Svg>
-      )}
-      {enough ? (
-        hi !== lo && (
-          <>
-            <Text style={[styles.axis, { top: -2 }]}>{format(hi)}</Text>
-            <Text style={[styles.axis, { top: TOP + plot + 3 }]}>{format(lo)}</Text>
-          </>
-        )
-      ) : (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No data yet</Text>
-          <Text style={styles.emptyText}>The app saves this card&apos;s price each day you open it or own it, and draws the history from there.</Text>
-        </View>
-      )}
-    </View>
+          )
+        ) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>No data yet</Text>
+            <Text style={styles.emptyText}>The app saves this card&apos;s price each day you open it or own it, and draws the history from there.</Text>
+          </View>
+        )}
+      </View>
     </GestureDetector>
   )
 }

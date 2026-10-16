@@ -1,16 +1,17 @@
-import { router } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router'
+import { useSQLiteContext } from 'expo-sqlite'
+import { useState } from 'react'
+import { ScrollView, StyleSheet, View } from 'react-native'
 
-import { BinderCover } from '@/components/binder/binder-cover';
-import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls';
-import { ColorSpectrum } from '@/components/color-spectrum';
-import { NameField } from '@/components/decks/parts';
-import { StartOptions, type Start } from '@/components/decks/new-sheet';
-import { BINDER_PRESETS, createBinder, updateBinder, type Binder } from '@/db/binders';
-import { moveEntries, type CollectionEntry } from '@/db/collection';
-import { setScanBinder } from '@/utils/scan-target';
+import { BinderCover } from '@/components/binder/binder-cover'
+import { ColorSpectrum } from '@/components/color-spectrum'
+import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls'
+import { StartOptions, type Start } from '@/components/decks/new-sheet'
+import { NameField } from '@/components/decks/parts'
+import { BINDER_PRESETS, createBinder, updateBinder, type Binder } from '@/db/binders'
+import { moveEntries, type CollectionEntry } from '@/db/collection'
+import { plural } from '@/utils/format'
+import { setScanBinder } from '@/utils/scan-target'
 
 const PREVIEW_SCALE = 0.85
 const PRESETS = Object.values(BINDER_PRESETS)
@@ -21,7 +22,8 @@ const FIRST_COLOR = BINDER_PRESETS.gold.hex
 // "Scan cards" creates it, sends scanned cards into it and opens the Scan tab.
 // Given a `binder`, it's "Edit binder" instead: name and color, saved with Save.
 // Given `entries` (cards picked in a binder's edit mode), the new binder is made with those cards,
-// moved out of where they were: no "Start from", and no binder opens. `onCreated` gets its id and name.
+// moved out of where they were: no "Start from", and no binder opens. `onCreated` gets its id and
+// name.
 export function BinderSheet({
   visible,
   binder,
@@ -56,7 +58,7 @@ export function BinderSheet({
   const copies = entries?.reduce((n, e) => n + e.quantity, 0) ?? 0
   const cta =
     binder ? 'Save'
-    : entries ? `Create binder with ${copies} ${copies === 1 ? 'card' : 'cards'}`
+    : entries ? `Create binder with ${plural(copies, 'card')}`
     : start === 'scan' ? 'Create & start scanning'
     : start === 'paste' ? 'Create & paste list'
     : 'Create binder'
@@ -91,7 +93,8 @@ export function BinderSheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={binder ? 'Edit binder' : 'New binder'} onClose={onClose} />
-      <ScrollView showsVerticalScrollIndicator={false}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
         keyboardShouldPersistTaps="handled"

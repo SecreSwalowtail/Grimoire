@@ -1,8 +1,8 @@
-import { BlurView } from 'expo-blur';
-import { Image } from 'expo-image';
-import { useEffect, useState, type RefObject } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { BlurView } from 'expo-blur'
+import { Image } from 'expo-image'
+import { useEffect, useState, type RefObject } from 'react'
+import { StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
   Extrapolation,
   interpolate,
@@ -10,14 +10,14 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { scheduleOnRN } from 'react-native-worklets';
+} from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { scheduleOnRN } from 'react-native-worklets'
 
-import { HoloFoil } from '@/components/card-effects/holo-foil';
-import type { Tilt } from '@/components/card-effects/tilt';
-import { faceImage, type ScryfallCard } from '@/db/scryfall';
-import { useAnimationsOff } from '@/utils/motion';
+import { HoloFoil } from '@/components/card-effects/holo-foil'
+import { clamp, type Tilt } from '@/components/card-effects/tilt'
+import { faceImage, type ScryfallCard } from '@/db/scryfall'
+import { useAnimationsOff } from '@/utils/motion'
 
 // Tap the hero card on Card detail: it lifts out of the header to almost the whole screen, over
 // the blurred page. It tilts much further than anywhere else, with the phone and under your finger
@@ -38,11 +38,6 @@ const GLARE_TRAVEL = 70
 const OPEN = { duration: 450, dampingRatio: 0.8 }
 const CLOSE = { duration: 380, dampingRatio: 1 }
 const LET_GO = { duration: 500, dampingRatio: 0.7 }
-
-const clamp = (v: number) => {
-  'worklet'
-  return Math.max(-1, Math.min(1, v))
-}
 
 export function CardZoom({
   card,

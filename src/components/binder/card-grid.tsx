@@ -1,20 +1,20 @@
-import { useIsFocused } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useCallback, useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, Text, View, type ViewToken } from 'react-native';
-import { FlatList, type GestureType } from 'react-native-gesture-handler';
-import { useSharedValue } from 'react-native-reanimated';
+import { useIsFocused } from 'expo-router'
+import { useCallback, useState, type ReactElement } from 'react'
+import { Pressable, StyleSheet, Text, View, type ViewToken } from 'react-native'
+import { FlatList, type GestureType } from 'react-native-gesture-handler'
+import { useSharedValue } from 'react-native-reanimated'
 
-import { TiltContext, TiltSensor } from '@/components/card-effects/tilt';
-import { CardTile } from '@/components/card-tile';
-import { EDIT_BAR } from '@/components/deck/card-drag';
-import { GroupIcon } from '@/components/deck/parts';
-import type { CardSort } from '@/components/sort-menu';
-import { Colors, Fonts } from '@/constants/theme';
-import { entryPrice, type CollectionEntry } from '@/db/collection';
-import { groupLines, primaryType, WUBRG, type Color, type Group, type Groupable, type GroupBy } from '@/rules/deck-stats';
-import { useAnimationsOff } from '@/utils/motion';
-import { useMoney } from '@/utils/money';
+import { TiltContext, TiltSensor } from '@/components/card-effects/tilt'
+import { CardTile } from '@/components/card-tile'
+import { EDIT_BAR } from '@/components/deck/card-drag'
+import { GroupIcon } from '@/components/deck/parts'
+import { Icon } from '@/components/icon'
+import type { CardSort } from '@/components/sort-menu'
+import { Colors, Fonts } from '@/constants/theme'
+import { entryPrice, type CollectionEntry } from '@/db/collection'
+import { groupLines, parseColors, primaryType, type Group, type Groupable, type GroupBy } from '@/rules/deck-stats'
+import { useMoney } from '@/utils/money'
+import { useAnimationsOff } from '@/utils/motion'
 
 // Cards per row, like a 9-pocket binder page.
 const COLUMNS = 3
@@ -24,7 +24,7 @@ const VIEWABILITY = { itemVisiblePercentThreshold: 1 }
 
 // A binder's edit mode, for the grid: which cards are selected, what a tap and a hold do, each
 // card's drag gesture, and whether cards are being dragged (the grid doesn't scroll meanwhile).
-export type GridEdit = {
+type GridEdit = {
   editing: boolean
   selected: number[]
   dragging: boolean
@@ -36,21 +36,12 @@ export type GridEdit = {
 // A binder card, as grouping reads it (the same groups as a deck's cards).
 type EntryLine = Groupable & { entry: CollectionEntry }
 
-function colorsOf(entry: CollectionEntry): Color[] {
-  try {
-    const list = JSON.parse(entry.colors) as string[]
-    return WUBRG.filter((c) => list.includes(c))
-  } catch {
-    return []
-  }
-}
-
 const lineOf = (entry: CollectionEntry): EntryLine => ({
   entry,
   commander: false,
   type: primaryType(entry.type_line ?? ''),
   cmc: entry.cmc ?? 0,
-  colors: colorsOf(entry),
+  colors: parseColors(entry.colors),
   rarity: entry.rarity,
   set: entry.set_code,
   setName: entry.set_name,
@@ -72,7 +63,8 @@ const rowsOf = (cards: CollectionEntry[], prefix: string): Item[] =>
 // Owned cards in a scrolling 3-column grid, in groups when `groupBy` says so (each group's header
 // opens and closes it, like a deck's). The cards tilt with the phone while the screen is shown,
 // except in edit mode (`edit`), where they lie still and the bottom leaves room for the edit bar.
-// `onOpen` gets a tapped card and the ids of the cards on show, in the grid's order (open groups only).
+// `onOpen` gets a tapped card and the ids of the cards on show, in the grid's order (open groups
+// only).
 export function CardGrid({
   entries,
   empty,
@@ -140,7 +132,8 @@ export function CardGrid({
       {isFocused && !reducedMotion && !editing && <TiltSensor tilt={tilt} />}
       <TiltContext value={tilt}>
         {/* Gesture handler's list: a card picked up to drag takes the touch from it. */}
-        <FlatList<Item> showsVerticalScrollIndicator={false}
+        <FlatList<Item>
+          showsVerticalScrollIndicator={false}
           style={styles.grid}
           data={items}
           keyExtractor={(item) => item.key}
@@ -161,7 +154,7 @@ export function CardGrid({
                     <Text style={styles.headCount}>{group.count}</Text>
                   </View>
                   <Text style={styles.headValue}>{money.eur(group.value)}</Text>
-                  <SymbolView
+                  <Icon
                     name={open ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
                     size={16}
                     tintColor={Colors.textMuted}
@@ -172,7 +165,7 @@ export function CardGrid({
             return (
               <View style={styles.row}>
                 {item.cards.map(tile)}
-                {/* Empty slots fill a short row, so its cards keep the same width instead of stretching. */}
+                {/* Empty slots fill a short row, so its cards keep their width instead of stretching. */}
                 {Array.from({ length: COLUMNS - item.cards.length }, (_, i) => (
                   <View key={`spacer-${i}`} style={styles.spacer} />
                 ))}
