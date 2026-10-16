@@ -3,7 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { useCallback, useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewToken } from 'react-native';
 import { FlatList, type GestureType } from 'react-native-gesture-handler';
-import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 
 import { TiltContext, TiltSensor } from '@/components/card-effects/tilt';
 import { CardTile } from '@/components/card-tile';
@@ -13,7 +13,8 @@ import type { CardSort } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
 import { entryPrice, type CollectionEntry } from '@/db/collection';
 import { groupLines, primaryType, WUBRG, type Color, type Group, type Groupable, type GroupBy } from '@/rules/deck-stats';
-import { formatEur } from '@/utils/format';
+import { useAnimationsOff } from '@/utils/motion';
+import { useMoney } from '@/utils/money';
 
 // Cards per row, like a 9-pocket binder page.
 const COLUMNS = 3
@@ -85,8 +86,9 @@ export function CardGrid({
   groupBy?: GroupBy
   onOpen?: (entry: CollectionEntry, shown: number[]) => void
 }) {
+  const money = useMoney()
   const isFocused = useIsFocused()
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = useAnimationsOff()
   const editing = edit?.editing ?? false
   const tiltX = useSharedValue(0)
   const tiltY = useSharedValue(0)
@@ -138,7 +140,7 @@ export function CardGrid({
       {isFocused && !reducedMotion && !editing && <TiltSensor tilt={tilt} />}
       <TiltContext value={tilt}>
         {/* Gesture handler's list: a card picked up to drag takes the touch from it. */}
-        <FlatList<Item>
+        <FlatList<Item> showsVerticalScrollIndicator={false}
           style={styles.grid}
           data={items}
           keyExtractor={(item) => item.key}
@@ -151,14 +153,14 @@ export function CardGrid({
                   onPress={() => setClosed(open ? [...closed, group.key] : closed.filter((k) => k !== group.key))}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: open }}
-                  accessibilityLabel={`${group.name}, ${group.count} cards, ${formatEur(group.value)}`}
+                  accessibilityLabel={`${group.name}, ${group.count} cards, ${money.eur(group.value)}`}
                 >
                   <GroupIcon head={group.head} />
                   <View style={styles.headTitle}>
                     <Text style={styles.headName} numberOfLines={1}>{group.name}</Text>
                     <Text style={styles.headCount}>{group.count}</Text>
                   </View>
-                  <Text style={styles.headValue}>{formatEur(group.value)}</Text>
+                  <Text style={styles.headValue}>{money.eur(group.value)}</Text>
                   <SymbolView
                     name={open ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
                     size={16}

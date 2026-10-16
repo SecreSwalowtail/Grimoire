@@ -9,10 +9,11 @@ import { FolderIcon } from '@/components/decks/parts';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { Colors, Fonts } from '@/constants/theme';
 import { deckValue, deleteDecks, FOLDER_COLORS, folderDecks, useDeckStore, withAlpha } from '@/utils/deck-store';
-import { formatEur } from '@/utils/format';
+import { useMoney } from '@/utils/money';
 
 // One folder's decks. Swipe a deck left for Move / Delete (with Undo).
 export default function FolderScreen() {
+  const money = useMoney()
   const insets = useSafeAreaInsets()
   const { folderId } = useLocalSearchParams<{ folderId: string }>()
   const store = useDeckStore()
@@ -25,7 +26,7 @@ export default function FolderScreen() {
 
   const hex = FOLDER_COLORS[folder.color].hex
   const inside = folderDecks(decks, folder, store)
-  const value = formatEur(inside.reduce((sum, d) => sum + deckValue(d, store), 0))
+  const value = money.eur(inside.reduce((sum, d) => sum + deckValue(d, store), 0))
 
   return (
     <View style={styles.root}>
@@ -33,7 +34,7 @@ export default function FolderScreen() {
         pointerEvents="none"
         style={[styles.glow, { experimental_backgroundImage: `radial-gradient(closest-side, ${withAlpha(hex, 0.2)}, rgba(0,0,0,0))` }]}
       />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityRole="button">
             <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />

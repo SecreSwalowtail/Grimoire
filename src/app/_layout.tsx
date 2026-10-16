@@ -17,11 +17,14 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 
 import { FpsMeter } from '@/components/dev/fps-meter';
 import { migrateDbIfNeeded } from '@/db/schema';
 import { loadDeckStore } from '@/utils/deck-store';
+import { refreshRates } from '@/utils/money';
 import { timed, useFpsMeter } from '@/utils/perf';
+import { useSettings } from '@/utils/settings';
 
 // Keep the splash screen up until the fonts are ready, so text never flashes in the system font.
 SplashScreen.preventAutoHideAsync();
@@ -40,6 +43,8 @@ async function initDb(db: SQLiteDatabase) {
 
 export default function RootLayout() {
   const fpsMeter = useFpsMeter()
+  // Settings → Animations off: every Reanimated animation finishes at once (dragging still works).
+  const animations = useSettings().animations
   const [fontsLoaded, fontError] = useFonts({
     CormorantGaramond_500Medium,
     CormorantGaramond_500Medium_Italic,
@@ -56,12 +61,18 @@ export default function RootLayout() {
     if (fontsLoaded || fontError) SplashScreen.hideAsync()
   }, [fontsLoaded, fontError])
 
+  // Today's exchange rates, for prices in the user's currency (kept a day).
+  useEffect(() => {
+    refreshRates()
+  }, [])
+
   // On a font error, continue with system fonts rather than staying on the splash screen.
   if (!fontsLoaded && !fontError) return null
 
   // Gesture root for swipeable rows (Decks folder screen).
   return (
   <GestureHandlerRootView style={{ flex: 1 }}>
+    <ReducedMotionConfig mode={animations ? ReduceMotion.System : ReduceMotion.Always} />
     <SQLiteProvider databaseName='binder.db' onInit={initDb}>
       <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
       {fpsMeter && <FpsMeter />}

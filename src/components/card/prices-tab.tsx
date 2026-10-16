@@ -7,6 +7,8 @@ import { Colors, Fonts } from '@/constants/theme';
 import type { CollectionEntry, Finish, PricePoint } from '@/db/collection';
 import type { ScryfallCard } from '@/db/scryfall';
 import { FINISH_LABEL, printingLabel } from '@/rules/printings';
+import { useMoney } from '@/utils/money';
+import { getSettings } from '@/utils/settings';
 import {
   formatPrice,
   priceOf,
@@ -14,7 +16,6 @@ import {
   type PriceSource,
   SHOW_HISTORY,
 } from '@/utils/card-prices';
-import { formatEur } from '@/utils/format';
 
 // C2 · Card — Prices. Today's price comes from Scryfall; the chart, average, low and high come
 // from the published daily prices (see remote-prices.ts) and the days saved on the
@@ -45,20 +46,25 @@ export function PricesTab({
   finish: Finish
   onFinish: (finish: Finish) => void
 }) {
+  const money = useMoney()
   const finishes = (card.finishes ?? ['nonfoil']) as Finish[]
-  const [source, setSource] = useState<PriceSource>('cardmarket')
+  const [source, setSource] = useState<PriceSource>(() => getSettings().priceSource)
   const [range, setRange] = useState('3M')
   const shownFinish = finish
   const current = RANGES.find((r) => r.key === range)!
-  const fmt = (v: number) => formatPrice(v, source)
+  const fmt = (v: number) => formatPrice(v, source, money)
 
   const now = priceOf(card, shownFinish, source)
   // Without the published prices set up (PRICES_URL), the chart stays empty.
   const points = SHOW_HISTORY ? pricesWithin(history, current.days, shownFinish, source) : []
   const values = points.map((p) => p.value)
   const enough = values.length >= 2
+  // The day being read off the chart (dragging across it), or null for today.
+  const [scrub, setScrub] = useState<number | null>(null)
+  const held = scrub != null && scrub < points.length ? points[scrub] : null
   const first = values[0]
-  const diff = enough ? values[values.length - 1] - first : 0
+  // Up to the day on the chart, or the whole range.
+  const diff = enough ? (held?.value ?? values[values.length - 1]) - first : 0
   const pct = enough && first ? (diff / first) * 100 : 0
   const avg = enough ? values.reduce((s, v) => s + v, 0) / values.length : null
   const lo = enough ? Math.min(...values) : null
@@ -104,8 +110,11 @@ export function PricesTab({
 
       <View style={styles.headline}>
         <View>
-          <Text style={styles.label}>{sourceName}{shownFinish !== 'nonfoil' ? ` · ${FINISH_LABEL[shownFinish].toLowerCase()}` : ''}</Text>
-          <Text style={styles.now}>{now != null ? fmt(now) : 'No price'}</Text>
+          <Text style={styles.label}>
+            {held ? shortDate(held.date) : sourceName}
+            {shownFinish !== 'nonfoil' ? ` · ${FINISH_LABEL[shownFinish].toLowerCase()}` : ''}
+          </Text>
+          <Text style={styles.now}>{held ? fmt(held.value) : now != null ? fmt(now) : 'No price'}</Text>
         </View>
         <View style={styles.changeBox}>
           {enough ? (
@@ -115,13 +124,14 @@ export function PricesTab({
           ) : (
             <Text style={styles.changeMuted}>{NO_DATA}</Text>
           )}
-          <Text style={styles.rangeWords}>{current.words}</Text>
+          <Text style={styles.rangeWords}>{held && points[0] ? `since ${shortDate(points[0].date)}` : current.words}</Text>
         </View>
       </View>
 
       <PriceChart
         values={values}
         format={fmt}
+        onScrub={setScrub}
         label={enough ? `Price ${current.words}, from ${fmt(values[0])} to ${fmt(values[values.length - 1])}` : 'No price history yet'}
       />
       <View style={styles.axisRow}>
@@ -158,15 +168,15 @@ export function PricesTab({
           <Text style={[styles.label, styles.sectionGap]}>Your {mine.length === 1 && mine[0].quantity === 1 ? 'copy' : 'copies'}</Text>
           <View style={styles.mine}>
             <View style={styles.mineText}>
-              <Text style={styles.mineWorth}>Worth {formatEur(worth)}</Text>
+              <Text style={styles.mineWorth}>Worth {money.eur(worth)}</Text>
               <Text style={styles.mineMeta}>
-                {mine.map((c) => `${c.quantity} × ${printingLabel(card)} · ${c.condition}${c.purchase_price != null ? ` · paid ${formatEur(c.purchase_price)}` : ''}`).join('\n')}
+                {mine.map((c) => `${c.quantity} × ${printingLabel(card)} · ${c.condition}${c.purchase_price != null ? ` · paid ${money.eur(c.purchase_price)}` : ''}`).join('\n')}
               </Text>
             </View>
             {gain != null && (
               <View style={styles.mineGain}>
                 <Text style={[styles.gain, { color: gain >= 0 ? Colors.positive : Colors.negative }]}>
-                  {gain >= 0 ? '+' : '−'}{formatEur(Math.abs(gain))}
+                  {gain >= 0 ? '+' : '−'}{money.eur(Math.abs(gain))}
                 </Text>
                 {paid > 0 && (
                   <Text style={[styles.gainPct, { color: gain >= 0 ? Colors.positive : Colors.negative }]}>
@@ -180,7 +190,8 @@ export function PricesTab({
       )}
 
       <Text style={styles.footnote}>
-        Prices come from Scryfall and refresh daily: Cardmarket&apos;s trend price in euros, TCGplayer&apos;s market price in dollars.
+        Prices come from Scryfall and refresh daily: Cardmarket&apos;s trend price and TCGplayer&apos;s market price, shown in your currency
+        (Settings).
         {mine.length > 0 && paidCopies.length === 0 ? ' Add what you paid for a copy (Printings tab) to see your gain.' : ''}
       </Text>
     </View>

@@ -32,8 +32,8 @@ import {
   type DeckData,
   type Undo,
 } from '@/utils/deck-store';
-import { formatEur } from '@/utils/format';
 import { useSearchBack } from '@/utils/use-search-back';
+import { useMoney } from '@/utils/money';
 
 const NEW_FOLDER = 'new-folder'
 
@@ -75,6 +75,7 @@ function placed(order: string[], moving: string[], target: string) {
 // kind puts them in its place. Sort, + and the search make way for Duplicate (tap it, or drop on
 // it); the bar at the bottom has Undo and Done. Deleting folders asks what to do with their decks.
 export default function DecksScreen() {
+  const money = useMoney()
   const insets = useSafeAreaInsets()
   const store = useDeckStore()
   const { folders, decks } = store
@@ -106,7 +107,7 @@ export default function DecksScreen() {
   const shownFolders = sortFolders(folders.filter((f) => !q || f.name.toLowerCase().includes(q)), decks, sort, store)
   // While searching, decks inside folders match too.
   const shownDecks = sortDecks(q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose, sort, store)
-  const totalValue = formatEur(decks.reduce((sum, d) => sum + deckValue(d, store), 0))
+  const totalValue = money.eur(decks.reduce((sum, d) => sum + deckValue(d, store), 0))
   const count = (folderId: string) => decks.filter((d) => d.folderId === folderId).length
   // Grid tiles: folder ids, then the "New folder" card (hidden while searching).
   const tiles = [...shownFolders.map((f) => f.id), ...(q ? [] : [NEW_FOLDER])]
@@ -315,7 +316,7 @@ export default function DecksScreen() {
         )}
       </View>
 
-      <AnimatedScrollView
+      <AnimatedScrollView showsVerticalScrollIndicator={false}
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}

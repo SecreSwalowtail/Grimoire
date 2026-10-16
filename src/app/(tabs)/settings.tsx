@@ -1,255 +1,331 @@
+import Constants from 'expo-constants';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Toggle } from '@/components/controls';
+import { Chip, SectionLabel, Segmented, Toggle } from '@/components/controls';
+import { DevTools } from '@/components/dev/dev-tools';
+import { CurrencySheet } from '@/components/settings/currency-sheet';
 import { Colors, Fonts } from '@/constants/theme';
-import { clearDatabase, hasTestData, seedTestData } from '@/utils/dev-seed';
-import { clearTimings, setFpsMeter, useFpsMeter, useTimings } from '@/utils/perf';
+import { exportCollection, importCollection } from '@/db/import-export';
+import { CONDITIONS } from '@/rules/collection';
+import { currencyName, phoneCurrency, useMoney } from '@/utils/money';
+import { setSettings, useSettings } from '@/utils/settings';
 
-// Settings isn't designed in the app yet. Holding the title for a second opens the Developer
-// tools for the performance pass: test data, the frame-rate meter and recent timings. They work
-// in release builds and stay hidden otherwise.
+type Tab = 'settings' | 'tools'
+
+const VERSION = Constants.expoConfig?.version ?? '1.0.0'
+
+// Settings: prices (currency, which market), scanning (condition), the app (animations,
+// vibration), the collection (export / import CSV) and about (version, sources). Tools: to come.
+// Holding the title for a second opens the Developer tools (performance pass).
 export default function SettingsScreen() {
-  const [devTools, setDevTools] = useState(false)
-  return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <Pressable onLongPress={() => setDevTools(!devTools)} delayLongPress={900} accessibilityRole="header">
-        <Text style={styles.title}>Settings</Text>
-      </Pressable>
-      {devTools && <DevTools />}
-    </SafeAreaView>
-  )
-}
-
-function DevTools() {
   const db = useSQLiteContext()
-  const meter = useFpsMeter()
-  const timings = useTimings()
+  const settings = useSettings()
+  const money = useMoney()
+  const [tab, setTab] = useState<Tab>('settings')
+  const [devTools, setDevTools] = useState(false)
+  const [currencyOpen, setCurrencyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  // Clearing erases your own cards and decks too: the first tap only asks.
-  const [confirmClear, setConfirmClear] = useState(false)
 
-  const run = async (work: () => Promise<void>) => {
+  const phone = phoneCurrency()
+  const currency = settings.currency ?? phone
+  const currencyText = `${currencyName(currency)} (${money.code === currency ? money.symbol : currency})${settings.currency == null ? ' · automatic' : ''}`
+
+  const run = async (work: () => Promise<string | null>) => {
     if (busy) return
     setBusy(true)
+    setStatus(null)
     try {
-      await work()
+      setStatus(await work())
     } catch (e) {
       setStatus(`Failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(false)
     }
   }
-
-  const fill = () =>
+  const exportCsv = () =>
     run(async () => {
-      if (await hasTestData(db)) {
-        setStatus('Test data is already there. Clear the database first.')
-        return
-      }
-      await seedTestData(db, setStatus)
+      const { exported } = await exportCollection(db)
+      return `Exported ${exported} ${exported === 1 ? 'card' : 'cards'}.`
     })
-
-  const clear = () => {
-    if (!confirmClear) {
-      setConfirmClear(true)
-      setStatus('This erases everything: your binder, decks, folders and price history. Tap again to confirm.')
-      return
-    }
-    setConfirmClear(false)
+  const importCsv = () =>
     run(async () => {
-      setStatus('Clearing the database…')
-      await clearDatabase(db)
-      setStatus('Database cleared.')
+      const result = await importCollection(db)
+      if (result.canceled) return null
+      const failed = result.failed.length ? ` ${result.failed.length} not found (${result.failed.slice(0, 3).map((f) => f.name).join(', ')}${result.failed.length > 3 ? '…' : ''}).` : ''
+      return `Imported ${result.imported} ${result.imported === 1 ? 'card' : 'cards'}.${failed}`
     })
-  }
 
   return (
-    <ScrollView style={styles.tools} contentContainerStyle={styles.toolsContent}>
-      <Text style={styles.label}>Developer tools</Text>
-
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Test data</Text>
-        <Text style={styles.body}>
-          About 2,000 real cards in the binder (1 in 5 foil, 30 days of prices) and 50 decks of 100–200 cards. Needs internet; takes a
-          minute. Clear database erases everything, your own cards and decks too.
-        </Text>
-        <View style={styles.buttons}>
-          <TouchableOpacity style={[styles.button, styles.primary, busy && styles.off]} onPress={fill} disabled={busy} accessibilityRole="button">
-            <Text style={styles.primaryLabel}>Fill with test data</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, confirmClear && styles.danger, busy && styles.off]}
-            onPress={clear}
-            disabled={busy}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.buttonLabel, confirmClear && styles.dangerLabel]}>{confirmClear ? 'Tap to erase' : 'Clear database'}</Text>
-          </TouchableOpacity>
-        </View>
-        {status && <Text style={styles.status}>{status}</Text>}
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <Pressable onLongPress={() => setDevTools(!devTools)} delayLongPress={900} accessibilityRole="header">
+        <Text style={styles.title}>Settings</Text>
+      </Pressable>
+      <View style={styles.tabs}>
+        <Segmented
+          label="Settings or tools"
+          options={[
+            { value: 'settings', label: 'Settings' },
+            { value: 'tools', label: 'Tools' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
       </View>
 
-      <View style={[styles.panel, styles.row]}>
-        <View style={styles.rowText}>
-          <Text style={styles.panelTitle}>Frame-rate meter</Text>
-          <Text style={styles.body}>UI and JS frames per second, and the slowest frame, top right.</Text>
-        </View>
-        <Toggle value={meter} onChange={setFpsMeter} label="Frame-rate meter" />
-      </View>
-
-      <View style={styles.panel}>
-        <View style={styles.row}>
-          <Text style={[styles.panelTitle, styles.rowText]}>Timings</Text>
-          <TouchableOpacity onPress={clearTimings} accessibilityRole="button">
-            <Text style={styles.link}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.body}>Newest first, last 100. Also in the device log as [perf] lines.</Text>
-        {timings.length === 0 ? (
-          <Text style={styles.status}>Nothing yet: use the app, then come back.</Text>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.content}>
+        {tab === 'tools' ? (
+          <View style={styles.soon}>
+            <SymbolView name={{ ios: 'wrench.and.screwdriver', android: 'build' }} size={30} tintColor={Colors.goldLight} />
+            <Text style={styles.soonTitle}>More tools in future versions</Text>
+            <Text style={styles.soonText}>Handy tools for your collection and decks will show up here.</Text>
+          </View>
         ) : (
-          timings.map((t, i) => (
-            <View key={`${t.at}-${i}`} style={styles.timing}>
-              <Text style={styles.timingName} numberOfLines={2}>
-                {t.name}
-                {t.detail ? <Text style={styles.timingDetail}> · {t.detail}</Text> : null}
-              </Text>
-              <Text style={styles.timingMs}>{t.ms} ms</Text>
+          <>
+            <SectionLabel style={styles.label}>Prices</SectionLabel>
+            <View style={styles.group}>
+              <Row
+                title="Currency"
+                subtitle={currencyText}
+                onPress={() => setCurrencyOpen(true)}
+                trailing={<SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />}
+              />
+              <View style={[styles.item, styles.rule]}>
+                <Text style={styles.itemTitle}>Prices from</Text>
+                <Text style={styles.itemSubtitle}>The market the Market and Card detail show first.</Text>
+                <View style={styles.control}>
+                  <Segmented
+                    label="Prices from"
+                    small
+                    options={[
+                      { value: 'cardmarket', label: 'Cardmarket' },
+                      { value: 'tcgplayer', label: 'TCGplayer' },
+                    ]}
+                    value={settings.priceSource}
+                    onChange={(priceSource) => setSettings({ priceSource })}
+                  />
+                </View>
+              </View>
             </View>
-          ))
+            <Text style={styles.note}>
+              Prices are converted from euros and dollars with the European Central Bank&apos;s daily rates.
+            </Text>
+
+            <SectionLabel style={styles.label}>Scanning</SectionLabel>
+            <View style={styles.group}>
+              <View style={styles.item}>
+                <Text style={styles.itemTitle}>Condition of scanned cards</Text>
+                <Text style={styles.itemSubtitle}>{CONDITIONS.find((c) => c.code === settings.scanCondition)?.name}. You can change a card&apos;s condition later.</Text>
+                <View style={[styles.control, styles.chips]}>
+                  {CONDITIONS.map((c) => (
+                    <Chip key={c.code} label={c.code} selected={settings.scanCondition === c.code} onPress={() => setSettings({ scanCondition: c.code })} />
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <SectionLabel style={styles.label}>App</SectionLabel>
+            <View style={styles.group}>
+              <Row
+                title="Animations"
+                subtitle="Card effects, transitions and bounces. Turn off on slower phones; dragging still works."
+                trailing={<Toggle value={settings.animations} onChange={(animations) => setSettings({ animations })} label="Animations" />}
+              />
+              <Row
+                rule
+                title="Vibration"
+                subtitle="Light taps when you swipe through cards or read the price chart."
+                trailing={<Toggle value={settings.haptics} onChange={(haptics) => setSettings({ haptics })} label="Vibration" />}
+              />
+            </View>
+
+            <SectionLabel style={styles.label}>Collection</SectionLabel>
+            <View style={styles.group}>
+              <Row title="Export collection" subtitle="Every card in your binders, as a CSV file (Moxfield's format)." onPress={exportCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} />} />
+              <Row rule title="Import collection" subtitle="Add cards from a CSV file, e.g. exported from Moxfield." onPress={importCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.down', android: 'download' }} />} />
+            </View>
+            {(busy || status) && <Text style={styles.status}>{busy ? 'Working…' : status}</Text>}
+
+            <SectionLabel style={styles.label}>About</SectionLabel>
+            <View style={styles.group}>
+              <Row title="Version" trailing={<Text style={styles.value}>{VERSION}</Text>} />
+              <Row rule title="Card data and images" subtitle="Scryfall. Prices: Cardmarket and TCGplayer, through Scryfall." />
+            </View>
+            <Text style={styles.note}>
+              Grimoire is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards. Portions of
+              the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
+            </Text>
+          </>
         )}
-      </View>
-    </ScrollView>
+        {devTools && <DevTools />}
+      </ScrollView>
+
+      <CurrencySheet visible={currencyOpen} onClose={() => setCurrencyOpen(false)} />
+    </SafeAreaView>
   )
+}
+
+// A settings row: title, explanation, something at the end (a toggle, a value, an arrow).
+// `onPress` makes the whole row a button.
+function Row({
+  title,
+  subtitle,
+  trailing,
+  onPress,
+  disabled,
+  rule,
+}: {
+  title: string
+  subtitle?: string
+  trailing?: ReactNode
+  onPress?: () => void
+  disabled?: boolean
+  rule?: boolean
+}) {
+  const content = (
+    <>
+      <View style={styles.rowText}>
+        <Text style={styles.itemTitle}>{title}</Text>
+        {subtitle != null && <Text style={styles.itemSubtitle}>{subtitle}</Text>}
+      </View>
+      {trailing}
+    </>
+  )
+  if (!onPress) return <View style={[styles.row, rule && styles.rule]}>{content}</View>
+  return (
+    <TouchableOpacity style={[styles.row, rule && styles.rule, disabled && styles.off]} onPress={onPress} disabled={disabled} accessibilityRole="button">
+      {content}
+    </TouchableOpacity>
+  )
+}
+
+function Action({ icon }: { icon: SymbolViewProps['name'] }) {
+  return <SymbolView name={icon} size={20} tintColor={Colors.goldLight} />
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingHorizontal: 20,
   },
   title: {
     marginTop: 16,
+    marginHorizontal: 20,
     fontSize: 42,
     fontFamily: Fonts.serif,
     color: Colors.text,
   },
-  tools: {
-    flex: 1,
-    marginTop: 16,
+  tabs: {
+    marginTop: 12,
+    marginHorizontal: 20,
   },
-  toolsContent: {
-    gap: 12,
+  scroll: {
+    flex: 1,
+    marginTop: 8,
+  },
+  content: {
+    paddingHorizontal: 20,
     paddingBottom: 120,
   },
   label: {
+    marginTop: 20,
+    marginBottom: 8,
     marginLeft: 2,
-    fontSize: 12,
-    fontFamily: Fonts.extraBold,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: Colors.textSecondary,
   },
-  panel: {
-    padding: 16,
+  group: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
-    gap: 8,
+    overflow: 'hidden',
   },
-  panelTitle: {
+  row: {
+    minHeight: 60,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  rule: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(237,230,214,0.07)',
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  item: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 2,
+  },
+  itemTitle: {
     fontSize: 15,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
   },
-  body: {
+  itemSubtitle: {
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 18,
     fontFamily: Fonts.regular,
     color: Colors.textSecondary,
   },
-  buttons: {
-    marginTop: 4,
+  control: {
+    marginTop: 10,
+  },
+  chips: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  button: {
-    height: 44,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceRaised,
-    justifyContent: 'center',
-  },
-  primary: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: Colors.gold,
-  },
-  off: {
-    opacity: 0.5,
-  },
-  danger: {
-    backgroundColor: '#B5412A',
-  },
-  dangerLabel: {
-    color: '#FFF4EC',
-  },
-  primaryLabel: {
-    fontSize: 14,
+  value: {
+    fontSize: 15,
     fontFamily: Fonts.extraBold,
-    color: Colors.onGold,
+    color: Colors.goldLight,
+    fontVariant: ['tabular-nums'],
   },
-  buttonLabel: {
-    fontSize: 14,
-    fontFamily: Fonts.extraBold,
-    color: Colors.text,
+  note: {
+    marginTop: 8,
+    marginHorizontal: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: Fonts.regular,
+    color: Colors.textMuted,
   },
   status: {
+    marginTop: 8,
+    marginHorizontal: 4,
     fontSize: 13,
     fontFamily: Fonts.bold,
     color: Colors.goldLight,
   },
-  row: {
-    flexDirection: 'row',
+  off: {
+    opacity: 0.5,
+  },
+  soon: {
+    marginTop: 48,
+    paddingHorizontal: 24,
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  rowText: {
-    flex: 1,
-  },
-  link: {
-    fontSize: 13,
-    fontFamily: Fonts.extraBold,
-    color: Colors.gold,
-  },
-  timing: {
-    paddingVertical: 6,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(237,230,214,0.07)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  timingName: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: Fonts.semiBold,
+  soonTitle: {
+    marginTop: 6,
+    fontSize: 24,
+    fontFamily: Fonts.serif,
     color: Colors.text,
+    textAlign: 'center',
   },
-  timingDetail: {
-    fontFamily: Fonts.regular,
+  soonText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: Fonts.medium,
     color: Colors.textSecondary,
-  },
-  timingMs: {
-    fontSize: 13,
-    fontFamily: Fonts.extraBold,
-    color: Colors.goldLight,
-    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
   },
 })

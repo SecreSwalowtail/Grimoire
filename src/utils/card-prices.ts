@@ -1,7 +1,7 @@
 import { PRICES_URL } from '@/constants/prices'
 import type { Finish, PricePoint } from '@/db/collection'
 import type { ScryfallCard } from '@/db/scryfall'
-import { formatEur } from '@/utils/format'
+import type { Money } from '@/utils/money'
 
 // Prices for Card detail. Scryfall passes on Cardmarket's price in EUR and TCGplayer's market price
 // in USD, once a day. History: the published daily prices (remote-prices.ts), plus the days the
@@ -24,12 +24,9 @@ export function mainFinish(card: ScryfallCard): Finish {
   return finishes.find((f) => priceOf(card, f, 'cardmarket') != null) ?? finishes[0] ?? 'nonfoil'
 }
 
-// "$12.40"
-export function formatUsd(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-export const formatPrice = (value: number, source: PriceSource) => (source === 'cardmarket' ? formatEur(value) : formatUsd(value))
+// A price from one of the markets (euros or dollars), in the user's currency.
+export const formatPrice = (value: number, source: PriceSource, money: Money) =>
+  source === 'cardmarket' ? money.eur(value) : money.usd(value)
 
 export function pointValue(point: PricePoint, finish: Finish, source: PriceSource) {
   if (source === 'cardmarket') return finish === 'nonfoil' ? point.price_eur : point.price_eur_foil

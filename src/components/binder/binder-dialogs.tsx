@@ -5,6 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View 
 import { RadioDot } from '@/components/decks/parts';
 import { Colors, Fonts } from '@/constants/theme';
 import type { Binder } from '@/db/binders';
+import { useModalAnimation } from '@/utils/motion';
 
 const DANGER = '#EE8466'
 
@@ -33,8 +34,9 @@ function Dialog({
   onClose: () => void
   children?: ReactNode
 }) {
+  const modalAnimation = useModalAnimation()
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={modalAnimation} statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.dialog} accessibilityRole="alert" accessibilityViewIsModal>
           <View style={[styles.icon, danger ? styles.iconDanger : styles.iconGold]}>
@@ -102,7 +104,7 @@ export function RemoveBinderDialog({
       onClose={onClose}
     >
       {cards > 0 && (
-        <ScrollView style={styles.choicesBox} bounces={false}>
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.choicesBox} bounces={false}>
           <View accessibilityRole="radiogroup" style={styles.choices}>
             {choices.map((c) => {
               const selected = c.id === moveTo

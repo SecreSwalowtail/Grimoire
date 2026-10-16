@@ -15,7 +15,6 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Animated, {
   SlideInDown,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -25,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Colors, Fonts } from '@/constants/theme';
+import { useAnimationsOff, useModalAnimation } from '@/utils/motion';
 
 // Building blocks shared by the bottom sheets (Market sort & filters, Decks).
 
@@ -85,12 +85,13 @@ export function Sheet({
   fullHeight?: boolean
   children: ReactNode
 }) {
+  const modalAnimation = useModalAnimation()
   // The modal window covers the whole screen, but on Android React Native lays its content out
   // as if it were the screen minus the status and navigation bars, which left the sheet floating
   // above the bottom edge. Sizing the backdrop to the full screen puts the sheet on the edge.
   const height = Dimensions.get('screen').height
   const insets = useSafeAreaInsets()
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = useAnimationsOff()
   const offset = useSharedValue(0)
   // The latest onClose, for a drag that ends after the screen re-rendered.
   const latestClose = useRef(onClose)
@@ -110,7 +111,7 @@ export function Sheet({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType={modalAnimation}
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}

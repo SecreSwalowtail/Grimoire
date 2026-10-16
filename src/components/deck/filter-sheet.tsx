@@ -64,7 +64,7 @@ export function FilterSheet({
   return (
     <Sheet visible={visible} onClose={onClose} fullHeight>
       <SheetHeader title="Filter" onClose={onClose} onReset={() => setDraft(NO_FILTERS)} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         <SectionLabel style={styles.label}>Card type</SectionLabel>
         <View style={styles.wrap}>
           {types.map((t) => (

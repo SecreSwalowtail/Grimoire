@@ -7,6 +7,7 @@ import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls';
 import { Colors, Fonts } from '@/constants/theme';
 import { editEntries, type CollectionEntry, type Condition, type CopyEdits, type Finish } from '@/db/collection';
 import { CONDITIONS, FINISH_NAME } from '@/rules/collection';
+import { currencyName, useMoney } from '@/utils/money';
 
 // Edit cards: condition, finish, and whether you got them in a trade (checked, the price paid per
 // copy opens under it), for one card (the quick look) or every card picked in a binder's edit mode
@@ -40,6 +41,7 @@ export function EditCopiesSheet({
   onSaved: (undo: () => Promise<unknown>, cards: number) => void
 }) {
   const db = useSQLiteContext()
+  const money = useMoney()
   const [condition, setCondition] = useState<Condition | null>(null)
   const [finish, setFinish] = useState<Finish | null>(null)
   // null: mixed.
@@ -62,7 +64,7 @@ export function EditCopiesSheet({
       setCondition(sameCondition ?? null)
       setFinish(sameFinish ?? null)
       setTraded(sameTraded ?? null)
-      setPaid(samePaid != null ? samePaid.toFixed(2) : '')
+      setPaid(samePaid != null ? money.fromEur(samePaid).toFixed(2) : '')
       setPaidTouched(false)
     }
   }
@@ -79,7 +81,9 @@ export function EditCopiesSheet({
     if (traded != null && traded !== sameTraded) edits.traded = traded
     // The price only opens for traded cards; unchecked, it stays as it is.
     if (traded && paidTouched) {
-      const price = parsePaid(paid)
+      // Typed in the user's currency, kept in euros (to the cent).
+      const typed = parsePaid(paid)
+      const price = typed == null ? null : Math.round(money.toEur(typed) * 100) / 100
       if (price !== samePaid) edits.purchasePrice = price
     }
     if (Object.keys(edits).length === 0) {
@@ -101,7 +105,7 @@ export function EditCopiesSheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={one ? 'Edit card' : `Edit ${entries.length} cards`} onClose={onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Text style={styles.lead} numberOfLines={2}>
           {one
             ? `${entries[0].name} · ${copies} ${copies === 1 ? 'copy' : 'copies'}`
@@ -178,7 +182,7 @@ export function EditCopiesSheet({
           <>
             <Text style={[styles.label, styles.gap]}>Price paid per copy</Text>
             <View style={styles.field}>
-              <Text style={styles.currency}>€</Text>
+              <Text style={styles.currency}>{money.symbol}</Text>
               <TextInput
                 style={styles.input}
                 value={paid}
@@ -189,7 +193,7 @@ export function EditCopiesSheet({
                 placeholder={samePaid === undefined && !paidTouched ? 'Different prices' : '0.00'}
                 placeholderTextColor={Colors.textMuted}
                 keyboardType="decimal-pad"
-                accessibilityLabel="Price paid per copy, in euros"
+                accessibilityLabel={`Price paid per copy, in ${currencyName(money.code)}`}
               />
               {paid !== '' && (
                 <TouchableOpacity

@@ -204,7 +204,7 @@ export function BinderToDeckSheet({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         <Segmented label="Add to which part of the deck" options={BOARDS} value={board} onChange={setBoard} />
 
         {/* Only when it makes a difference: some card was picked more than once. */}

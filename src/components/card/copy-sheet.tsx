@@ -19,7 +19,7 @@ import { cardThumb, type ScryfallCard } from '@/db/scryfall';
 import { CONDITIONS, COPY_LANGUAGES, LANGUAGE_NAMES } from '@/rules/collection';
 import { FINISH_LABEL, printingLabel } from '@/rules/printings';
 import { mainFinish } from '@/utils/card-prices';
-import { formatEur } from '@/utils/format';
+import { currencyName, useMoney, type Money } from '@/utils/money';
 
 // C5 · Add / edit a copy. Adding uses the printing on show ("Change" goes to Printings to pick
 // another); editing keeps the copy's printing. Under it, the binder the copy goes in (your first
@@ -41,6 +41,9 @@ const parsePaid = (text: string) => {
   return text.trim() && Number.isFinite(value) && value >= 0 ? value : null
 }
 
+// What was paid, typed in the user's currency, kept in euros (to the cent).
+const toEur = (value: number | null, money: Money) => (value == null ? null : Math.round(money.toEur(value) * 100) / 100)
+
 export function CopySheet({
   visible,
   card,
@@ -59,6 +62,7 @@ export function CopySheet({
   // For the holographic thumbnail when a foil finish is picked.
   tilt: Tilt
 }) {
+  const money = useMoney()
   const db = useSQLiteContext()
   const editing = entry != null
   // The copy's own printing when editing (it may not be the one on show).
@@ -96,7 +100,7 @@ export function CopySheet({
               finish: entry.finish,
               condition: entry.condition,
               language: entry.language,
-              paid: entry.purchase_price != null ? entry.purchase_price.toFixed(2) : '',
+              paid: entry.purchase_price != null ? money.fromEur(entry.purchase_price).toFixed(2) : '',
               forTrade: entry.for_trade === 1,
             }
           : {
@@ -125,7 +129,7 @@ export function CopySheet({
   const unit = entry && !samePrinting
     ? draft.finish === 'nonfoil' ? entry.price_eur ?? entry.price_eur_foil : entry.price_eur_foil ?? entry.price_eur
     : Number((draft.finish === 'nonfoil' ? card.prices.eur ?? card.prices.eur_foil : card.prices.eur_foil ?? card.prices.eur) ?? NaN)
-  const value = unit != null && Number.isFinite(unit) ? formatEur(unit * draft.qty) : '—'
+  const value = unit != null && Number.isFinite(unit) ? money.eur(unit * draft.qty) : '—'
   const printingTitle = entry && !samePrinting
     ? `${entry.set_name} #${entry.collector_number}`
     : `${printingLabel(card)} · ${card.set_name} #${card.collector_number}`
@@ -141,7 +145,7 @@ export function CopySheet({
         finish: draft.finish,
         condition: draft.condition,
         language: draft.language,
-        purchasePrice: parsePaid(draft.paid),
+        purchasePrice: toEur(parsePaid(draft.paid), money),
         forTrade: draft.forTrade,
       }
       if (entry) await updateEntry(db, entry.id, { ...changes, binderId: changes.binderId ?? entry.binder_id })
@@ -168,7 +172,7 @@ export function CopySheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={editing ? 'Edit copy' : 'Add to binder'} onClose={onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Pressable
           style={styles.printing}
           onPress={editing ? undefined : onChangePrinting}
@@ -286,7 +290,7 @@ export function CopySheet({
           <View style={styles.paidBox}>
             <Text style={styles.label}>Price paid · optional</Text>
             <View style={styles.field}>
-              <Text style={styles.currency}>€</Text>
+              <Text style={styles.currency}>{money.symbol}</Text>
               <TextInput
                 style={styles.input}
                 value={draft.paid}
@@ -294,7 +298,7 @@ export function CopySheet({
                 placeholder="0.00"
                 placeholderTextColor={Colors.textMuted}
                 keyboardType="decimal-pad"
-                accessibilityLabel="Price paid per copy, in euros"
+                accessibilityLabel={`Price paid per copy, in ${currencyName(money.code)}`}
               />
             </View>
           </View>

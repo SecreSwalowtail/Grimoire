@@ -91,7 +91,7 @@ export function BinderSheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={binder ? 'Edit binder' : 'New binder'} onClose={onClose} />
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
         keyboardShouldPersistTaps="handled"

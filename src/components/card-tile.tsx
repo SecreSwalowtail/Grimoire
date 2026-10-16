@@ -4,13 +4,15 @@ import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
-import Animated, { css, cubicBezier, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
+import Animated, { css, cubicBezier, useAnimatedStyle } from 'react-native-reanimated';
 
 import { HoloFoil } from '@/components/card-effects/holo-foil';
 import { FLAT, useTilt, type Tilt } from '@/components/card-effects/tilt';
 import { Colors, Fonts, RarityColors } from '@/constants/theme';
 import { entryPrice, type CollectionEntry } from '@/db/collection';
-import { capitalize, formatEur } from '@/utils/format';
+import { capitalize } from '@/utils/format';
+import { useAnimationsOff } from '@/utils/motion';
+import { useMoney } from '@/utils/money';
 
 // Magic cards are 63 × 88 mm.
 const CARD_RATIO = 63 / 88
@@ -63,6 +65,7 @@ export type TileEdit = {
 
 // `onOpen`: what a tap does outside edit mode (the Binder's quick look); Card detail without it.
 export function CardTile({ entry, active, edit, onOpen }: { entry: CollectionEntry; active: boolean; edit?: TileEdit; onOpen?: () => void }) {
+  const money = useMoney()
   const screenTilt = useTilt()
   const editing = edit?.editing ?? false
   const selected = editing && (edit?.selected ?? false)
@@ -85,7 +88,7 @@ export function CardTile({ entry, active, edit, onOpen }: { entry: CollectionEnt
       accessibilityRole={editing ? 'checkbox' : 'button'}
       accessibilityState={editing ? { checked: selected } : undefined}
       accessibilityHint={edit && !editing ? 'Hold to select and drag' : undefined}
-      accessibilityLabel={`${entry.name}, ${entry.quantity} ${entry.quantity === 1 ? 'copy' : 'copies'}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? formatEur(price) : 'no price'}`}
+      accessibilityLabel={`${entry.name}, ${entry.quantity} ${entry.quantity === 1 ? 'copy' : 'copies'}${foil ? `, ${entry.finish}` : ''}, ${set} ${capitalize(entry.rarity)}, ${price != null ? money.eur(price) : 'no price'}`}
     >
       <CardFace entry={entry} tilt={active && !editing ? screenTilt : FLAT} still={editing}>
         {selected && (
@@ -103,7 +106,7 @@ export function CardTile({ entry, active, edit, onOpen }: { entry: CollectionEnt
           <View style={[styles.dot, { backgroundColor: RarityColors[entry.rarity] ?? Colors.textMuted }]} />
           <Text style={styles.set} numberOfLines={1}>{set}</Text>
         </View>
-        <Text style={styles.price} numberOfLines={1}>{price != null ? formatEur(price) : '—'}</Text>
+        <Text style={styles.price} numberOfLines={1}>{price != null ? money.eur(price) : '—'}</Text>
       </View>
     </Pressable>
   )
@@ -132,7 +135,7 @@ export function CardFace({
   style?: StyleProp<ViewStyle>
   children?: ReactNode
 }) {
-  const reducedMotion = useReducedMotion() || still
+  const reducedMotion = useAnimationsOff() || still
   const foil = entry.finish !== 'nonfoil'
   const tier = tierFor(entryPrice(entry))
   const premium = tier >= 2

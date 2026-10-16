@@ -2,6 +2,7 @@ import { SymbolView } from 'expo-symbols';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
+import { useModalAnimation } from '@/utils/motion';
 
 export type CardSort = 'recent' | 'price' | 'priceAsc' | 'name'
 
@@ -30,8 +31,9 @@ export function SortMenu<T extends string>({
   onSelect: (value: T) => void
   onClose: () => void
 }) {
+  const modalAnimation = useModalAnimation()
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={modalAnimation} onRequestClose={onClose}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={`Close ${title.toLowerCase()} menu`} />
       <View style={[styles.menu, { top }]} accessibilityRole="menu">
         <Text style={styles.heading}>{title}</Text>

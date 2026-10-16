@@ -1,5 +1,4 @@
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SymbolView } from 'expo-symbols';
@@ -10,7 +9,6 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   type SharedValue,
@@ -30,7 +28,9 @@ import { cardManaCost, faceImage, type ScryfallCard } from '@/db/scryfall';
 import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection';
 import { COLOR_HEX, WUBRG, type Color } from '@/rules/deck-stats';
 import { cardUse, useDeckStore, withAlpha } from '@/utils/deck-store';
-import { capitalize, formatEur } from '@/utils/format';
+import { capitalize } from '@/utils/format';
+import { tick, useAnimationsOff, useModalAnimation } from '@/utils/motion';
+import { useMoney } from '@/utils/money';
 
 // 1b · Card quick look: a card from a binder held up over the blurred binder, alive like in the
 // grid (it tilts with the phone, foils shine, expensive cards shimmer), with what a player wants at
@@ -99,6 +99,8 @@ export function QuickLook({
   // After a change to the collection (reload).
   onChanged: () => void
 }) {
+  const money = useMoney()
+  const modalAnimation = useModalAnimation()
   const db = useSQLiteContext()
   const store = useDeckStore()
   const insets = useSafeAreaInsets()
@@ -113,7 +115,7 @@ export function QuickLook({
   const [editOpen, setEditOpen] = useState(false)
   const [sheetH, setSheetH] = useState(360)
   // Phone tilt for the card on show, as in the grid (the sensor runs only while open).
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = useAnimationsOff()
   const tiltX = useSharedValue(0)
   const tiltY = useSharedValue(0)
   const [tilt] = useState<Tilt>(() => ({ x: tiltX, y: tiltY }))
@@ -177,7 +179,7 @@ export function QuickLook({
     if (!e) return
     expected.set(target)
     setAt({ id: e.id, index: target })
-    Haptics.selectionAsync().catch(() => undefined)
+    tick()
   }
   const go = (by: number) => {
     const target = Math.max(0, Math.min(last, index + by))
@@ -251,7 +253,7 @@ export function QuickLook({
   const around = [-2, -1, 1, 2, 0].map((d) => index + d).filter((i) => i >= 0 && i <= last)
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={modalAnimation} statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <GestureHandlerRootView style={styles.root}>
         {visible && !reducedMotion && <TiltSensor tilt={tilt} />}
         {/* The binder underneath, blurred (only dimmed on Android before 12). */}
@@ -347,7 +349,7 @@ export function QuickLook({
               </View>
             </View>
             <View style={styles.priceBox}>
-              <Text style={styles.price}>{price != null ? formatEur(price) : '—'}</Text>
+              <Text style={styles.price}>{price != null ? money.eur(price) : '—'}</Text>
               {change != null && (
                 <Text style={[styles.change, { color: change > 0 ? Colors.positive : change < 0 ? Colors.negative : Colors.textSecondary }]}>
                   {change > 0 ? '▲' : change < 0 ? '▼' : '—'} {Math.abs(change).toFixed(1)}% · 7 days
@@ -372,7 +374,7 @@ export function QuickLook({
               </Text>
               <Text style={styles.copiesValue} numberOfLines={1}>
                 {qty} {qty === 1 ? 'copy' : 'copies'}
-                {price != null ? ` · ${formatEur(price * qty)}` : ''}
+                {price != null ? ` · ${money.eur(price * qty)}` : ''}
               </Text>
             </View>
             <View style={styles.stepper}>
@@ -397,7 +399,7 @@ export function QuickLook({
             <Chip label={conditionName(entry.condition)} />
             <Chip label={LANGUAGE_NAMES[entry.language] ?? entry.language.toUpperCase()} />
             {entry.traded === 1 && <Chip label="Traded" />}
-            {entry.purchase_price != null && <Chip label={`Paid ${formatEur(entry.purchase_price)}`} />}
+            {entry.purchase_price != null && <Chip label={`Paid ${money.eur(entry.purchase_price)}`} />}
             {entry.for_trade === 1 && <Chip label="For trade" gold />}
             <Chip label={decks ? `In ${decks} ${decks === 1 ? 'deck' : 'decks'}` : 'In no deck'} gold={decks > 0} />
           </View>

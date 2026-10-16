@@ -4,7 +4,7 @@ import { usePreventRemove } from 'expo-router/react-navigation';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useReducedMotion, useSharedValue } from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddToDeckSheet, copiesNeeded } from '@/components/card/add-to-deck-sheet';
@@ -25,6 +25,7 @@ import { mainFinish } from '@/utils/card-prices';
 import { useCard, useLocalCardData, useOracleData } from '@/utils/use-card-detail';
 import { cardInfoOf, cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store';
 import { record } from '@/utils/perf';
+import { useAnimationsOff } from '@/utils/motion';
 
 // Card detail (design C1–C6): opened from a Binder card or a Market row with the printing's
 // Scryfall id. Overview / Prices / Printings / Rules are tabs on one screen; picking another
@@ -47,7 +48,7 @@ export default function CardScreen() {
   const tiltY = useSharedValue(0)
   const [tilt] = useState(() => ({ x: tiltX, y: tiltY }))
   const isFocused = useIsFocused()
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = useAnimationsOff()
   // The hero card held out to full screen (card-zoom.tsx), and whether it's on its way back.
   const [zoom, setZoom] = useState<{ from: ZoomFrom; closing: boolean } | null>(null)
   // The page the zoomed card blurs (Android needs it named; iOS blurs whatever is underneath).
@@ -125,7 +126,7 @@ export default function CardScreen() {
   return (
     <View style={styles.root}>
       <BlurTargetView ref={page} style={styles.page}>
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         ref={scroll}
         contentContainerStyle={[
           styles.content,

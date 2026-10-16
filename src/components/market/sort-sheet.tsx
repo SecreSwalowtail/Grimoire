@@ -5,6 +5,7 @@ import { PrimaryButton, SectionLabel, Sheet, SheetHeader, ToggleRow } from '@/co
 import { SortPicker, type SortOption } from '@/components/sort-picker';
 import { Colors } from '@/constants/theme';
 import type { SearchOrder } from '@/db/scryfall';
+import { useMoney } from '@/utils/money';
 
 export type MarketSort = {
   by: SearchOrder
@@ -42,6 +43,7 @@ export function SortSheet({
   onApply: (value: MarketSort) => void
   onClose: () => void
 }) {
+  const money = useMoney()
   const [draft, setDraft] = useState(value)
   // Start every opening from the applied sort (state adjusted during render, no effect needed).
   const [wasVisible, setWasVisible] = useState(visible)
@@ -52,11 +54,11 @@ export function SortSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose}>
-      <ScrollView bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <SheetHeader title="Sort & display" onClose={onClose} />
 
         <SortPicker
-          options={SORTS}
+          options={SORTS.map((o) => (o.value === 'eur' ? { ...o, glyph: money.symbol } : o))}
           by={draft.by}
           desc={draft.desc}
           onBy={(by) => setDraft({ ...draft, by })}

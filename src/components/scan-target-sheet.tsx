@@ -59,7 +59,7 @@ export function ScanTargetSheet({ visible, binders, onClose }: { visible: boolea
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title="Scan into" onClose={onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         <Segmented
           label="Scan into"
           options={INTO}

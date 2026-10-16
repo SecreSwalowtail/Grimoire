@@ -102,7 +102,7 @@ export function NewSheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={isDeck ? 'New deck' : 'New folder'} onClose={onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Segmented
           label="What to create"
           options={[

@@ -6,7 +6,7 @@ import { PrimaryButton, SectionLabel, Sheet } from '@/components/controls';
 import { Option } from '@/components/decks/new-sheet';
 import { DeckThumb, NameField } from '@/components/decks/parts';
 import { Colors, Fonts } from '@/constants/theme';
-import { formatEur } from '@/utils/format';
+import { useMoney } from '@/utils/money';
 import {
   deckCardCount,
   deckValue,
@@ -36,6 +36,7 @@ export function DeckOptionsSheet({
   onImport: (deckId: string) => void
   onDeleted: (name: string, undo: Undo) => void
 }) {
+  const money = useMoney()
   const store = useDeckStore()
   const { folders, decks } = store
   const deck = decks.find((d) => d.id === deckId)
@@ -56,7 +57,7 @@ export function DeckOptionsSheet({
 
   const folder = folders.find((f) => f.id === deck?.folderId)
   const cardCount = deck ? deckCardCount(deck, store) : 0
-  const value = formatEur(deck ? deckValue(deck, store) : 0)
+  const value = money.eur(deck ? deckValue(deck, store) : 0)
 
   return (
     <Sheet visible={deck != null} onClose={onClose}>
@@ -73,7 +74,7 @@ export function DeckOptionsSheet({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <NameField label="Deck name" value={name} onChange={setName} />
 
         <SectionLabel style={styles.label}>Format</SectionLabel>

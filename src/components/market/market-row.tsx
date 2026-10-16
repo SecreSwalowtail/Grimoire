@@ -5,21 +5,22 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ManaSymbol, parseManaCost } from '@/components/mana-symbol';
 import { Colors, Fonts, RarityColors } from '@/constants/theme';
 import { cardImage, cardManaCost, cardThumb, rememberCard, type ScryfallCard } from '@/db/scryfall';
-import { formatUsd, type PriceSource } from '@/utils/card-prices';
-import { capitalize, formatEur } from '@/utils/format';
+import type { PriceSource } from '@/utils/card-prices';
+import { capitalize } from '@/utils/format';
+import { useMoney, type Money } from '@/utils/money';
 
 // Rows and tiles open Card detail; it gets the card from memory, so it opens without a request.
 // The design's weekly ▲/▼ % under the price needs price history we don't have for search results yet.
 
 // The chosen market's price: non-foil, else foil (else etched, on TCGplayer).
-function price(card: ScryfallCard, source: PriceSource) {
+function price(card: ScryfallCard, source: PriceSource, money: Money) {
   const p = card.prices
   if (source === 'cardmarket') {
     const eur = p.eur ?? p.eur_foil
-    return eur != null ? formatEur(Number(eur)) : '—'
+    return eur != null ? money.eur(Number(eur)) : '—'
   }
   const usd = p.usd ?? p.usd_foil ?? p.usd_etched
-  return usd != null ? formatUsd(Number(usd)) : '—'
+  return usd != null ? money.usd(Number(usd)) : '—'
 }
 
 // fromDeck: the deck whose + opened the Market; adding the card to a deck then goes back to it.
@@ -28,15 +29,16 @@ function open(card: ScryfallCard, fromDeck?: string) {
   router.push({ pathname: '/card/[id]', params: fromDeck ? { id: card.id, fromDeck } : { id: card.id } })
 }
 
-function label(card: ScryfallCard, source: PriceSource) {
-  return `${card.name}, ${card.set.toUpperCase()} ${capitalize(card.rarity)}, ${price(card, source)}`
+function label(card: ScryfallCard, source: PriceSource, money: Money) {
+  return `${card.name}, ${card.set.toUpperCase()} ${capitalize(card.rarity)}, ${price(card, source, money)}`
 }
 
 // List view: thumbnail, name (+ language if not English), mana cost, rarity · set, price.
 export function MarketRow({ card, source, fromDeck }: { card: ScryfallCard; source: PriceSource; fromDeck?: string }) {
+  const money = useMoney()
   const cost = parseManaCost(cardManaCost(card))
   return (
-    <Pressable style={styles.row} onPress={() => open(card, fromDeck)} accessibilityRole="button" accessibilityLabel={label(card, source)}>
+    <Pressable style={styles.row} onPress={() => open(card, fromDeck)} accessibilityRole="button" accessibilityLabel={label(card, source, money)}>
       <Image source={{ uri: cardThumb(card) ?? undefined }} style={styles.thumb} contentFit="cover" transition={120} />
       <View style={styles.middle}>
         <View style={styles.nameRow}>
@@ -53,18 +55,19 @@ export function MarketRow({ card, source, fromDeck }: { card: ScryfallCard; sour
           <Text style={styles.meta} numberOfLines={1}>{card.set.toUpperCase()} · {capitalize(card.rarity)}</Text>
         </View>
       </View>
-      <Text style={styles.price}>{price(card, source)}</Text>
+      <Text style={styles.price}>{price(card, source, money)}</Text>
     </Pressable>
   )
 }
 
 // Grid view: the card image with name and price under it, 3 per row like the Binder.
 export function MarketTile({ card, source, fromDeck }: { card: ScryfallCard; source: PriceSource; fromDeck?: string }) {
+  const money = useMoney()
   return (
-    <Pressable style={styles.tile} onPress={() => open(card, fromDeck)} accessibilityRole="button" accessibilityLabel={label(card, source)}>
+    <Pressable style={styles.tile} onPress={() => open(card, fromDeck)} accessibilityRole="button" accessibilityLabel={label(card, source, money)}>
       <Image source={{ uri: cardImage(card) ?? undefined }} style={styles.tileImage} contentFit="cover" transition={150} />
       <Text style={styles.tileName} numberOfLines={1}>{card.name}</Text>
-      <Text style={styles.tilePrice}>{price(card, source)}</Text>
+      <Text style={styles.tilePrice}>{price(card, source, money)}</Text>
     </Pressable>
   )
 }

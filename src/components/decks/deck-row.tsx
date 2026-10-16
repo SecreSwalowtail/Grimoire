@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 
 import { DeckThumb, FolderFan, FolderIcon } from '@/components/decks/parts';
 import { Colors, Fonts } from '@/constants/theme';
-import { formatEur } from '@/utils/format';
+import { useMoney } from '@/utils/money';
 import {
   deckCardCount,
   deckValue,
@@ -41,9 +41,10 @@ export function DeckRow({
   edit?: RowEdit
   onHold?: () => void
 }) {
+  const money = useMoney()
   const data = useDeckStore()
   const meta = deckMeta(deck, data)
-  const value = formatEur(deckValue(deck, data))
+  const value = money.eur(deckValue(deck, data))
   return (
     <View style={[styles.row, !last && styles.rule]}>
       {edit?.selected && <View pointerEvents="none" style={styles.rowOn} />}

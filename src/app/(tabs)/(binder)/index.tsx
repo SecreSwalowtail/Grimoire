@@ -19,8 +19,8 @@ import { SortMenu } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
 import { deleteBinder, mergeBinders, reorderBinders, type Binder } from '@/db/binders';
 import type { CollectionEntry } from '@/db/collection';
-import { formatEur } from '@/utils/format';
 import { forgetScanBinder } from '@/utils/scan-target';
+import { useMoney } from '@/utils/money';
 
 type BinderSort = 'custom' | 'value' | 'valueAsc' | 'name'
 
@@ -43,6 +43,7 @@ type Row = { id: string; binder: Binder; value: number; cards: number; change: n
 // selected (tap another to pick it instead). Keep holding to drag it: drop it in another place to
 // reorder, or on the middle of another binder to merge the two.
 export default function BindersScreen() {
+  const money = useMoney()
   const db = useSQLiteContext()
   const insets = useSafeAreaInsets()
   // Two columns between 20 px margins; the binder drawing scales to fit.
@@ -154,7 +155,7 @@ export default function BindersScreen() {
         }}
         accessibilityRole="button"
         accessibilityState={editing ? { selected: isSelected } : undefined}
-        accessibilityLabel={`${editing ? 'Select' : 'Open'} ${binder.name}, ${cards} ${cards === 1 ? 'card' : 'cards'}, ${formatEur(value)}`}
+        accessibilityLabel={`${editing ? 'Select' : 'Open'} ${binder.name}, ${cards} ${cards === 1 ? 'card' : 'cards'}, ${money.eur(value)}`}
         accessibilityHint={editing ? undefined : 'Hold to edit, reorder or merge binders'}
       >
         <BinderCover color={binder.color} scale={coverScale} />
@@ -167,10 +168,10 @@ export default function BindersScreen() {
         <View style={styles.itemText}>
           <Text style={[styles.name, isSelected && styles.nameSelected]} numberOfLines={1}>{binder.name}</Text>
           <View style={styles.itemValueRow}>
-            <Text style={styles.itemValue}>{formatEur(value)}</Text>
+            <Text style={styles.itemValue}>{money.eur(value)}</Text>
             {change != null && (
               <Text style={[styles.itemChange, { color: change >= 0 ? Colors.positive : Colors.negative }]}>
-                {change >= 0 ? '▲' : '▼'} {formatEur(Math.abs(change))}
+                {change >= 0 ? '▲' : '▼'} {money.eur(Math.abs(change))}
               </Text>
             )}
           </View>
@@ -270,7 +271,7 @@ export default function BindersScreen() {
           }
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.content} scrollEnabled={!dragging}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content} scrollEnabled={!dragging}>
           <ReorderGrid
             items={sorted}
             columns={2}

@@ -51,7 +51,7 @@ export function MoveSheet({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.list} bounces={false} accessibilityRole="radiogroup">
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.list} bounces={false} accessibilityRole="radiogroup">
         <Destination
           name="No folder"
           meta={current === null ? 'Current location' : 'Outside folders'}

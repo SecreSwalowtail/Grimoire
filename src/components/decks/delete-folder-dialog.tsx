@@ -5,6 +5,7 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import { RadioDot } from '@/components/decks/parts';
 import { Colors, Fonts } from '@/constants/theme';
 import { deleteFolders, useDeckStore, type Undo } from '@/utils/deck-store';
+import { useModalAnimation } from '@/utils/motion';
 
 const DANGER = '#EE8466'
 
@@ -19,6 +20,7 @@ export function DeleteFolderDialog({
   onClose: () => void
   onDeleted: (message: string, undo: Undo) => void
 }) {
+  const modalAnimation = useModalAnimation()
   const { folders, decks } = useDeckStore()
   const targets = folders.filter((f) => folderIds?.includes(f.id))
   const inside = decks.filter((d) => d.folderId != null && folderIds?.includes(d.folderId)).length
@@ -44,7 +46,7 @@ export function DeleteFolderDialog({
     <Modal
       visible={targets.length > 0}
       transparent
-      animationType="fade"
+      animationType={modalAnimation}
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}

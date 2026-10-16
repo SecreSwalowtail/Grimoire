@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
@@ -22,7 +21,9 @@ import { isPlayable, PAPER_FORMATS } from '@/rules/formats';
 import { FLIPPABLE } from '@/rules/printings';
 import { mainFinish, priceChange, priceOf, SHOW_HISTORY } from '@/utils/card-prices';
 import { withAlpha } from '@/utils/deck-store';
-import { capitalize, formatEur } from '@/utils/format';
+import { capitalize } from '@/utils/format';
+import { thump } from '@/utils/motion';
+import { useMoney } from '@/utils/money';
 
 // C1 · Card — Overview: the hero (art backdrop, tilted card, name, cost, type), then at a glance,
 // card text, facts and legality. The bottom bar (Add to deck / Add to binder) is the screen's.
@@ -88,7 +89,7 @@ export function CardHero({
   const frame = useRef<View>(null)
   const [pressed, setPressed] = useState(false)
   const zoom = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined)
+    thump()
     frame.current?.measureInWindow((x, y, width, height) => onZoom({ x, y, width, height }))
   }
   const tiltStyle = useAnimatedStyle(() => ({
@@ -195,6 +196,7 @@ export function OverviewTab({
   onTab: (tab: CardTab) => void
   onAddToDeck: () => void
 }) {
+  const money = useMoney()
   const finish = mainFinish(card)
   const price = priceOf(card, finish, 'cardmarket')
   // Past prices are off for now, so no change over time either.
@@ -217,7 +219,7 @@ export function OverviewTab({
     <View style={styles.tab}>
       <View style={styles.glance} accessibilityLabel="At a glance">
         <TouchableOpacity style={styles.glanceCell} onPress={() => onTab('prices')} accessibilityRole="button">
-          <Text style={[styles.glanceValue, styles.gold]}>{price != null ? formatEur(price) : '—'}</Text>
+          <Text style={[styles.glanceValue, styles.gold]}>{price != null ? money.eur(price) : '—'}</Text>
           {change ? (
             <Text style={[styles.glanceNote, { color: change.diff >= 0 ? Colors.positive : Colors.negative }]}>
               {change.diff >= 0 ? '▲' : '▼'} {Math.abs(change.percent).toFixed(1)}% · {change.days}d

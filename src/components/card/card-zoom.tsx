@@ -8,7 +8,6 @@ import Animated, {
   interpolate,
   useAnimatedReaction,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
@@ -18,6 +17,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { HoloFoil } from '@/components/card-effects/holo-foil';
 import type { Tilt } from '@/components/card-effects/tilt';
 import { faceImage, type ScryfallCard } from '@/db/scryfall';
+import { useAnimationsOff } from '@/utils/motion';
 
 // Tap the hero card on Card detail: it lifts out of the header to almost the whole screen, over
 // the blurred page. It tilts much further than anywhere else, with the phone and under your finger
@@ -70,7 +70,7 @@ export function CardZoom({
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions()
   const insets = useSafeAreaInsets()
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = useAnimationsOff()
 
   // As big as fits with a margin, in the card's 63:88 shape, centered.
   const width = Math.min(screenW - 40, ((screenH - insets.top - insets.bottom - 64) * 63) / 88)

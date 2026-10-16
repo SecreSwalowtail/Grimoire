@@ -21,8 +21,8 @@ import {
   type GroupBy,
 } from '@/rules/deck-stats';
 import { cardInfoOf, removeDeckCards, setDeckCardCount, useDeckStore, type Board, type CardInfo, type Undo } from '@/utils/deck-store';
-import { formatEur } from '@/utils/format';
 import { useSearchBack } from '@/utils/use-search-back';
+import { useMoney } from '@/utils/money';
 
 // A search the deck has nothing for asks the Market after this pause in typing, from this many
 // letters, and shows this many of its cards (most played first).
@@ -93,6 +93,7 @@ export function CardsTab({
   // A card's last copy taken out with −: its name, and how to put it back (the Undo toast).
   onTakenOut: (name: string, undo: Undo) => void
 }) {
+  const money = useMoney()
   const db = useSQLiteContext()
   const store = useDeckStore()
   const [query, setQuery] = useState('')
@@ -281,14 +282,14 @@ export function CardsTab({
                   onPress={() => setClosed(open ? [...closed, g.key] : closed.filter((k) => k !== g.key))}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: open }}
-                  accessibilityLabel={`${g.name}, ${g.count} cards, ${formatEur(g.value)}`}
+                  accessibilityLabel={`${g.name}, ${g.count} cards, ${money.eur(g.value)}`}
                 >
                   <GroupIcon head={g.head} />
                   <View style={styles.groupTitle}>
                     <Text style={styles.groupName} numberOfLines={1}>{g.name}</Text>
                     <Text style={styles.groupCount}>{g.count}</Text>
                   </View>
-                  <Text style={styles.groupValue}>{formatEur(g.value)}</Text>
+                  <Text style={styles.groupValue}>{money.eur(g.value)}</Text>
                   <SymbolView
                     name={open ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
                     size={16}
@@ -312,12 +313,12 @@ export function CardsTab({
                         accessibilityRole={editing ? 'checkbox' : 'button'}
                         accessibilityState={editing ? { checked: on } : undefined}
                         accessibilityHint={editing ? undefined : 'Hold to select and drag'}
-                        accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? formatEur(l.price * l.quantity) : 'no price'}`}
+                        accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? money.eur(l.price * l.quantity) : 'no price'}`}
                       >
                         <CardText
                           name={l.name}
                           cost={l.manaCost}
-                          price={l.price != null ? formatEur(l.price * l.quantity) : '—'}
+                          price={l.price != null ? money.eur(l.price * l.quantity) : '—'}
                           tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
                         />
                         {editing ? (
@@ -369,12 +370,12 @@ export function CardsTab({
                   style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                   onPress={() => router.push({ pathname: '/card/[id]', params: { id: card.id, fromDeck: deckId } })}
                   accessibilityRole="button"
-                  accessibilityLabel={`${card.name}, ${n ? `${n} in the deck` : 'not in the deck'}, ${price != null ? formatEur(price) : 'no price'}`}
+                  accessibilityLabel={`${card.name}, ${n ? `${n} in the deck` : 'not in the deck'}, ${price != null ? money.eur(price) : 'no price'}`}
                 >
                   <CardText
                     name={card.name}
                     cost={cardManaCost(card)}
-                    price={price != null ? formatEur(price * Math.max(n, 1)) : '—'}
+                    price={price != null ? money.eur(price * Math.max(n, 1)) : '—'}
                     tag={n === 0 ? 'Not in deck' : null}
                     tagMuted
                   />

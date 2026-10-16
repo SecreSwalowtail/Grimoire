@@ -53,7 +53,7 @@ export function ImportSheet({ deckId, onClose }: { deckId: string | null; onClos
   return (
     <Sheet visible={deck != null} onClose={busy ? () => {} : onClose}>
       <SheetHeader title="Import decklist" onClose={busy ? undefined : onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         {result ? (
           <View>
             <View style={styles.done}>

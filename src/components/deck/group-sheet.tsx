@@ -45,7 +45,7 @@ export function GroupSheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title="Group by" onClose={onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         <View style={styles.options} accessibilityRole="radiogroup" accessibilityLabel="Group cards by">
           {GROUP_OPTIONS.map((o) => {
             const on = o.value === pick

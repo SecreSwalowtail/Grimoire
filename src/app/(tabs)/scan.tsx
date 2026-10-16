@@ -20,13 +20,14 @@ import { scanDecks, ScanTargetSheet, scanTargetLabel } from '@/components/scan-t
 import { ScanToast, ScanToastData } from '@/components/scan-toast';
 import { Colors, Fonts } from '@/constants/theme';
 import { getBinders, type Binder } from '@/db/binders';
-import { addToCollection, removeOneCopy } from '@/db/collection';
+import { addToCollection, removeOneCopy, type Condition } from '@/db/collection';
 import { cardImage, getCardBySetNumber, getSets, type ScryfallCard } from '@/db/scryfall';
 import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button';
 import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan';
 import { ocrRows, parseCollectorLine } from '@/utils/collector-line';
 import { addCardsToDecks, cardInfoOf, getDeckStore, useDeckStore, type Undo } from '@/utils/deck-store';
 import { getScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target';
+import { getSettings } from '@/utils/settings';
 
 // Where the set code + collector number sit on a card, as fractions of the card: the bottom-left
 // corner, with room around it (it reaches past the card's edges) because the card found in the
@@ -82,6 +83,7 @@ export default function ScanScreen() {
   const [lastAdded, setLastAdded] = useState<{
     cardId: string
     language: string
+    condition: Condition
     target: ScanTarget
     // Taking it back out of the decks (null: it went into none).
     deckUndo: Undo | null
@@ -188,12 +190,13 @@ export default function ScanScreen() {
       }
       // Into the binder and / or decks picked in "Scan into" (decks deleted meanwhile are skipped).
       const into = getScanTarget()
-      if (into.binder) await addToCollection(db, found, { language: line.language, binderId: into.binderId ?? undefined })
+      const condition = getSettings().scanCondition
+      if (into.binder) await addToCollection(db, found, { language: line.language, binderId: into.binderId ?? undefined, condition })
       const deckUndo =
         into.decks && into.deckIds.length > 0
           ? addCardsToDecks(into.deckIds, [{ cardId: found.id, info: cardInfoOf(found), quantity: 1 }], into.board)
           : null
-      setLastAdded({ cardId: found.id, language: line.language, target: into, deckUndo })
+      setLastAdded({ cardId: found.id, language: line.language, condition, target: into, deckUndo })
       setToast({
         ok: true,
         name: found.name,
@@ -221,7 +224,13 @@ export default function ScanScreen() {
     if (!lastAdded) return
     try {
       const { target: into } = lastAdded
-      if (into.binder) await removeOneCopy(db, lastAdded.cardId, { language: lastAdded.language, binderId: into.binderId ?? undefined })
+      if (into.binder) {
+        await removeOneCopy(db, lastAdded.cardId, {
+          language: lastAdded.language,
+          binderId: into.binderId ?? undefined,
+          condition: lastAdded.condition,
+        })
+      }
       lastAdded.deckUndo?.()
       setLastAdded(null)
       setToast(null)

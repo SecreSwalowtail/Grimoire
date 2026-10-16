@@ -41,7 +41,7 @@ export function FolderEditSheet({
   return (
     <Sheet visible={folder != null} onClose={onClose}>
       <SheetHeader title="Edit folder" onClose={onClose} />
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <NameField
           label="Name"
           value={name}

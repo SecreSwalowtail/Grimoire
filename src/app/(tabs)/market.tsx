@@ -34,6 +34,7 @@ import {
 } from '@/utils/market-filters';
 import type { PriceSource } from '@/utils/card-prices';
 import { useSearchBack } from '@/utils/use-search-back';
+import { getSettings } from '@/utils/settings';
 
 // Cards per row in grid view, same as the Binder.
 const COLUMNS = 3
@@ -109,7 +110,7 @@ export default function MarketScreen() {
   const [sortOpen, setSortOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<FilterTab>('format')
-  const [source, setSource] = useState<PriceSource>('cardmarket')
+  const [source, setSource] = useState<PriceSource>(() => getSettings().priceSource)
   const [sourceOpen, setSourceOpen] = useState(false)
   // The last finished search, tagged with the request it answered: while the search box or sort
   // has moved on from it, a new search is loading.
@@ -314,7 +315,7 @@ export default function MarketScreen() {
       {/* Header stays fixed; only the results scroll. */}
       <View style={{ paddingTop: insets.top + 8 }}>{header}</View>
       {suggesting ? (
-        <ScrollView contentContainerStyle={styles.suggestContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.suggestContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {(suggestions?.names ?? []).slice(0, MAX_SUGGESTIONS).map((name) => (
             <TouchableOpacity key={name} style={styles.suggestion} onPress={() => pickName(name)} accessibilityRole="button">
               <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={16} tintColor={Colors.textMuted} />
@@ -327,7 +328,7 @@ export default function MarketScreen() {
           </TouchableOpacity>
         </ScrollView>
       ) : view === 'list' ? (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           key="list"
           data={loading ? [] : results}
           keyExtractor={(card) => card.id}
@@ -338,7 +339,7 @@ export default function MarketScreen() {
           keyboardDismissMode="on-drag"
         />
       ) : (
-        <FlatList<ScryfallCard | null>
+        <FlatList<ScryfallCard | null> showsVerticalScrollIndicator={false}
           key="grid"
           // Empty slots fill the last row, so its cards keep the same width instead of stretching.
           data={loading ? [] : [...results, ...Array<null>((COLUMNS - (results.length % COLUMNS)) % COLUMNS).fill(null)]}

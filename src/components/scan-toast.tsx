@@ -3,6 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
+import { useMoney } from '@/utils/money';
 
 export type ScanToastData =
   | {
@@ -10,6 +11,7 @@ export type ScanToastData =
       name: string
       set: string
       rarity: string
+      // Cardmarket's price in euros, as Scryfall gives it.
       price: string | null
       image: string | null
     }
@@ -18,6 +20,7 @@ export type ScanToastData =
 // "Last scanned card" card from the Scan design: thumbnail, result, details, Undo. `where`: what the
 // card went into ("Main binder + Izzet Wizards").
 export function ScanToast({ data, where = 'Binder', onUndo }: { data: ScanToastData; where?: string; onUndo?: () => void }) {
+  const money = useMoney()
   if (!data.ok) {
     return (
       <View style={[styles.toast, styles.toastError]} accessibilityRole="alert">
@@ -45,7 +48,7 @@ export function ScanToast({ data, where = 'Binder', onUndo }: { data: ScanToastD
         <Text style={styles.name} numberOfLines={1}>{data.name}</Text>
         <Text style={styles.detail} numberOfLines={1}>
           {data.set} · {rarity}
-          {data.price != null && <Text style={styles.price}> · €{data.price}</Text>}
+          {data.price != null && <Text style={styles.price}> · {money.eur(Number(data.price))}</Text>}
         </Text>
       </View>
       {onUndo && (

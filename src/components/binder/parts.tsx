@@ -4,22 +4,23 @@ import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 
 import { PathIcon } from '@/components/deck/parts';
 import { Colors, Fonts } from '@/constants/theme';
-import { formatEur } from '@/utils/format';
 import { useSearchBack } from '@/utils/use-search-back';
+import { useMoney } from '@/utils/money';
 
 // "All binders  €1,284.60          ▲ €42.10 / this week · 312 cards"
 export function ValueSummary({ label, value, cards, change }: { label: string; value: number; cards: number; change: number | null }) {
+  const money = useMoney()
   const cardsText = `${cards} ${cards === 1 ? 'card' : 'cards'}`
   return (
-    <View style={styles.valueRow} accessible accessibilityLabel={`${label} ${formatEur(value)}, ${cardsText}`}>
+    <View style={styles.valueRow} accessible accessibilityLabel={`${label} ${money.eur(value)}, ${cardsText}`}>
       <View>
         <Text style={styles.sectionLabel}>{label}</Text>
-        <Text style={styles.value}>{formatEur(value)}</Text>
+        <Text style={styles.value}>{money.eur(value)}</Text>
       </View>
       <View style={styles.changeBox}>
         {change != null && (
           <Text style={[styles.change, { color: change >= 0 ? Colors.positive : Colors.negative }]}>
-            {change >= 0 ? '▲' : '▼'} {formatEur(Math.abs(change))}
+            {change >= 0 ? '▲' : '▼'} {money.eur(Math.abs(change))}
           </Text>
         )}
         <Text style={styles.changeLabel}>

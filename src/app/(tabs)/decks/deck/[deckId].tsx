@@ -30,6 +30,7 @@ import { canShareCommand } from '@/rules/commander';
 import { useDeckSheets } from '@/components/decks/use-deck-sheets';
 import { ManaSymbol } from '@/components/mana-symbol';
 import { Colors, Fonts } from '@/constants/theme';
+import { useMoney } from '@/utils/money';
 import {
   canBeCommander,
   COLOR_HEX,
@@ -51,7 +52,6 @@ import {
   type Deck,
   type Undo,
 } from '@/utils/deck-store';
-import { formatEur } from '@/utils/format';
 
 type Tab = 'cards' | 'stats' | 'legal'
 
@@ -81,6 +81,7 @@ function coverLine(deck: Deck, main: DeckLine[]) {
 // Commander group; one card that can lead the deck, anything else turns it red), or dragged down
 // into the trash bubble. ⋯ and Filter hide meanwhile; the bar at the bottom has Undo and Done.
 export default function DeckScreen() {
+  const money = useMoney()
   const insets = useSafeAreaInsets()
   const { deckId } = useLocalSearchParams<{ deckId: string }>()
   const store = useDeckStore()
@@ -210,7 +211,7 @@ export default function DeckScreen() {
           },
         ]}
       />
-      <AnimatedScrollView
+      <AnimatedScrollView showsVerticalScrollIndicator={false}
         ref={scrollRef}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -277,7 +278,7 @@ export default function DeckScreen() {
               </Text>
             </View>
             <Text style={styles.valueLine}>
-              <Text style={styles.value}>{formatEur(value)}</Text>
+              <Text style={styles.value}>{money.eur(value)}</Text>
               {missing > 0 ? ` · ${missing} missing` : mainCount > 0 ? ' · all owned' : ''}
             </Text>
           </View>

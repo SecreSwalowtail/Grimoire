@@ -8,7 +8,7 @@ import { entryPrice, type CollectionEntry } from '@/db/collection';
 import { cardThumb, type ScryfallCard } from '@/db/scryfall';
 import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection';
 import { finishesText, printingLabel } from '@/rules/printings';
-import { formatEur } from '@/utils/format';
+import { useMoney } from '@/utils/money';
 
 // C3 · Card — Printings & your copies. Tapping a printing shows it on every tab; tapping one of
 // your copies edits it.
@@ -43,6 +43,7 @@ export function PrintingsTab({
   onEditCopy: (entry: CollectionEntry) => void
   onAddCopy: () => void
 }) {
+  const money = useMoney()
   const [filter, setFilter] = useState<Filter>('all')
   const [expanded, setExpanded] = useState(false)
   const all = printings?.list ?? []
@@ -62,7 +63,7 @@ export function PrintingsTab({
     <View style={styles.tab}>
       <View style={styles.sectionHead}>
         <Text style={styles.label}>Your copies</Text>
-        {copies.length > 0 && <Text style={styles.total}>{formatEur(total)} total</Text>}
+        {copies.length > 0 && <Text style={styles.total}>{money.eur(total)} total</Text>}
       </View>
       {copies.map((entry) => {
         const printing = all.find((p) => p.id === entry.card_id)
@@ -87,7 +88,7 @@ export function PrintingsTab({
                 {entry.for_trade ? ' · for trade' : ''}
               </Text>
             </View>
-            <Text style={styles.copyPrice}>{price != null ? formatEur(price * entry.quantity) : '—'}</Text>
+            <Text style={styles.copyPrice}>{price != null ? money.eur(price * entry.quantity) : '—'}</Text>
             <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.textMuted} />
           </TouchableOpacity>
         )
@@ -157,9 +158,9 @@ export function PrintingsTab({
                   <Text style={styles.printFinishes}>{finishesText(p.finishes)}</Text>
                 </View>
                 <View style={styles.printPrice}>
-                  <Text style={styles.printPriceValue}>{main != null ? formatEur(main) : '—'}</Text>
+                  <Text style={styles.printPriceValue}>{main != null ? money.eur(main) : '—'}</Text>
                   <Text style={styles.printPriceNote}>
-                    {foilOnly ? 'foil only' : foil != null ? `foil ${formatEur(foil)}` : main == null ? 'no price' : ''}
+                    {foilOnly ? 'foil only' : foil != null ? `foil ${money.eur(foil)}` : main == null ? 'no price' : ''}
                   </Text>
                 </View>
               </Pressable>

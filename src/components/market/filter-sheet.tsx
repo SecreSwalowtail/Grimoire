@@ -62,7 +62,7 @@ export function FilterSheet({
         })}
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled">
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled">
         {tab === 'format' && <FormatTab filters={filters} onChange={patch} />}
         {tab === 'colors' && <ColorsTab filters={filters} onChange={patch} />}
         {tab === 'cost' && <CostTab filters={filters} onChange={patch} />}
