@@ -15,8 +15,9 @@ export type ScanToastData =
     }
   | { ok: false; title: string; message: string }
 
-// "Last scanned card" card from the Scan design: thumbnail, result, details, Undo.
-export function ScanToast({ data, onUndo }: { data: ScanToastData; onUndo?: () => void }) {
+// "Last scanned card" card from the Scan design: thumbnail, result, details, Undo. `where`: what the
+// card went into ("Main binder + Izzet Wizards").
+export function ScanToast({ data, where = 'Binder', onUndo }: { data: ScanToastData; where?: string; onUndo?: () => void }) {
   if (!data.ok) {
     return (
       <View style={[styles.toast, styles.toastError]} accessibilityRole="alert">
@@ -30,7 +31,7 @@ export function ScanToast({ data, onUndo }: { data: ScanToastData; onUndo?: () =
 
   const rarity = data.rarity.charAt(0).toUpperCase() + data.rarity.slice(1)
   return (
-    <View style={styles.toast} accessibilityLabel={`Added ${data.name} to Binder`}>
+    <View style={styles.toast} accessibilityLabel={`Added ${data.name} to ${where}`}>
       {data.image ? (
         <Image source={{ uri: data.image }} style={styles.thumb} contentFit="cover" />
       ) : (
@@ -39,7 +40,7 @@ export function ScanToast({ data, onUndo }: { data: ScanToastData; onUndo?: () =
       <View style={styles.body}>
         <View style={styles.labelRow}>
           <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={13} tintColor={Colors.positive} />
-          <Text style={[styles.label, { color: Colors.positive }]}>Added to Binder</Text>
+          <Text style={[styles.label, styles.where, { color: Colors.positive }]} numberOfLines={1}>Added to {where}</Text>
         </View>
         <Text style={styles.name} numberOfLines={1}>{data.name}</Text>
         <Text style={styles.detail} numberOfLines={1}>
@@ -89,6 +90,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+  },
+  // A long destination shortens rather than wrapping.
+  where: {
+    flexShrink: 1,
   },
   label: {
     fontSize: 12,

@@ -20,7 +20,7 @@ import { Colors, Fonts } from '@/constants/theme';
 import { deleteBinder, mergeBinders, reorderBinders, type Binder } from '@/db/binders';
 import type { CollectionEntry } from '@/db/collection';
 import { formatEur } from '@/utils/format';
-import { forgetScanBinder } from '@/utils/scan-binder';
+import { forgetScanBinder } from '@/utils/scan-target';
 
 type BinderSort = 'custom' | 'value' | 'valueAsc' | 'name'
 

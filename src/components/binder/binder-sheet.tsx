@@ -10,7 +10,7 @@ import { NameField } from '@/components/decks/parts';
 import { StartOptions, type Start } from '@/components/decks/new-sheet';
 import { BINDER_PRESETS, createBinder, updateBinder, type Binder } from '@/db/binders';
 import { moveEntries, type CollectionEntry } from '@/db/collection';
-import { setScanBinder } from '@/utils/scan-binder';
+import { setScanBinder } from '@/utils/scan-target';
 
 const PREVIEW_SCALE = 0.85
 const PRESETS = Object.values(BINDER_PRESETS)

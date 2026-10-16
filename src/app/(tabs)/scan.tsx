@@ -16,15 +16,17 @@ import {
   usePhotoOutput,
 } from 'react-native-vision-camera';
 
+import { scanDecks, ScanTargetSheet, scanTargetLabel } from '@/components/scan-target-sheet';
 import { ScanToast, ScanToastData } from '@/components/scan-toast';
 import { Colors, Fonts } from '@/constants/theme';
+import { getBinders, type Binder } from '@/db/binders';
 import { addToCollection, removeOneCopy } from '@/db/collection';
 import { cardImage, getCardBySetNumber, type ScryfallCard } from '@/db/scryfall';
 import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button';
 import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan';
 import { parseCollectorLine } from '@/utils/collector-line';
-import { addDeckCards, cardInfoOf, useDeckStore } from '@/utils/deck-store';
-import { getScanBinder, getScanDeck, setScanDeck, useScanDeck, type ScanDeck } from '@/utils/scan-binder';
+import { addCardsToDecks, cardInfoOf, getDeckStore, useDeckStore, type Undo } from '@/utils/deck-store';
+import { getScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target';
 
 // Where the set code + collector number sit on a card, as fractions of the card. Tune these.
 const STRIP = { x: 0, y: 0.88, width: 0.6, height: 0.12 }
@@ -55,11 +57,29 @@ export default function ScanScreen() {
   const [status, setStatus] = useState<ScanStatus | null>(null)
   const [processing, setProcessing] = useState(false)
   const [toast, setToast] = useState<ScanToastData | null>(null)
-  // What the last successful scan added, so Undo can take it back off.
-  const deckStore = useDeckStore()
-  const scanDeck = useScanDeck()
-  const intoDeck = scanDeck ? deckStore.decks.find((d) => d.id === scanDeck.deckId) : undefined
-  const [lastAdded, setLastAdded] = useState<{ cardId: string; language: string; binderId: string | null; deck: ScanDeck | null } | null>(null)
+  // Where scans go (the "Scan into" sheet), and the binders, for its button's name.
+  const { decks } = useDeckStore()
+  const target = useScanTarget()
+  const [targetOpen, setTargetOpen] = useState(false)
+  const [binders, setBinders] = useState<Binder[]>([])
+  useEffect(() => {
+    if (!isFocused) return
+    let live = true
+    getBinders(db)
+      .then((list) => live && setBinders(list))
+      .catch((e) => console.warn('Failed to load binders', e))
+    return () => {
+      live = false
+    }
+  }, [isFocused, db])
+  // What the last successful scan added, and where, so Undo can take it back off.
+  const [lastAdded, setLastAdded] = useState<{
+    cardId: string
+    language: string
+    target: ScanTarget
+    // Taking it back out of the decks (null: it went into none).
+    deckUndo: Undo | null
+  } | null>(null)
   const busy = useRef(false)
   const lastRect = useRef<NormalizedRect | null>(null)
 
@@ -84,6 +104,13 @@ export default function ScanScreen() {
 
   const capture = useCallback(async (rect: NormalizedRect | null) => {
     if (busy.current || !rect) return
+    // Decks only, but none picked (or they're gone): nowhere to put the card.
+    const target = getScanTarget()
+    if (!target.binder && scanDecks(target, getDeckStore().decks).length === 0) {
+      setLastAdded(null)
+      setToast({ ok: false, title: 'No deck picked', message: 'Tap the button at the top to pick the decks scans go into.' })
+      return
+    }
     busy.current = true
     setProcessing(true)
     try {
@@ -136,11 +163,14 @@ export default function ScanScreen() {
         setToast({ ok: false, title: 'Card not found', message: `No card for ${line.set.toUpperCase()} #${line.collectorNumbers[0]}.` })
         return
       }
-      const binderId = getScanBinder()
-      await addToCollection(db, found, { language: line.language, binderId: binderId ?? undefined })
-      const deck = getScanDeck()
-      const inDeck = deck != null && addDeckCards(deck.deckId, found.id, cardInfoOf(found), deck.board, 1)
-      setLastAdded({ cardId: found.id, language: line.language, binderId, deck: inDeck ? deck : null })
+      // Into the binder and / or decks picked in "Scan into" (decks deleted meanwhile are skipped).
+      const into = getScanTarget()
+      if (into.binder) await addToCollection(db, found, { language: line.language, binderId: into.binderId ?? undefined })
+      const deckUndo =
+        into.decks && into.deckIds.length > 0
+          ? addCardsToDecks(into.deckIds, [{ cardId: found.id, info: cardInfoOf(found), quantity: 1 }], into.board)
+          : null
+      setLastAdded({ cardId: found.id, language: line.language, target: into, deckUndo })
       setToast({
         ok: true,
         name: found.name,
@@ -162,10 +192,9 @@ export default function ScanScreen() {
   const undo = async () => {
     if (!lastAdded) return
     try {
-      await removeOneCopy(db, lastAdded.cardId, { language: lastAdded.language, binderId: lastAdded.binderId ?? undefined })
-      const { deck } = lastAdded
-      const info = deck && deckStore.info[lastAdded.cardId]
-      if (deck && info) addDeckCards(deck.deckId, lastAdded.cardId, info, deck.board, -1)
+      const { target: into } = lastAdded
+      if (into.binder) await removeOneCopy(db, lastAdded.cardId, { language: lastAdded.language, binderId: into.binderId ?? undefined })
+      lastAdded.deckUndo?.()
       setLastAdded(null)
       setToast(null)
     } catch (e) {
@@ -234,7 +263,8 @@ export default function ScanScreen() {
         ref={camera}
         style={StyleSheet.absoluteFill}
         device="back"
-        isActive={isFocused}
+        // Paused while "Scan into" is open, so Bulk mode adds nothing meanwhile.
+        isActive={isFocused && !targetOpen}
         resizeMode="cover"
         // Follow the (portrait-locked) UI, not the physical device: pointing down at a table
         // otherwise flips frames/photos to landscape and breaks the card mapping.
@@ -256,20 +286,23 @@ export default function ScanScreen() {
       <View pointerEvents="box-none" style={[styles.overlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.header}>
           <Text style={styles.title}>Scan</Text>
-          {/* Scans also going into a new deck: which one, and a way to stop. */}
-          {intoDeck && scanDeck && (
-            <TouchableOpacity
-              style={styles.deckPill}
-              onPress={() => setScanDeck(null)}
-              accessibilityRole="button"
-              accessibilityLabel={`Adding scans to ${intoDeck.name}, ${BOARD_NAME[scanDeck.board]}. Tap to stop.`}
-            >
-              <Text style={styles.deckPillLabel} numberOfLines={1}>
-                {intoDeck.name} · {BOARD_NAME[scanDeck.board]}
-              </Text>
-              <SymbolView name={{ ios: 'xmark', android: 'close' }} size={14} tintColor={Colors.goldLight} />
-            </TouchableOpacity>
-          )}
+          {/* Where scans go: tap to pick a binder, decks, or both. */}
+          <TouchableOpacity
+            style={styles.targetPill}
+            onPress={() => setTargetOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Scanning into ${scanTargetLabel(target, binders, decks)}. Tap to change`}
+          >
+            <SymbolView
+              name={target.decks && !target.binder ? { ios: 'rectangle.stack', android: 'style' } : { ios: 'books.vertical', android: 'collections_bookmark' }}
+              size={15}
+              tintColor={Colors.goldLight}
+            />
+            <Text style={styles.targetPillLabel} numberOfLines={1}>
+              {scanTargetLabel(target, binders, decks)}
+            </Text>
+            <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={Colors.goldLight} />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, torch && styles.iconBtnOn]}
             onPress={() => setTorch((t) => !t)}
@@ -317,17 +350,21 @@ export default function ScanScreen() {
 
         {toast && (
           <View style={styles.toastWrap}>
-            <ScanToast data={toast} onUndo={toast.ok && lastAdded ? undo : undefined} />
+            <ScanToast
+              data={toast}
+              where={lastAdded ? scanTargetLabel(lastAdded.target, binders, decks) : undefined}
+              onUndo={toast.ok && lastAdded ? undo : undefined}
+            />
           </View>
         )}
       </View>
+
+      <ScanTargetSheet visible={targetOpen} binders={binders} onClose={() => setTargetOpen(false)} />
     </View>
   )
 }
 
 const BRACKET = 34
-
-const BOARD_NAME = { main: 'Main deck', side: 'Sideboard', maybe: 'Maybe' } as const
 
 const styles = StyleSheet.create({
   root: {
@@ -350,11 +387,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     zIndex: 1, // above the frame's scrim
   },
-  deckPill: {
+  targetPill: {
     flexShrink: 1,
     height: 36,
     marginHorizontal: 12,
-    paddingLeft: 14,
+    paddingLeft: 12,
     paddingRight: 10,
     borderRadius: 18,
     borderWidth: 1,
@@ -364,7 +401,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  deckPillLabel: {
+  targetPillLabel: {
     flexShrink: 1,
     fontSize: 13,
     fontFamily: Fonts.extraBold,

@@ -192,6 +192,9 @@ export async function loadDeckStore(database: SQLiteDatabase) {
   listeners.forEach((listener) => listener())
 }
 
+// The decks as they are now, outside a component (e.g. in a callback made earlier).
+export const getDeckStore = () => state
+
 export function useDeckStore() {
   return useSyncExternalStore((listener) => {
     listeners.add(listener)

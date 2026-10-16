@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls';
 import { CheckBox, ColorPicker, NameField } from '@/components/decks/parts';
-import { setScanDeck } from '@/utils/scan-binder';
+import { setScanDeck } from '@/utils/scan-target';
 import { Colors, Fonts } from '@/constants/theme';
 import {
   createDeck,
