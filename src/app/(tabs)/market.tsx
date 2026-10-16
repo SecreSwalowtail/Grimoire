@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FilterSheet } from '@/components/market/filter-sheet';
 import { MarketRow, MarketTile } from '@/components/market/market-row';
 import { DEFAULT_SORT, sortSummary, SortSheet, type MarketSort } from '@/components/market/sort-sheet';
+import { SortMenu } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
 import { autocomplete, searchCards, type ScryfallCard, type SearchOptions } from '@/db/scryfall';
 import { timed } from '@/utils/perf';
@@ -31,10 +32,14 @@ import {
   type FilterTab,
   type MarketFilters,
 } from '@/utils/market-filters';
+import type { PriceSource } from '@/utils/card-prices';
 import { useSearchBack } from '@/utils/use-search-back';
 
 // Cards per row in grid view, same as the Binder.
 const COLUMNS = 3
+
+const MARKET_NAME: Record<PriceSource, string> = { cardmarket: 'Cardmarket', tcgplayer: 'TCGplayer' }
+const MARKETS = (Object.keys(MARKET_NAME) as PriceSource[]).map((value) => ({ value, label: MARKET_NAME[value] }))
 
 type ResultView = 'list' | 'grid'
 
@@ -56,18 +61,20 @@ function searchRequest(
   sort: MarketSort,
   exact: boolean,
   filters: MarketFilters,
+  source: PriceSource,
 ): { query: string; options: SearchOptions } {
   const filtered = filterQuery(filters)
   if (!submitted && !filtered) return { query: trendingQuery(), options: { order: 'edhrec', dir: 'asc', unique: 'cards' } }
   const text = !submitted ? '' : exact ? `!"${submitted.replace(/"/g, '')}"` : textQuery(submitted)
   return {
     query: [text, filtered].filter(Boolean).join(' '),
-    options: { order: sort.by, dir: sort.desc ? 'desc' : 'asc', unique: sort.groupPrintings ? 'cards' : 'prints' },
+    // Price sorts by the market on show.
+    options: { order: sort.by === 'eur' && source === 'tcgplayer' ? 'usd' : sort.by, dir: sort.desc ? 'desc' : 'asc', unique: sort.groupPrintings ? 'cards' : 'prints' },
   }
 }
 
-// Market: trending cards, and search every card by text and filters. The price-source button does
-// nothing yet.
+// Market: trending cards, and search every card by text and filters. The market button picks whose
+// prices show (and price sorting follows it).
 export default function MarketScreen() {
   const insets = useSafeAreaInsets()
   // Set when a deck's + opened the Market (cleared by tapping the Market tab).
@@ -102,12 +109,14 @@ export default function MarketScreen() {
   const [sortOpen, setSortOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filterTab, setFilterTab] = useState<FilterTab>('format')
+  const [source, setSource] = useState<PriceSource>('cardmarket')
+  const [sourceOpen, setSourceOpen] = useState(false)
   // The last finished search, tagged with the request it answered: while the search box or sort
   // has moved on from it, a new search is loading.
   const [search, setSearch] = useState<{ key: string; cards: ScryfallCard[]; total: number | null; error: string | null } | null>(null)
   const filtering = filterQuery(searchFilters) !== ''
   const trending = submitted === '' && !filtering
-  const searchKey = JSON.stringify(searchRequest(submitted, sort, exact, searchFilters))
+  const searchKey = JSON.stringify(searchRequest(submitted, sort, exact, searchFilters, source))
 
   useEffect(() => {
     if (filters === searchFilters) return
@@ -179,8 +188,13 @@ export default function MarketScreen() {
     <View style={styles.header}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Market</Text>
-        <TouchableOpacity style={styles.source} accessibilityRole="button" accessibilityLabel="Price source: Cardmarket, euro">
-          <Text style={styles.sourceLabel}>Cardmarket · €</Text>
+        <TouchableOpacity
+          style={styles.source}
+          onPress={() => setSourceOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Prices from ${MARKET_NAME[source]}. Tap to change`}
+        >
+          <Text style={styles.sourceLabel}>{MARKET_NAME[source]}</Text>
           <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={Colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -317,7 +331,7 @@ export default function MarketScreen() {
           key="list"
           data={loading ? [] : results}
           keyExtractor={(card) => card.id}
-          renderItem={({ item }) => <MarketRow card={item} fromDeck={fromDeck} />}
+          renderItem={({ item }) => <MarketRow card={item} source={source} fromDeck={fromDeck} />}
           ListEmptyComponent={empty}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
@@ -330,7 +344,7 @@ export default function MarketScreen() {
           data={loading ? [] : [...results, ...Array<null>((COLUMNS - (results.length % COLUMNS)) % COLUMNS).fill(null)]}
           keyExtractor={(card, i) => (card ? card.id : `spacer-${i}`)}
           numColumns={COLUMNS}
-          renderItem={({ item }) => (item ? <MarketTile card={item} fromDeck={fromDeck} /> : <View style={{ flex: 1 }} />)}
+          renderItem={({ item }) => (item ? <MarketTile card={item} source={source} fromDeck={fromDeck} /> : <View style={{ flex: 1 }} />)}
           ListEmptyComponent={empty}
           columnWrapperStyle={styles.gridRow}
           contentContainerStyle={styles.gridContent}
@@ -339,6 +353,15 @@ export default function MarketScreen() {
         />
       )}
 
+      <SortMenu
+        visible={sourceOpen}
+        top={insets.top + 58}
+        title="Prices from"
+        options={MARKETS}
+        value={source}
+        onSelect={setSource}
+        onClose={() => setSourceOpen(false)}
+      />
       <SortSheet visible={sortOpen} value={sort} onApply={setSort} onClose={() => setSortOpen(false)} />
       <FilterSheet
         visible={filtersOpen}

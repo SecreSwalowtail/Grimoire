@@ -134,7 +134,8 @@ export async function getCardsByIdentifiers(identifiers: CardIdentifier[]) {
 }
 
 // 'edhrec' = popularity in Commander decks (most played first when ascending).
-export type SearchOrder = 'name' | 'cmc' | 'power' | 'toughness' | 'eur' | 'released' | 'edhrec';
+// 'eur' / 'usd': by Cardmarket's / TCGplayer's price.
+export type SearchOrder = 'name' | 'cmc' | 'power' | 'toughness' | 'eur' | 'usd' | 'released' | 'edhrec';
 
 export type SearchOptions = {
   order: SearchOrder;

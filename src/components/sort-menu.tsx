@@ -12,10 +12,11 @@ export const CARD_SORTS: { value: CardSort; label: string }[] = [
   { value: 'name', label: 'Name: A to Z' },
 ]
 
-// Small dropdown under a Binder header's sort button.
+// Small dropdown under a header button: a Binder's sort, the Market's price source. `title`: its heading.
 export function SortMenu<T extends string>({
   visible,
   top,
+  title = 'Sort by',
   options,
   value,
   onSelect,
@@ -23,6 +24,7 @@ export function SortMenu<T extends string>({
 }: {
   visible: boolean
   top: number
+  title?: string
   options: { value: T; label: string }[]
   value: T
   onSelect: (value: T) => void
@@ -30,9 +32,9 @@ export function SortMenu<T extends string>({
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close sort menu" />
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={`Close ${title.toLowerCase()} menu`} />
       <View style={[styles.menu, { top }]} accessibilityRole="menu">
-        <Text style={styles.heading}>Sort by</Text>
+        <Text style={styles.heading}>{title}</Text>
         {options.map((option) => {
           const selected = option.value === value
           return (
