@@ -18,13 +18,28 @@ import { Colors, Fonts } from '@/constants/theme';
 import type { DeckLine } from '@/rules/deck-stats';
 import type { Board } from '@/utils/deck-store';
 
-// Dragging deck cards in the deck screen's edit mode: onto the Main deck / Sideboard / Maybe chips,
+// Dragging cards in edit mode. In the deck screen: onto the Main deck / Sideboard / Maybe chips,
 // onto the commander (cover card or Commander group), or down into the trash bubble that rises at
 // the bottom, which pulls the cards in when they come close (like deleting in Instagram). Taking the
 // cards up into the top third of the screen scrolls to the top, where the chips and commander are.
+// In a binder: onto its Deck and Binder buttons, or into the trash. In Decks: decks and folders
+// onto a folder, another deck or folder (to take its place), New folder, Duplicate, or the trash.
 
 // 'commander-group': the Commander group's header, another way to the commander slot.
-export type DropTarget = 'trash' | 'commander' | 'commander-group' | Board
+// 'to-deck' / 'new-binder' / 'edit-cards': a binder's Add to deck, New binder and Edit buttons.
+// 'duplicate' / 'new-folder' and `folder:<id>` / `deck:<id>`: the Decks screen's buttons and rows.
+export type DropTarget =
+  | 'trash'
+  | 'commander'
+  | 'commander-group'
+  | 'to-deck'
+  | 'new-binder'
+  | 'edit-cards'
+  | 'duplicate'
+  | 'new-folder'
+  | `folder:${string}`
+  | `deck:${string}`
+  | Board
 // `s`: the scroll offset when it was measured (-1 for targets that don't scroll with the list).
 type Rect = { x: number; y: number; w: number; h: number; s: number }
 
@@ -49,28 +64,37 @@ export type CardDrag = {
   measurers: Set<() => void>
   // Whether the commander takes what's dragged, and the part of the deck on show (moving there does nothing).
   commanderOk: SharedValue<boolean>
-  board: SharedValue<Board>
-  // The list's scroll view and how far it's scrolled.
-  scrollRef: AnimatedRef<any>
+  board: SharedValue<Board | null>
+  // Targets that aren't targets for this drag (the things being dragged), and ones that turn it down.
+  skip: SharedValue<string[]>
+  refuse: SharedValue<string[]>
+  // The list's scroll view and how far it's scrolled (none where every target stays put).
+  scrollRef?: AnimatedRef<any>
   scrollY: SharedValue<number>
   // Whether this drag already scrolled to the top.
   jumped: SharedValue<boolean>
 }
 
+// The binder passes nothing: it has no commander or parts of a deck, and its targets don't scroll.
 export function useCardDrag({
-  commanderOk,
-  board,
+  commanderOk = false,
+  board = null,
   scrollRef,
   scrollY,
+  skip = NONE,
+  refuse = NONE,
 }: {
-  commanderOk: boolean
-  board: Board
-  scrollRef: AnimatedRef<any>
-  scrollY: SharedValue<number>
-}): CardDrag {
+  commanderOk?: boolean
+  board?: Board | null
+  scrollRef?: AnimatedRef<any>
+  scrollY?: SharedValue<number>
+  skip?: string[]
+  refuse?: string[]
+} = {}): CardDrag {
   // One of each for the screen's life: written to by the targets, never rendered from.
   const [rectMap] = useState(() => new Map<DropTarget, Rect>())
   const [measurers] = useState(() => new Set<() => void>())
+  const noScroll = useSharedValue(0)
   const drag: CardDrag = {
     rectMap,
     measurers,
@@ -80,16 +104,26 @@ export function useCardDrag({
     hover: useSharedValue<DropTarget | null>(null),
     rects: useSharedValue<Partial<Record<DropTarget, Rect>>>({}),
     commanderOk: useSharedValue(commanderOk),
-    board: useSharedValue(board),
+    board: useSharedValue<Board | null>(board),
+    skip: useSharedValue(skip),
+    refuse: useSharedValue(refuse),
     scrollRef,
-    scrollY,
+    scrollY: scrollY ?? noScroll,
     jumped: useSharedValue(false),
   }
   const { commanderOk: ok, board: on } = drag
   useEffect(() => ok.set(commanderOk), [ok, commanderOk])
   useEffect(() => on.set(board), [on, board])
+  // By content, as the lists are new arrays every render.
+  const { skip: skipped, refuse: refused } = drag
+  const skipKey = skip.join('\n')
+  const refuseKey = refuse.join('\n')
+  useEffect(() => skipped.set(skipKey ? skipKey.split('\n') : []), [skipped, skipKey])
+  useEffect(() => refused.set(refuseKey ? refuseKey.split('\n') : []), [refused, refuseKey])
   return drag
 }
+
+const NONE: string[] = []
 
 const isCommander = (t: DropTarget) => {
   'worklet'
@@ -100,22 +134,23 @@ const isCommander = (t: DropTarget) => {
 // never (nothing would change).
 const accepts = (drag: CardDrag, target: DropTarget) => {
   'worklet'
+  if (drag.refuse.get().includes(target)) return false
   if (isCommander(target)) return drag.commanderOk.get()
-  if (target === 'trash') return true
-  return target !== drag.board.get()
+  if (target === 'main' || target === 'side' || target === 'maybe') return target !== drag.board.get()
+  return true
 }
 
 // Hold a card to pick it up (with whatever is selected); let go over a target to drop.
 // `onStart` gets the held card, `onDrop` the target under the finger (null: none). `topZone`: how
-// far down the screen (from the top) taking the cards scrolls the list to the top.
-export function dragGesture(
+// far down the screen (from the top) taking the cards scrolls the list to the top (0: never).
+export function dragGesture<T>(
   drag: CardDrag,
-  line: DeckLine,
-  onStart: (line: DeckLine) => void,
+  card: T,
+  onStart: (card: T) => void,
   onDrop: (target: DropTarget | null) => void,
-  topZone: number,
+  topZone = 0,
 ) {
-  const { x, y, active, hover, rects, measurers, scrollRef, scrollY, jumped } = drag
+  const { x, y, active, hover, rects, measurers, scrollRef, scrollY, jumped, skip } = drag
   const remeasure = () => measurers.forEach((m) => m())
   const hit = (px: number, py: number): DropTarget | null => {
     'worklet'
@@ -124,7 +159,7 @@ export function dragGesture(
     const t = all.trash
     if (t && Math.hypot(px - (t.x + t.w / 2), py - (t.y + t.h / 2)) < TRASH_PULL) return 'trash'
     for (const key in all) {
-      if (key === 'trash') continue
+      if (key === 'trash' || skip.get().includes(key)) continue
       const r = all[key as DropTarget]!
       // Targets in the list moved by however much it scrolled since they were measured.
       const ry = r.s >= 0 ? r.y + r.s - scrollY.get() : r.y
@@ -141,13 +176,13 @@ export function dragGesture(
       active.set(true)
       jumped.set(false)
       scheduleOnRN(remeasure)
-      scheduleOnRN(onStart, line)
+      scheduleOnRN(onStart, card)
     })
     .onUpdate((e) => {
       x.set(e.absoluteX)
       y.set(e.absoluteY)
       // Up into the top of the screen: straight to the top of the list.
-      if (e.absoluteY < topZone && !jumped.get() && scrollY.get() > 0) {
+      if (scrollRef && e.absoluteY < topZone && !jumped.get() && scrollY.get() > 0) {
         jumped.set(true)
         scrollTo(scrollRef, 0, 0, true)
       }
@@ -203,8 +238,21 @@ export function useDropTarget(drag: CardDrag, id: DropTarget, fixed = false) {
 }
 
 // A drop target around something: a highlight frame drawn over it while it's under the finger.
-export function DropZone({ drag, id, style, children }: { drag: CardDrag; id: DropTarget; style?: StyleProp<ViewStyle>; children: ReactNode }) {
-  const { ref, onLayout, style: lit } = useDropTarget(drag, id)
+// `fixed`: outside the list, so it stays put when the list scrolls.
+export function DropZone({
+  drag,
+  id,
+  fixed,
+  style,
+  children,
+}: {
+  drag: CardDrag
+  id: DropTarget
+  fixed?: boolean
+  style?: StyleProp<ViewStyle>
+  children: ReactNode
+}) {
+  const { ref, onLayout, style: lit } = useDropTarget(drag, id, fixed)
   return (
     <View style={style}>
       {children}
@@ -214,8 +262,11 @@ export function DropZone({ drag, id, style, children }: { drag: CardDrag; id: Dr
 }
 
 // What follows the finger: up to 5 cards fanned out, more as a bundle with a count. Over the trash
-// it's pulled into the bubble and shrinks.
-export function DragGhost({ drag, lines }: { drag: CardDrag; lines: DeckLine[] }) {
+// it's pulled into the bubble and shrinks. `key`: unique among the dragged cards. `label`: what
+// the bundle says it holds (cards and copies by default).
+export type GhostCard = Pick<DeckLine, 'name' | 'image' | 'quantity'> & { key: string }
+
+export function DragGhost({ drag, lines, label }: { drag: CardDrag; lines: GhostCard[]; label?: string }) {
   const style = useAnimatedStyle(() => {
     const t = drag.rects.get().trash
     const intoTrash = drag.hover.get() === 'trash' && t != null
@@ -244,13 +295,13 @@ export function DragGhost({ drag, lines }: { drag: CardDrag; lines: DeckLine[] }
       {bundle ? (
         <View style={styles.bundle}>
           {lines.slice(0, 3).map((l, i) => (
-            <View key={l.cardId} style={[styles.mini, styles.bundleCard, { left: 8 + i * 6, top: 8 - i * 4 }]}>
+            <View key={l.key} style={[styles.mini, styles.bundleCard, { left: 8 + i * 6, top: 8 - i * 4 }]}>
               {l.image && <Image source={{ uri: l.image }} style={StyleSheet.absoluteFill} contentFit="cover" />}
             </View>
           ))}
           <View style={styles.bundleText}>
             <Text style={styles.bundleCount}>{lines.length}</Text>
-            <Text style={styles.bundleLabel}>{lines.length} cards · {n} copies</Text>
+            <Text style={styles.bundleLabel}>{label ?? `${lines.length} cards · ${n} copies`}</Text>
           </View>
         </View>
       ) : (
@@ -259,7 +310,7 @@ export function DragGhost({ drag, lines }: { drag: CardDrag; lines: DeckLine[] }
             const mid = (lines.length - 1) / 2
             return (
               <View
-                key={l.cardId}
+                key={l.key}
                 style={[
                   styles.mini,
                   { left: GHOST_W / 2 - MINI_W / 2 + (i - mid) * 20, top: 8 + Math.abs(i - mid) * 4, transform: [{ rotate: `${(i - mid) * 6}deg` }] },
@@ -302,12 +353,28 @@ export function TrashBubble({ drag, bottom }: { drag: CardDrag; bottom: number }
   )
 }
 
-// The bar at the bottom in edit mode: Undo (the last change made here) and Done.
-export function EditBar({ canUndo, onUndo, onDone, selected }: { canUndo: boolean; onUndo: () => void; onDone: () => void; selected: number }) {
+// Height of the edit bar (title, buttons, room for the Scan button).
+export const EDIT_BAR = 124
+
+// The bar at the bottom in edit mode: Undo (the last change made here) and Done. `note` says what
+// the last change did, in place of the hint.
+export function EditBar({
+  canUndo,
+  onUndo,
+  onDone,
+  selected,
+  note,
+}: {
+  canUndo: boolean
+  onUndo: () => void
+  onDone: () => void
+  selected: number
+  note?: string | null
+}) {
   return (
     <View style={styles.bar}>
-      <Text style={styles.barTitle}>
-        {selected ? `${selected} selected · hold one to drag them all` : 'Tap cards to select, then hold one to drag'}
+      <Text style={styles.barTitle} accessibilityLiveRegion="polite">
+        {note ?? (selected ? `${selected} selected · hold one to drag them all` : 'Tap cards to select, then hold one to drag')}
       </Text>
       <View style={styles.barButtons}>
         <TouchableOpacity

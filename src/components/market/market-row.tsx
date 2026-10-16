@@ -15,9 +15,10 @@ function price(card: ScryfallCard) {
   return eur != null ? formatEur(Number(eur)) : '—'
 }
 
-function open(card: ScryfallCard) {
+// fromDeck: the deck whose + opened the Market; adding the card to a deck then goes back to it.
+function open(card: ScryfallCard, fromDeck?: string) {
   rememberCard(card)
-  router.push({ pathname: '/card/[id]', params: { id: card.id } })
+  router.push({ pathname: '/card/[id]', params: fromDeck ? { id: card.id, fromDeck } : { id: card.id } })
 }
 
 function label(card: ScryfallCard) {
@@ -25,10 +26,10 @@ function label(card: ScryfallCard) {
 }
 
 // List view: thumbnail, name (+ language if not English), mana cost, rarity · set, price.
-export function MarketRow({ card }: { card: ScryfallCard }) {
+export function MarketRow({ card, fromDeck }: { card: ScryfallCard; fromDeck?: string }) {
   const cost = parseManaCost(cardManaCost(card))
   return (
-    <Pressable style={styles.row} onPress={() => open(card)} accessibilityRole="button" accessibilityLabel={label(card)}>
+    <Pressable style={styles.row} onPress={() => open(card, fromDeck)} accessibilityRole="button" accessibilityLabel={label(card)}>
       <Image source={{ uri: cardThumb(card) ?? undefined }} style={styles.thumb} contentFit="cover" transition={120} />
       <View style={styles.middle}>
         <View style={styles.nameRow}>
@@ -51,9 +52,9 @@ export function MarketRow({ card }: { card: ScryfallCard }) {
 }
 
 // Grid view: the card image with name and price under it, 3 per row like the Binder.
-export function MarketTile({ card }: { card: ScryfallCard }) {
+export function MarketTile({ card, fromDeck }: { card: ScryfallCard; fromDeck?: string }) {
   return (
-    <Pressable style={styles.tile} onPress={() => open(card)} accessibilityRole="button" accessibilityLabel={label(card)}>
+    <Pressable style={styles.tile} onPress={() => open(card, fromDeck)} accessibilityRole="button" accessibilityLabel={label(card)}>
       <Image source={{ uri: cardImage(card) ?? undefined }} style={styles.tileImage} contentFit="cover" transition={150} />
       <Text style={styles.tileName} numberOfLines={1}>{card.name}</Text>
       <Text style={styles.tilePrice}>{price(card)}</Text>

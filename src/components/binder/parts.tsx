@@ -1,8 +1,11 @@
 import { SymbolView } from 'expo-symbols';
+import { useRef, type ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import { PathIcon } from '@/components/deck/parts';
 import { Colors, Fonts } from '@/constants/theme';
 import { formatEur } from '@/utils/format';
+import { useSearchBack } from '@/utils/use-search-back';
 
 // "All binders  €1,284.60          ▲ €42.10 / this week · 312 cards"
 export function ValueSummary({ label, value, cards, change }: { label: string; value: number; cards: number; change: number | null }) {
@@ -27,11 +30,25 @@ export function ValueSummary({ label, value, cards, change }: { label: string; v
   )
 }
 
-export function SearchField({ value, onChange, placeholder }: { value: string; onChange: (text: string) => void; placeholder: string }) {
+// `trailing`: buttons at the field's right end (a binder's Group by).
+export function SearchField({
+  value,
+  onChange,
+  placeholder,
+  trailing,
+}: {
+  value: string
+  onChange: (text: string) => void
+  placeholder: string
+  trailing?: ReactNode
+}) {
+  const input = useRef<TextInput>(null)
+  useSearchBack(input)
   return (
-    <View style={styles.search}>
+    <View style={[styles.search, trailing != null && styles.searchWithTools]}>
       <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
       <TextInput
+        ref={input}
         style={styles.searchInput}
         value={value}
         onChangeText={onChange}
@@ -42,7 +59,18 @@ export function SearchField({ value, onChange, placeholder }: { value: string; o
         autoCorrect={false}
         clearButtonMode="while-editing"
       />
+      {trailing}
     </View>
+  )
+}
+
+// A small labeled button inside the search field, like the deck's Group by.
+export function SearchTool({ icon, label, onPress, accessibilityLabel }: { icon: string; label: string; onPress: () => void; accessibilityLabel: string }) {
+  return (
+    <TouchableOpacity style={styles.tool} onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
+      <PathIcon d={icon} color={Colors.goldLight} size={15} />
+      <Text style={styles.toolLabel} numberOfLines={1}>{label}</Text>
+    </TouchableOpacity>
   )
 }
 
@@ -100,8 +128,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  searchWithTools: {
+    paddingRight: 4,
+  },
+  tool: {
+    height: 38,
+    maxWidth: 120,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceRaised,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  toolLabel: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontFamily: Fonts.extraBold,
+    color: Colors.text,
+  },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     height: '100%',
     fontSize: 15,
     fontFamily: Fonts.medium,

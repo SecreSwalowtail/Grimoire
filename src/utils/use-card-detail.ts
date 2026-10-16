@@ -5,6 +5,7 @@ import { getSavedCard, upsertCard } from '@/db/cards'
 import { getCopiesOfCard, getPriceHistory, type CollectionEntry, type PricePoint } from '@/db/collection'
 import { cachedCard, getCard, getPrintings, getRulings, rememberCard, type Ruling, type ScryfallCard } from '@/db/scryfall'
 import { timed } from '@/utils/perf'
+import { getRemotePrices, mergeHistory } from '@/utils/remote-prices'
 
 // Data for Card detail. Each piece is stored with the key it was loaded for (printing id, or the
 // card's oracle id / name), so switching printings never shows another printing's data, and no
@@ -138,12 +139,14 @@ export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
 
 // What's saved on the phone for a card: your copies of it (any printing), and the price history of
 // the printing on show. Opening a printing fresh from Scryfall saves it, which records today's
-// price for the chart and lets it open from the phone next time.
+// price for the chart and lets it open from the phone next time. The history also takes in the
+// published daily prices (remote-prices.ts), which go back further.
 export function useLocalCardData(card: ScryfallCard | null) {
   const db = useSQLiteContext()
   const name = card?.name ?? null
   const [copies, setCopies] = useState<Keyed<CollectionEntry[]> | null>(null)
   const [history, setHistory] = useState<Keyed<PricePoint[]> | null>(null)
+  const [published, setPublished] = useState<Keyed<PricePoint[]> | null>(null)
 
   const reloadCopies = useCallback(async () => {
     if (!name) return
@@ -179,9 +182,25 @@ export function useLocalCardData(card: ScryfallCard | null) {
     }
   }, [db, card])
 
+  useEffect(() => {
+    if (!card) return
+    let live = true
+    getRemotePrices(card.id)
+      .then((value) => {
+        if (live) setPublished({ key: card.id, value })
+      })
+      .catch((e) => console.warn('Failed to download price history', e))
+    return () => {
+      live = false
+    }
+  }, [card])
+
   return {
     copies: copies?.key === name ? copies.value : [],
-    history: history != null && history.key === card?.id ? history.value : [],
+    history: mergeHistory(
+      history != null && history.key === card?.id ? history.value : [],
+      published != null && published.key === card?.id ? published.value : [],
+    ),
     reloadCopies,
   }
 }

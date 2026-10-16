@@ -217,19 +217,25 @@ export function updateDeck(id: string, patch: Partial<Omit<Deck, 'id'>>) {
 }
 
 // Copies go right after their originals, named "… copy", with the same cards.
-export function duplicateDecks(ids: string[]) {
+// Each copy goes right after its deck. The undo deletes the copies.
+export function duplicateDecks(ids: string[]): Undo {
   const decks: Deck[] = []
   const cards = [...state.cards]
+  const copies: string[] = []
   for (const deck of state.decks) {
     decks.push(deck)
     if (!ids.includes(deck.id)) continue
     const id = newId('deck')
+    copies.push(id)
     decks.push({ ...deck, id, name: `${deck.name} copy` })
     for (const c of state.cards) {
       if (c.deckId === deck.id) cards.push({ ...c, id: cardKey(id, c.cardId, c.board), deckId: id })
     }
   }
   set({ ...state, decks, cards })
+  return () => {
+    deleteDecks(copies)
+  }
 }
 
 // Sets how many copies of a card are in one part of a deck (0 takes it out).
@@ -340,6 +346,32 @@ export type DeckCardKey = { cardId: string; board: Board }
 function restoreDeck(deckId: string): Undo {
   const before = state.cards.filter((c) => c.deckId === deckId)
   return () => set({ ...state, cards: [...state.cards.filter((c) => c.deckId !== deckId), ...before] })
+}
+
+// Adds cards to one part of several decks at once (copies already there add up), in one change.
+// Decks that are gone are skipped. The undo puts those decks' cards back as they were.
+export function addCardsToDecks(deckIds: string[], add: { cardId: string; info: CardInfo; quantity: number }[], board: Board): Undo {
+  const ids = deckIds.filter((id) => state.decks.some((d) => d.id === id))
+  const before = state.cards.filter((c) => ids.includes(c.deckId))
+  const info = { ...state.info }
+  for (const a of add) info[a.cardId] = a.info
+  const cards = [...state.cards]
+  const index = new Map(cards.map((c, i) => [c.id, i]))
+  for (const deckId of ids) {
+    for (const a of add) {
+      if (a.quantity <= 0) continue
+      const id = cardKey(deckId, a.cardId, board)
+      const i = index.get(id)
+      if (i != null) {
+        cards[i] = { ...cards[i], quantity: cards[i].quantity + a.quantity }
+      } else {
+        index.set(id, cards.length)
+        cards.push({ id, deckId, cardId: a.cardId, board, quantity: a.quantity })
+      }
+    }
+  }
+  set({ ...state, info, cards })
+  return () => set({ ...state, cards: [...state.cards.filter((c) => !ids.includes(c.deckId)), ...before] })
 }
 
 // Takes cards out of a deck (every copy of each).

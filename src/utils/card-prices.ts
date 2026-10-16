@@ -1,9 +1,11 @@
+import { PRICES_URL } from '@/constants/prices'
 import type { Finish, PricePoint } from '@/db/collection'
 import type { ScryfallCard } from '@/db/scryfall'
 import { formatEur } from '@/utils/format'
 
 // Prices for Card detail. Scryfall passes on Cardmarket's price in EUR and TCGplayer's market price
-// in USD, once a day; history only exists for the days the app saved a snapshot.
+// in USD, once a day. History: the published daily prices (remote-prices.ts), plus the days the
+// app saved a snapshot itself.
 
 export type PriceSource = 'cardmarket' | 'tcgplayer'
 
@@ -57,6 +59,6 @@ export function priceChange(history: PricePoint[], days: number, finish: Finish,
   return { diff: last.value - first.value, percent: ((last.value - first.value) / first.value) * 100, days: span }
 }
 
-// Whether Card detail shows prices over time (chart, changes). Off until there is a proper source
-// for past prices; the daily snapshots the app saves are still kept.
-export const SHOW_HISTORY = false
+// Whether Card detail shows prices over time (chart, changes): once the daily price files are set
+// up (PRICES_URL). Without them there would only be the days the phone saved itself.
+export const SHOW_HISTORY = PRICES_URL !== ''

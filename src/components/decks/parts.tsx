@@ -188,7 +188,7 @@ export function ColorPicker<K extends string = FolderColor>({
   )
 }
 
-// Square checkbox (New folder's deck list) or round one (Organize), gold when checked.
+// Square checkbox (New folder's deck list) or round one, gold when checked.
 export function CheckBox({ checked, round }: { checked: boolean; round?: boolean }) {
   return (
     <View style={[styles.box, round && styles.boxRound, checked && styles.boxChecked]}>

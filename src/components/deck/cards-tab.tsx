@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
 
 import { DropZone, type CardDrag } from '@/components/deck/card-drag';
 import { CostRow, CROWN, GroupIcon, ICON, PathIcon } from '@/components/deck/parts';
 import { Colors, Fonts } from '@/constants/theme';
+import { upsertCard } from '@/db/cards';
+import { cardManaCost, searchCards, type ScryfallCard } from '@/db/scryfall';
 import {
   activeFilters,
   filterLines,
@@ -17,8 +20,23 @@ import {
   type DeckLine,
   type GroupBy,
 } from '@/rules/deck-stats';
-import type { Board } from '@/utils/deck-store';
+import { cardInfoOf, removeDeckCards, setDeckCardCount, useDeckStore, type Board, type CardInfo, type Undo } from '@/utils/deck-store';
 import { formatEur } from '@/utils/format';
+import { useSearchBack } from '@/utils/use-search-back';
+
+// A search the deck has nothing for asks the Market after this pause in typing, from this many
+// letters, and shows this many of its cards (most played first).
+const MARKET_DELAY = 400
+const MARKET_FROM = 2
+const MARKET_MAX = 20
+
+// The Market's cards for a search: the search, and its cards (null: it failed).
+type MarketResult = { q: string; cards: ScryfallCard[] | null }
+
+const marketPrice = (card: ScryfallCard) => {
+  const p = card.prices.eur ?? card.prices.eur_foil
+  return p != null ? Number(p) : null
+}
 
 const BOARDS: { value: Board; label: string }[] = [
   { value: 'main', label: 'Main deck' },
@@ -31,10 +49,14 @@ const count = (lines: DeckLine[]) => lines.reduce((n, l) => n + l.quantity, 0)
 // D1 · The deck's cards: search, sort by name, group (opens Group by), filter (opens Filter),
 // which part of the deck, then the groups, each opening and closing with a tap. Tap a card for
 // Card detail. Cards your binders don't cover are tagged "Not owned"; commanders lead the list.
+// Each card has − / + for its copies in this part of the deck (− takes the last one out, with Undo).
+// A search the deck has nothing for searches the Market too: its cards show below, tagged
+// "Not in deck" at 0 copies, and + puts them in. They stay while the search does, with their counts.
 // Hold a card to edit: it's picked up to drag (see card-drag.tsx), and taps then select cards
 // instead of opening them; the part-of-deck chips and the Commander group take dropped cards. The
-// filter button hides meanwhile.
+// filter button and the − / + hide meanwhile.
 export function CardsTab({
+  deckId,
   commanderFormat,
   lines,
   board,
@@ -49,7 +71,9 @@ export function CardsTab({
   gestureFor,
   onHold,
   drag,
+  onTakenOut,
 }: {
+  deckId: string
   commanderFormat: boolean
   lines: DeckLine[]
   board: Board
@@ -66,15 +90,63 @@ export function CardsTab({
   // Holding a card outside edit mode: start editing with it selected.
   onHold: (line: DeckLine) => void
   drag: CardDrag
+  // A card's last copy taken out with −: its name, and how to put it back (the Undo toast).
+  onTakenOut: (name: string, undo: Undo) => void
 }) {
+  const db = useSQLiteContext()
+  const store = useDeckStore()
   const [query, setQuery] = useState('')
+  const searchInput = useRef<TextInput>(null)
+  useSearchBack(searchInput)
   const [desc, setDesc] = useState(false)
   // Groups closed by the user (all open to start).
   const [closed, setClosed] = useState<string[]>([])
+  const [market, setMarket] = useState<MarketResult | null>(null)
 
   const inBoard = lines.filter((l) => l.board === board)
-  const shown = filterLines(inBoard, filters, query).sort((a, b) => (desc ? -1 : 1) * a.name.localeCompare(b.name))
+  const found = filterLines(inBoard, filters, query).sort((a, b) => (desc ? -1 : 1) * a.name.localeCompare(b.name))
+  const q = query.trim()
+  // The Market is asked when the deck has nothing for the search, and its cards stay on show while
+  // the search does (so cards put in from there keep their place, with their new counts).
+  const nothingHere = !editing && q.length >= MARKET_FROM && found.length === 0
+  const marketOn = !editing && q.length >= MARKET_FROM && (nothingHere || market?.q === q)
+  const marketCards = marketOn && market?.q === q ? market.cards : undefined
+  const marketIds = new Set((marketCards ?? []).map((c) => c.id))
+  // Cards from the Market list show there only.
+  const shown = marketOn ? found.filter((l) => !marketIds.has(l.cardId)) : found
   const groups = groupLines(shown, groupBy)
+
+  useEffect(() => {
+    if (!nothingHere) return
+    let live = true
+    const timer = setTimeout(() => {
+      const phrase = q.replace(/"/g, '')
+      searchCards(`"${phrase}" game:paper`, { order: 'edhrec', dir: 'asc', unique: 'cards' })
+        .then((r) => live && setMarket({ q, cards: r.data.slice(0, MARKET_MAX) }))
+        .catch((e) => {
+          console.warn('Market search from the deck failed', e)
+          if (live) setMarket({ q, cards: null })
+        })
+    }, MARKET_DELAY)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [nothingHere, q])
+
+  // Copies of a card in the part of the deck on show (0 takes it out).
+  const setCount = (cardId: string, info: CardInfo, n: number) => {
+    if (n > 0) setDeckCardCount(deckId, cardId, info, board, n)
+    else onTakenOut(info.name, removeDeckCards(deckId, [{ cardId, board }]))
+  }
+  const lineInfo = (l: DeckLine): CardInfo =>
+    store.info[l.cardId] ?? { name: l.name, typeLine: l.typeLine, cmc: l.cmc, priceEur: l.price, priceEurFoil: null, image: l.image }
+  // A Market card is saved first, so the deck can show its cost and rules.
+  const setMarketCount = (card: ScryfallCard, n: number) =>
+    upsertCard(db, card)
+      .catch((e) => console.warn('Failed to save the card', e))
+      .then(() => setCount(card.id, cardInfoOf(card), n))
+  const inDeck = (cardId: string) => inBoard.find((l) => l.cardId === cardId)?.quantity ?? 0
   const nFilters = activeFilters(filters)
   const groupLabel = GROUP_OPTIONS.find((o) => o.value === groupBy)!
   const noCommander = commanderFormat && board === 'main' && inBoard.length > 0 && !lines.some((l) => l.commander)
@@ -90,6 +162,7 @@ export function CardsTab({
         <View style={styles.search}>
           <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={18} tintColor={Colors.textSecondary} />
           <TextInput
+            ref={searchInput}
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
@@ -188,6 +261,7 @@ export function CardsTab({
       )}
 
       {groups.length === 0 ? (
+        !marketOn && (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>
             {inBoard.length === 0
@@ -195,6 +269,7 @@ export function CardsTab({
               : 'No cards match.'}
           </Text>
         </View>
+        )
       ) : (
         <View style={styles.groups}>
           {groups.map((g) => {
@@ -229,7 +304,7 @@ export function CardsTab({
                       <GestureDetector key={key} gesture={gestureFor(l)}>
                       <Pressable
                         style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
-                        onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId } }))}
+                        onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId, fromDeck: deckId } }))}
                         // A long press replaces the tap, so letting go doesn't open (or deselect) the card. It
                         // stays set in edit mode: removed mid-press, letting go would count as a tap.
                         onLongPress={() => !editing && onHold(l)}
@@ -239,15 +314,17 @@ export function CardsTab({
                         accessibilityHint={editing ? undefined : 'Hold to select and drag'}
                         accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? formatEur(l.price * l.quantity) : 'no price'}`}
                       >
-                        <Text style={styles.qty}>{l.quantity}×</Text>
-                        <View style={styles.rowText}>
-                          <Text style={styles.cardName} numberOfLines={1}>{l.name}</Text>
-                          {missing > 0 && (
-                            <Text style={styles.tag}>{missing === l.quantity ? 'Not owned' : `${missing} not owned`}</Text>
-                          )}
-                        </View>
-                        <CostRow cost={l.manaCost} />
-                        <Text style={styles.price} numberOfLines={1}>{l.price != null ? formatEur(l.price * l.quantity) : '—'}</Text>
+                        <CardText
+                          name={l.name}
+                          cost={l.manaCost}
+                          price={l.price != null ? formatEur(l.price * l.quantity) : '—'}
+                          tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
+                        />
+                        {editing ? (
+                          <Text style={styles.qty}>{l.quantity}×</Text>
+                        ) : (
+                          <Stepper name={l.name} count={l.quantity} onChange={(n) => setCount(l.cardId, lineInfo(l), n)} />
+                        )}
                       </Pressable>
                       </GestureDetector>
                     )
@@ -257,6 +334,99 @@ export function CardsTab({
           })}
         </View>
       )}
+
+      {marketOn && (
+        <View style={[styles.group, styles.marketGroup]}>
+          <View style={styles.groupHead}>
+            <View style={styles.marketIcon}>
+              <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={15} tintColor={Colors.goldLight} />
+            </View>
+            <View style={styles.groupTitle}>
+              <Text style={styles.groupName} numberOfLines={1}>From the Market</Text>
+              {marketCards != null && <Text style={styles.groupCount}>{marketCards.length}</Text>}
+            </View>
+          </View>
+          {marketCards === undefined ? (
+            <View style={styles.marketNote}>
+              <ActivityIndicator color={Colors.goldLight} />
+              <Text style={styles.marketNoteText}>Not in this deck. Searching the Market…</Text>
+            </View>
+          ) : marketCards === null ? (
+            <View style={styles.marketNote}>
+              <Text style={styles.marketNoteText}>{"Not in this deck, and the Market couldn't be reached."}</Text>
+            </View>
+          ) : marketCards.length === 0 ? (
+            <View style={styles.marketNote}>
+              <Text style={styles.marketNoteText}>No cards called that, in the deck or the Market.</Text>
+            </View>
+          ) : (
+            marketCards.map((card) => {
+              const n = inDeck(card.id)
+              const price = marketPrice(card)
+              return (
+                <Pressable
+                  key={card.id}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  onPress={() => router.push({ pathname: '/card/[id]', params: { id: card.id, fromDeck: deckId } })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${card.name}, ${n ? `${n} in the deck` : 'not in the deck'}, ${price != null ? formatEur(price) : 'no price'}`}
+                >
+                  <CardText
+                    name={card.name}
+                    cost={cardManaCost(card)}
+                    price={price != null ? formatEur(price * Math.max(n, 1)) : '—'}
+                    tag={n === 0 ? 'Not in deck' : null}
+                    tagMuted
+                  />
+                  <Stepper name={card.name} count={n} onChange={(next) => setMarketCount(card, next)} />
+                </Pressable>
+              )
+            })
+          )}
+        </View>
+      )}
+    </View>
+  )
+}
+
+// A card row's text: the name, then its cost, price and tag (Not owned / Not in deck) under it.
+function CardText({ name, cost, price, tag, tagMuted }: { name: string; cost: string; price: string; tag: string | null; tagMuted?: boolean }) {
+  return (
+    <View style={styles.rowText}>
+      <Text style={styles.cardName} numberOfLines={1}>{name}</Text>
+      <View style={styles.rowMeta}>
+        <CostRow cost={cost} size={14} />
+        <Text style={styles.price} numberOfLines={1}>{price}</Text>
+        {tag && <Text style={[styles.tag, tagMuted && styles.tagMuted]} numberOfLines={1}>{tag}</Text>}
+      </View>
+    </View>
+  )
+}
+
+// − copies + for one card. − from one takes the card out (with Undo); at none it's off.
+function Stepper({ name, count, onChange }: { name: string; count: number; onChange: (count: number) => void }) {
+  return (
+    <View style={styles.stepper}>
+      <TouchableOpacity
+        style={[styles.step, count === 0 && styles.stepOff]}
+        onPress={() => onChange(count - 1)}
+        disabled={count === 0}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`One copy less of ${name}`}
+      >
+        <PathIcon d={ICON.minus} color={Colors.text} size={14} weight={2.2} />
+      </TouchableOpacity>
+      <Text style={[styles.stepCount, count === 0 && styles.stepCountZero]} accessibilityLabel={`${count} in the deck`}>{count}</Text>
+      <TouchableOpacity
+        style={[styles.step, styles.stepPlus]}
+        onPress={() => onChange(count + 1)}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`One copy more of ${name}`}
+      >
+        <PathIcon d={ICON.plus} color={Colors.goldLight} size={14} weight={2.2} />
+      </TouchableOpacity>
     </View>
   )
 }
@@ -423,10 +593,10 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   row: {
-    minHeight: 50,
-    paddingVertical: 6,
-    paddingLeft: 12,
-    paddingRight: 14,
+    minHeight: 58,
+    paddingVertical: 8,
+    paddingLeft: 14,
+    paddingRight: 10,
     borderTopWidth: 1,
     borderTopColor: 'rgba(237,230,214,0.06)',
     flexDirection: 'row',
@@ -451,7 +621,7 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 4,
   },
   cardName: {
     fontSize: 14,
@@ -469,13 +639,83 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
   },
+  rowMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   price: {
-    minWidth: 54,
-    textAlign: 'right',
-    fontSize: 13,
+    flexShrink: 0,
+    fontSize: 12,
     fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
     fontVariant: ['tabular-nums'],
+  },
+  // Not in the deck: neutral, the gold tag is for cards you don't own.
+  tagMuted: {
+    backgroundColor: 'rgba(237,230,214,0.10)',
+    color: '#CFC7B4',
+  },
+  stepper: {
+    height: 36,
+    padding: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.12)',
+    backgroundColor: Colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  step: {
+    width: 30,
+    height: 28,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepPlus: {
+    backgroundColor: 'rgba(212,166,74,0.14)',
+  },
+  stepOff: {
+    opacity: 0.3,
+  },
+  stepCount: {
+    minWidth: 26,
+    textAlign: 'center',
+    fontSize: 14,
+    fontFamily: Fonts.extraBold,
+    color: Colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  stepCountZero: {
+    color: Colors.textMuted,
+  },
+  marketGroup: {
+    marginTop: 12,
+  },
+  marketIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: 'rgba(212,166,74,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  marketNote: {
+    minHeight: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(237,230,214,0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  marketNoteText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: Fonts.medium,
+    color: Colors.textSecondary,
   },
   slotZone: {
     marginTop: 12,

@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router/js-tabs';
+import { CommonActions } from 'expo-router/react-navigation';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { NavIcon } from '@/components/nav-icon';
@@ -38,6 +39,13 @@ export default function TabLayout() {
             <NavIcon kind="market" color={color} bg={Colors.background} />
           ),
         }}
+        listeners={({ navigation, route }) => ({
+          // Opened from the tab bar, the Market is no longer adding to the deck whose + opened it.
+          tabPress: () => {
+            if ((route.params as { fromDeck?: string } | undefined)?.fromDeck)
+              navigation.dispatch({ ...CommonActions.setParams({ fromDeck: undefined }), source: route.key })
+          },
+        })}
       />
       <Tabs.Screen
         name="scan"

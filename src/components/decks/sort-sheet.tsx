@@ -6,7 +6,7 @@ import { SortPicker, type SortOption } from '@/components/sort-picker';
 import { deckManaValue, deckValue, type Deck, type DeckData, type Folder } from '@/utils/deck-store';
 
 export type DeckSortBy = 'name' | 'format' | 'value' | 'mana'
-// `by` null: no sort, decks and folders in your own order (as arranged in Manage decks).
+// `by` null: no sort, decks and folders in your own order (as arranged by dragging in Decks).
 export type DeckSort = { by: DeckSortBy | null; desc: boolean }
 
 export const DEFAULT_DECK_SORT: DeckSort = { by: null, desc: false }

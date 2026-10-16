@@ -1,7 +1,9 @@
+import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   FlatList,
   Keyboard,
   Pressable,
@@ -29,6 +31,7 @@ import {
   type FilterTab,
   type MarketFilters,
 } from '@/utils/market-filters';
+import { useSearchBack } from '@/utils/use-search-back';
 
 // Cards per row in grid view, same as the Binder.
 const COLUMNS = 3
@@ -67,9 +70,27 @@ function searchRequest(
 // nothing yet.
 export default function MarketScreen() {
   const insets = useSafeAreaInsets()
+  // Set when a deck's + opened the Market (cleared by tapping the Market tab).
+  const { fromDeck } = useLocalSearchParams<{ fromDeck?: string }>()
+  const navigation = useNavigation()
+  // Opened from a deck, Android's back button goes back to it: the tabs' own back would go to
+  // Binder. Switching to the Decks tab keeps its screens, so the deck is still on top there.
+  useFocusEffect(
+    useCallback(() => {
+      if (!fromDeck) return
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        navigation.setParams({ fromDeck: undefined } as never)
+        navigation.navigate('decks' as never)
+        return true
+      })
+      return () => sub.remove()
+    }, [fromDeck, navigation]),
+  )
   const [text, setText] = useState('')
   const [submitted, setSubmitted] = useState('')
   const [exact, setExact] = useState(false)
+  const searchInput = useRef<TextInput>(null)
+  useSearchBack(searchInput)
   // Card names for what's being typed, tagged with the text they're for.
   const [suggestions, setSuggestions] = useState<{ key: string; names: string[] } | null>(null)
   const [focused, setFocused] = useState(false)
@@ -167,6 +188,7 @@ export default function MarketScreen() {
       <View style={[styles.search, focused && styles.searchFocused]}>
         <SymbolView name={{ ios: 'magnifyingglass', android: 'search' }} size={20} tintColor={Colors.textSecondary} />
         <TextInput
+          ref={searchInput}
           style={styles.searchInput}
           value={text}
           onChangeText={(value) => {
@@ -295,7 +317,7 @@ export default function MarketScreen() {
           key="list"
           data={loading ? [] : results}
           keyExtractor={(card) => card.id}
-          renderItem={({ item }) => <MarketRow card={item} />}
+          renderItem={({ item }) => <MarketRow card={item} fromDeck={fromDeck} />}
           ListEmptyComponent={empty}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
@@ -308,7 +330,7 @@ export default function MarketScreen() {
           data={loading ? [] : [...results, ...Array<null>((COLUMNS - (results.length % COLUMNS)) % COLUMNS).fill(null)]}
           keyExtractor={(card, i) => (card ? card.id : `spacer-${i}`)}
           numColumns={COLUMNS}
-          renderItem={({ item }) => (item ? <MarketTile card={item} /> : <View style={{ flex: 1 }} />)}
+          renderItem={({ item }) => (item ? <MarketTile card={item} fromDeck={fromDeck} /> : <View style={{ flex: 1 }} />)}
           ListEmptyComponent={empty}
           columnWrapperStyle={styles.gridRow}
           contentContainerStyle={styles.gridContent}

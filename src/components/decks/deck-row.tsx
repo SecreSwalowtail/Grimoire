@@ -22,18 +22,41 @@ export function deckMeta(deck: Deck, data: DeckData) {
   return `${deck.format} · ${n === 0 ? 'No cards yet' : `${n} ${n === 1 ? 'card' : 'cards'}`}`
 }
 
+// Selecting in the Decks screen's edit mode: whether it's selected, and tapping toggles that.
+export type RowEdit = { selected: boolean; onToggle: () => void }
+
 // One deck: fanned thumbnail, name, format and card count, value, and the ⋮ options button when given.
-// Tapping it opens the deck.
-export function DeckRow({ deck, onOptions, last }: { deck: Deck; onOptions?: () => void; last?: boolean }) {
+// Tapping it opens the deck. `onHold`: holding it (outside edit mode). With `edit`, tapping
+// selects it instead and the options button hides.
+export function DeckRow({
+  deck,
+  onOptions,
+  last,
+  edit,
+  onHold,
+}: {
+  deck: Deck
+  onOptions?: () => void
+  last?: boolean
+  edit?: RowEdit
+  onHold?: () => void
+}) {
   const data = useDeckStore()
   const meta = deckMeta(deck, data)
   const value = formatEur(deckValue(deck, data))
   return (
     <View style={[styles.row, !last && styles.rule]}>
+      {edit?.selected && <View pointerEvents="none" style={styles.rowOn} />}
       <Pressable
         style={styles.open}
-        onPress={() => router.push({ pathname: '/decks/deck/[deckId]', params: { deckId: deck.id } })}
-        accessibilityRole="button"
+        onPress={() => (edit ? edit.onToggle() : router.push({ pathname: '/decks/deck/[deckId]', params: { deckId: deck.id } }))}
+        // A long press replaces the tap, so letting go doesn't open (or deselect) the deck. It stays
+        // set in edit mode: removed mid-press, letting go would count as a tap.
+        onLongPress={onHold && (() => !edit && onHold())}
+        delayLongPress={300}
+        accessibilityRole={edit ? 'checkbox' : 'button'}
+        accessibilityState={edit ? { checked: edit.selected } : undefined}
+        accessibilityHint={edit || !onHold ? undefined : 'Hold to select and drag'}
         accessibilityLabel={`${deck.name}, ${meta}, ${value}`}
       >
         <DeckThumb deckId={deck.id} />
@@ -43,7 +66,7 @@ export function DeckRow({ deck, onOptions, last }: { deck: Deck; onOptions?: () 
         </View>
         <Text style={styles.value}>{value}</Text>
       </Pressable>
-      {onOptions && (
+      {onOptions && !edit && (
         <TouchableOpacity
           style={styles.options}
           onPress={onOptions}
@@ -58,26 +81,35 @@ export function DeckRow({ deck, onOptions, last }: { deck: Deck; onOptions?: () 
 }
 
 // Folder card for the Decks screen grid: folder icon and card fan, name, deck count, ⋯ options.
+// `onHold` and `edit` as for DeckRow.
 export function FolderCard({
   folder,
   count,
   onOpen,
   onOptions,
+  edit,
+  onHold,
 }: {
   folder: Folder
   count: number
   onOpen: () => void
   onOptions: () => void
+  edit?: RowEdit
+  onHold?: () => void
 }) {
   const hex = FOLDER_COLORS[folder.color].hex
   const decksText = `${count} ${count === 1 ? 'deck' : 'decks'}`
   return (
     <View style={styles.folder}>
       <Pressable
-        style={styles.folderCard}
-        onPress={onOpen}
-        accessibilityRole="button"
-        accessibilityLabel={`Open folder ${folder.name}, ${decksText}`}
+        style={[styles.folderCard, edit?.selected && styles.folderOn]}
+        onPress={edit ? edit.onToggle : onOpen}
+        onLongPress={onHold && (() => !edit && onHold())}
+        delayLongPress={300}
+        accessibilityRole={edit ? 'checkbox' : 'button'}
+        accessibilityState={edit ? { checked: edit.selected } : undefined}
+        accessibilityHint={edit || !onHold ? undefined : 'Hold to select and drag'}
+        accessibilityLabel={`${edit ? '' : 'Open folder '}${folder.name}${edit ? ' folder' : ''}, ${decksText}`}
       >
         <View
           pointerEvents="none"
@@ -92,14 +124,16 @@ export function FolderCard({
           <Text style={styles.folderCount}>{decksText}</Text>
         </View>
       </Pressable>
-      <TouchableOpacity
-        style={styles.folderOptions}
-        onPress={onOptions}
-        accessibilityRole="button"
-        accessibilityLabel={`Folder options for ${folder.name}`}
-      >
-        <SymbolView name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.textSecondary} />
-      </TouchableOpacity>
+      {!edit && (
+        <TouchableOpacity
+          style={styles.folderOptions}
+          onPress={onOptions}
+          accessibilityRole="button"
+          accessibilityLabel={`Folder options for ${folder.name}`}
+        >
+          <SymbolView name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.textSecondary} />
+        </TouchableOpacity>
+      )}
     </View>
   )
 }
@@ -122,6 +156,16 @@ const styles = StyleSheet.create({
   rule: {
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(237,230,214,0.07)',
+  },
+  // A selected deck: tinted gold, a little wider than the row.
+  rowOn: {
+    position: 'absolute',
+    left: -10,
+    right: -10,
+    top: 4,
+    bottom: 4,
+    borderRadius: 14,
+    backgroundColor: 'rgba(212,166,74,0.16)',
   },
   text: {
     flex: 1,
@@ -164,6 +208,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     justifyContent: 'space-between',
     overflow: 'hidden',
+  },
+  folderOn: {
+    borderWidth: 1.5,
+    borderColor: Colors.gold,
+    backgroundColor: 'rgba(212,166,74,0.14)',
   },
   glow: {
     position: 'absolute',

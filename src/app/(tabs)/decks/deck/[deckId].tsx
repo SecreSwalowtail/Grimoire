@@ -12,6 +12,7 @@ import {
   dragGesture,
   DragGhost,
   DropZone,
+  EDIT_BAR,
   EditBar,
   TrashBubble,
   useCardDrag,
@@ -22,6 +23,7 @@ import { CROWN, ICON, PathIcon } from '@/components/deck/parts';
 import { FilterSheet } from '@/components/deck/filter-sheet';
 import { setGroupBy, useGroupBy } from '@/components/deck/group-prefs';
 import { GroupSheet } from '@/components/deck/group-sheet';
+import { LegalTab } from '@/components/deck/legal-tab';
 import { StatsTab } from '@/components/deck/stats-tab';
 import { useDeckLines } from '@/components/deck/use-deck-lines';
 import { canShareCommand } from '@/rules/commander';
@@ -51,14 +53,12 @@ import {
 } from '@/utils/deck-store';
 import { formatEur } from '@/utils/format';
 
-type Tab = 'cards' | 'stats'
+type Tab = 'cards' | 'stats' | 'legal'
 
 // Gesture-handler's scroll view, animatable so a drag can scroll it.
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView)
 
 const keyOf = (l: DeckLine) => `${l.cardId}|${l.board}`
-// Height of the edit bar (title, buttons, room for the Scan button).
-const EDIT_BAR = 124
 
 // The card on show at the top: the commander; in a Commander-style deck without one, its first
 // legendary creature; otherwise the most valuable card.
@@ -73,13 +73,13 @@ function coverLine(deck: Deck, main: DeckLine[]) {
 }
 
 // D1–D8 · One deck: its cover card, colors, size and value, then Cards (grouped, filtered, by part
-// of the deck) or Stats. + goes to the Market, where Card detail adds cards to decks; ⋯ opens Deck
-// options (which can import a decklist).
+// of the deck) or Stats. Cards are added from the Cards tab's search (it searches the Market when
+// the deck has nothing for it); ⋯ opens Deck options (which can import a decklist).
 // Hold a card to edit: it's selected (not picked up). Tap cards to select more; holding any selected
 // card then picks up the whole selection (unselected cards don't drag). It can be
 // dropped on the Main deck / Sideboard / Maybe chips, on the commander (the cover card or the
 // Commander group; one card that can lead the deck, anything else turns it red), or dragged down
-// into the trash bubble. ⋯, + and Filter hide meanwhile; the bar at the bottom has Undo and Done.
+// into the trash bubble. ⋯ and Filter hide meanwhile; the bar at the bottom has Undo and Done.
 export default function DeckScreen() {
   const insets = useSafeAreaInsets()
   const { deckId } = useLocalSearchParams<{ deckId: string }>()
@@ -174,9 +174,11 @@ export default function DeckScreen() {
       // Next to a commander it can share command with; otherwise it takes over alone.
       const partner = partnerOf(line)
       setCommanders(deck.id, partner ? [partner.cardId, line.cardId] : [line.cardId])
-    } else {
+    } else if (target === 'main' || target === 'side' || target === 'maybe') {
       if (target === board) return
       change = moveDeckCards(deck.id, keys, target)
+    } else {
+      return
     }
     setUndos([...undos, change])
     setSelected([])
@@ -232,15 +234,6 @@ export default function DeckScreen() {
             >
               <PathIcon d={ICON.more} color={Colors.text} size={22} weight={3} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.add}
-              onPress={() => router.navigate('/market')}
-              accessibilityRole="button"
-              accessibilityLabel="Add cards"
-              accessibilityHint="Find cards in the Market and add them from Card detail"
-            >
-              <PathIcon d={ICON.plus} color={Colors.onGold} size={22} weight={2.4} />
-            </TouchableOpacity>
           </View>
           )}
         </View>
@@ -250,7 +243,7 @@ export default function DeckScreen() {
             <DropZone drag={drag} id="commander">
             <Pressable
               style={styles.cover}
-              onPress={() => router.push({ pathname: '/card/[id]', params: { id: cover.cardId } })}
+              onPress={() => router.push({ pathname: '/card/[id]', params: { id: cover.cardId, fromDeck: deck.id } })}
               accessibilityRole="button"
               accessibilityLabel={`${cover.commander ? 'Commander: ' : 'Open '}${cover.name}`}
             >
@@ -296,6 +289,7 @@ export default function DeckScreen() {
             options={[
               { value: 'cards', label: 'Cards' },
               { value: 'stats', label: 'Stats' },
+              { value: 'legal', label: 'Legal' },
             ]}
             value={tab}
             onChange={(t) => {
@@ -307,6 +301,7 @@ export default function DeckScreen() {
 
         {tab === 'cards' ? (
           <CardsTab
+            deckId={deck.id}
             commanderFormat={commanderFormat}
             lines={lines}
             board={board}
@@ -327,9 +322,10 @@ export default function DeckScreen() {
             gestureFor={gestureFor}
             onHold={startEditing}
             drag={drag}
+            onTakenOut={(name, change) => deckSheets.showUndo(`${name} taken out`, change)}
           />
         ) : (
-          <StatsTab lines={lines} />
+          tab === 'stats' ? <StatsTab lines={lines} /> : <LegalTab format={deck.format} lines={lines} />
         )}
       </AnimatedScrollView>
 
@@ -339,7 +335,7 @@ export default function DeckScreen() {
           <TrashBubble drag={drag} bottom={EDIT_BAR + 20} />
         </>
       )}
-      <DragGhost drag={drag} lines={picked} />
+      <DragGhost drag={drag} lines={picked.map((l) => ({ key: keyOf(l), name: l.name, image: l.image, quantity: l.quantity }))} />
 
       <GroupSheet
         visible={groupOpen}
@@ -500,13 +496,5 @@ const styles = StyleSheet.create({
   topActions: {
     flexDirection: 'row',
     gap: 8,
-  },
-  add: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: Colors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 })

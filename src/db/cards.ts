@@ -46,6 +46,32 @@ export async function upsertCard(db: SQLiteDatabase, card: ScryfallCard) {
   if (before?.owned && (before.price_eur !== prices[0] || before.price_eur_foil !== prices[1])) collectionChanged();
 }
 
+// What decks need to know about saved cards, with their full data (null when never saved with it).
+export async function getCardRows(db: SQLiteDatabase, ids: string[]) {
+  if (ids.length === 0) return [];
+  const rows = await db.getAllAsync<{
+    id: string;
+    name: string;
+    type_line: string | null;
+    cmc: number | null;
+    price_eur: number | null;
+    price_eur_foil: number | null;
+    image_uri: string | null;
+    data: string | null;
+  }>(
+    `SELECT id, name, type_line, cmc, price_eur, price_eur_foil, image_uri, data FROM cards
+     WHERE id IN (${ids.map(() => '?').join(', ')})`,
+    ...ids,
+  );
+  return rows.map(({ data, ...row }) => {
+    let card: ScryfallCard | null = null;
+    try {
+      card = data ? (JSON.parse(data) as ScryfallCard) : null;
+    } catch {}
+    return { ...row, card };
+  });
+}
+
 // A card saved on the phone, with when it was last refreshed. Null if it was never saved with its
 // full data (cards saved before the app kept it get it the next time they're opened).
 export async function getSavedCard(db: SQLiteDatabase, id: string) {

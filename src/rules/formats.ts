@@ -60,7 +60,7 @@ export const LEGALITY_HINT: Record<Legality, string> = {
 export const isPlayable = (status: Legality | undefined) => status === 'legal' || status === 'restricted'
 
 // The decks' formats as Scryfall keys; Casual has no card pool.
-const DECK_FORMAT_KEY: Record<DeckFormat, string | null> = {
+export const DECK_FORMAT_KEY: Record<DeckFormat, string | null> = {
   Commander: 'commander',
   Standard: 'standard',
   Modern: 'modern',
@@ -99,6 +99,9 @@ const SINGLETON = new Set<DeckFormat>([
   'Competitive Brawl',
   'Gladiator',
 ])
+
+// One copy of each card (basics and "any number" cards aside).
+export const isSingleton = (format: DeckFormat) => SINGLETON.has(format)
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,

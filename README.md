@@ -1,56 +1,57 @@
-# Welcome to your Expo app 👋
+# Grimoire
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**A Magic: The Gathering collection app for Android and iOS.** Scan your cards with the camera,
+keep them in binders, see what they're worth, search every card ever printed, and build decks
+from what you own.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Scan cards**: point the camera at a card and it's recognized from its set code and
+  collector number, then added to your binder. Single mode, or Bulk mode for a whole stack.
+- **Binders**: your collection as 9-pocket binder pages, with value, weekly change and card
+  count. Search, sort and group the cards, look at one up close (it tilts with your phone and
+  foils shine), and hold cards to select and drag them: to another binder, into a deck, or into
+  the trash.
+- **Market**: search every Magic card through Scryfall by name, rules text or type, with filters
+  for format legality, colors, mana cost, set, rarity and language.
+- **Card detail**: the card, its prices (Cardmarket and TCGplayer) with price history, every
+  printing and your copies of each, rules, rulings and format legality.
+- **Decks**: decks and folders, a commander slot with partner rules, main deck, sideboard and
+  maybe list, stats (curve, colors, types) and a legality check per format. Add cards straight
+  from the deck's search (it searches every card when the deck has none), change copies with
+  − / +, and drag cards between parts of the deck.
 
-   ```bash
-   npm install
-   ```
+## Built with
 
-2. Start the app
+- [Expo](https://expo.dev) (SDK 57) and [React Native](https://reactnative.dev), in TypeScript
+- [Expo Router](https://docs.expo.dev/router/introduction/) for navigation
+- [Reanimated](https://docs.swmansion.com/react-native-reanimated/) and
+  [Gesture Handler](https://docs.swmansion.com/react-native-gesture-handler/) for animation and
+  drag and drop
+- [Skia](https://shopify.github.io/react-native-skia/) for card effects
+- [VisionCamera](https://react-native-vision-camera.com) and
+  [ML Kit text recognition](https://developers.google.com/ml-kit/vision/text-recognition) for scanning
+- [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) for the collection, stored on the phone
+- Card data and images from [Scryfall](https://scryfall.com)
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run it
 
 ```bash
-npm run reset-project
+npm install
+npx expo run:android   # or: npx expo run:ios (needs a Mac)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## License
 
-### Other setup steps
+[PolyForm Noncommercial 1.0.0](LICENSE): you may read, learn from, copy and change this code for
+any noncommercial purpose. Commercial use isn't allowed. This makes the project source-available
+rather than open source.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Legal
 
-## Learn more
+Grimoire is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed
+by Wizards. Portions of the materials used are property of Wizards of the Coast.
+©Wizards of the Coast LLC.
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Card data and images: [Scryfall](https://scryfall.com). Prices: [MTGJSON](https://mtgjson.com),
+from Cardmarket and TCGplayer. Grimoire is not affiliated with any of them.

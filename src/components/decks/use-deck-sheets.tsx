@@ -30,14 +30,21 @@ function useToast() {
   }, () => toast)
 }
 
-// The Decks sheets and Undo toast, shared by the Decks, Folder and Organize screens, and the
+// The Decks sheets and Undo toast, shared by the Decks, Folder and Deck screens, and the
 // hand-offs between them (Deck options → Move, Move → New folder, Edit folder → Delete…).
-// Render `sheets` once at the end of the screen.
+// Render `sheets` once at the end of the screen. `onUndoable`: takes the changes that can be undone
+// instead of the Undo toast (the Decks screen's edit mode, which has its own Undo).
 export function useDeckSheets({
   toastBottom = 16,
   onFolderDeleted,
   onDeckDeleted,
-}: { toastBottom?: number; onFolderDeleted?: () => void; onDeckDeleted?: () => void } = {}) {
+  onUndoable,
+}: {
+  toastBottom?: number
+  onFolderDeleted?: () => void
+  onDeckDeleted?: () => void
+  onUndoable?: (message: string, undo: Undo) => void
+} = {}) {
   const [newSheet, setNewSheet] = useState<NewState | null>(null)
   const [editFolderId, setEditFolderId] = useState<string | null>(null)
   const [optionsDeckId, setOptionsDeckId] = useState<string | null>(null)
@@ -49,7 +56,7 @@ export function useDeckSheets({
   // Only the screen in front shows the toast; screens behind it in the stack stay mounted.
   const isFocused = useIsFocused()
 
-  const showUndo = (message: string, undo: Undo) => setToast({ message, undo })
+  const showUndo = (message: string, undo: Undo) => (onUndoable ? onUndoable(message, undo) : setToast({ message, undo }))
 
   const sheets = (
     <>

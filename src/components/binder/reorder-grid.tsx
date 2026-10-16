@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-// Like the Decks reorder list (components/decks/reorder-list.tsx), with a gentler sway: these
+// Dragged items sway with the drag speed, gently: these
 // items are big.
 const SETTLE = { damping: 20, stiffness: 240 }
 const WOBBLE = { damping: 14, stiffness: 200 }

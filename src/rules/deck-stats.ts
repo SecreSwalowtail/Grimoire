@@ -42,6 +42,8 @@ export type DeckLine = {
   // Copies you own of this card (any printing), across binders.
   owned: number
   commander: boolean
+  // The full card, when it's saved on the phone (legality, color identity, copy rules).
+  card: ScryfallCard | null
 }
 
 export type CardType =
@@ -119,6 +121,7 @@ export function lineFrom(
     keywords: card?.keywords ?? [],
     owned,
     commander,
+    card,
   }
 }
 
@@ -169,21 +172,24 @@ export type GroupHead =
   | { kind: 'rarity'; rarity: string }
   | { kind: 'text'; text: string }
 
-export type Group = { key: string; name: string; head: GroupHead; lines: DeckLine[]; count: number; value: number }
+// What grouping reads from a card: deck lines, or a binder's cards (see binder/card-grid.tsx).
+export type Groupable = Pick<DeckLine, 'commander' | 'type' | 'cmc' | 'colors' | 'rarity' | 'set' | 'setName' | 'quantity' | 'price'>
+
+export type Group<L extends Groupable = DeckLine> = { key: string; name: string; head: GroupHead; lines: L[]; count: number; value: number }
 
 const RARITIES = ['mythic', 'rare', 'uncommon', 'common']
 const mvBucket = (cmc: number) => Math.min(Math.floor(cmc), 7)
 
-// The lines in groups, in the order the groups are listed. Lands stay together whatever the grouping
-// (they have no mana value or color of their own).
-export function groupLines(lines: DeckLine[], by: GroupBy): Group[] {
-  const map = new Map<string, Omit<Group, 'count' | 'value'> & { order: number }>()
-  const add = (key: string, name: string, head: GroupHead, order: number, line: DeckLine) => {
+// The lines in groups, in the order the groups are listed (lines keep their order within a group).
+// Lands stay together whatever the grouping (they have no mana value or color of their own).
+export function groupLines<L extends Groupable>(lines: L[], by: GroupBy): Group<L>[] {
+  const map = new Map<string, Omit<Group<L>, 'count' | 'value'> & { order: number }>()
+  const add = (key: string, name: string, head: GroupHead, order: number, line: L) => {
     const g = map.get(key) ?? { key, name, head, lines: [], order }
     g.lines.push(line)
     map.set(key, g)
   }
-  const land = (l: DeckLine) => add('land', 'Lands', { kind: 'type', type: 'Land' }, 1000, l)
+  const land = (l: L) => add('land', 'Lands', { kind: 'type', type: 'Land' }, 1000, l)
   const commanders = lines.filter((l) => l.commander).length
   for (const l of lines) {
     // The commander leads, whatever the grouping.

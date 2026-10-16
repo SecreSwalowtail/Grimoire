@@ -32,7 +32,7 @@ import { record } from '@/utils/perf';
 export default function CardScreen() {
   const insets = useSafeAreaInsets()
   const db = useSQLiteContext()
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, fromDeck } = useLocalSearchParams<{ id: string; fromDeck?: string }>()
   const [viewingId, setViewingId] = useState(id)
   const [tab, setTab] = useState<CardTab>('overview')
   const [face, setFace] = useState(0)
@@ -219,6 +219,7 @@ export default function CardScreen() {
         visible={deckSheet}
         card={card}
         owned={owned}
+        fromDeck={fromDeck}
         onClose={() => setDeckSheet(false)}
         onNewDeck={(board) => {
           setDeckSheet(false)

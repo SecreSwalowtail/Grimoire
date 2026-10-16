@@ -22,10 +22,10 @@ import {
 } from '@/utils/deck-store';
 
 // C6 · Add to deck. Pick the part of the deck (main, sideboard, maybe) and how many copies, then tap
-// the decks to put them in (one or several), and the button adds them. "Ignore format rules" lets
-// the card into decks whose format doesn't allow it, and past the copy limit. Afterwards: one deck
-// opens that deck (back to the same screen, edit mode and all, if it's already open behind);
-// several open the Decks list.
+// the decks to put them in (one or several), and the button adds them. Any card can go in any deck:
+// what breaks the format's rules is only flagged here (gold), and the deck's Legal tab says how to
+// fix it. Afterwards, if Card detail was opened from a deck (its card list, or its + and the Market),
+// it goes back to that deck as it was left; otherwise it stays on Card detail.
 
 const BOARDS: { value: Board; label: string }[] = [
   { value: 'main', label: 'Main deck' },
@@ -42,43 +42,25 @@ export function copiesNeeded(data: DeckData, name: string) {
 
 type Row = {
   deck: Deck
-  // How many copies the button would add here, and why it can't (or adds fewer).
-  adds: number
-  blocked: string | null
   note: string
   noteColor: string
 }
 
-export function AddToDeckSheet({
-  visible,
-  card,
-  owned,
-  onClose,
-  onNewDeck,
-}: {
-  visible: boolean
-  card: ScryfallCard
-  owned: number
-  onClose: () => void
-  onNewDeck: (board: Board) => void
-}) {
+export type CommanderIdentity = Map<string, { colors: Set<string>; names: string[] }>
+
+// Each deck's commander colors and names (from the commanders' saved data), for decks that have
+// one. Read while `visible`.
+export function useCommanderIdentity(visible: boolean) {
   const db = useSQLiteContext()
   const store = useDeckStore()
-  const [board, setBoard] = useState<Board>('main')
-  const [amount, setAmount] = useState(1)
-  const [ignoreRules, setIgnoreRules] = useState(false)
-  const [picked, setPicked] = useState<string[]>([])
-  const name = card.name
-
-  // Each deck's commander colors (from the commanders' saved data), for decks that have one.
   const commanders = store.cards.filter((c) => isCommander(c, store.decks))
   const commanderKey = commanders.map((c) => `${c.deckId}:${c.cardId}`).join(',')
-  const [identity, setIdentity] = useState<Map<string, { colors: Set<string>; names: string[] }>>(() => new Map())
+  const [identity, setIdentity] = useState<CommanderIdentity>(() => new Map())
   useEffect(() => {
     if (!visible) return
     let live = true
     ;(async () => {
-      const next = new Map<string, { colors: Set<string>; names: string[] }>()
+      const next: CommanderIdentity = new Map()
       for (const pair of commanderKey ? commanderKey.split(',') : []) {
         const [deckId, cardId] = pair.split(':')
         const saved = await getSavedCard(db, cardId)
@@ -94,6 +76,32 @@ export function AddToDeckSheet({
       live = false
     }
   }, [visible, commanderKey, db])
+  return identity
+}
+
+export function AddToDeckSheet({
+  visible,
+  card,
+  owned,
+  fromDeck,
+  onClose,
+  onNewDeck,
+}: {
+  visible: boolean
+  card: ScryfallCard
+  owned: number
+  // The deck Card detail was opened from, if any.
+  fromDeck?: string
+  onClose: () => void
+  onNewDeck: (board: Board) => void
+}) {
+  const db = useSQLiteContext()
+  const store = useDeckStore()
+  const [board, setBoard] = useState<Board>('main')
+  const [amount, setAmount] = useState(1)
+  const [picked, setPicked] = useState<string[]>([])
+  const name = card.name
+  const identity = useCommanderIdentity(visible)
 
   // Fresh each time it opens (state adjusted during render).
   const [wasVisible, setWasVisible] = useState(visible)
@@ -101,7 +109,6 @@ export function AddToDeckSheet({
     setWasVisible(visible)
     if (visible) {
       setAmount(1)
-      setIgnoreRules(false)
       setPicked([])
     }
   }
@@ -119,38 +126,26 @@ export function AddToDeckSheet({
     return found
   }
 
-  const rows: Row[] = store.decks
-    .map((deck) => {
-      const { fit, rule } = rulesFor(deck.format)
-      const counts = use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 }
-      const here = counts[board]
-      // A card outside the commander's colors can't go in that deck.
-      const id = identity.get(deck.id)
-      const outside = id ? (card.color_identity ?? []).filter((c) => !id.colors.has(c)) : []
-      const notAllowed = !fit.allowed ? fit.reason ?? 'Not allowed in this format' : outside.length ? `Outside ${id!.names.join(' & ')}'s colors` : null
-      // The copy limit covers the deck and its sideboard together.
-      const room = board !== 'maybe' && rule.max != null ? Math.max(rule.max - (counts.main + counts.side), 0) : null
-      const atLimit = room === 0
-      const blocked = ignoreRules ? null : notAllowed ?? (atLimit ? `At the limit · ${rule.label.toLowerCase()}` : null)
-      const adds = ignoreRules || room == null ? amount : Math.min(amount, room)
-      let note = here > 0 ? `${here} ${IN_BOARD[board]}` : rule.label
-      let noteColor: string = here > 0 ? Colors.positive : Colors.textMuted
-      if (blocked) {
-        note = blocked
-        noteColor = Colors.textMuted
-      } else if (ignoreRules && notAllowed) {
-        note = `${notAllowed} · rules ignored`
-        noteColor = Colors.goldLight
-      } else if (!ignoreRules && adds < amount) {
-        note = `Adds ${adds} · ${rule.label.toLowerCase()}`
-        noteColor = Colors.goldLight
-      }
-      return { deck, adds, blocked, note, noteColor }
-    })
-    .sort((a, b) => Number(a.blocked != null) - Number(b.blocked != null))
+  const rows: Row[] = store.decks.map((deck) => {
+    const { fit, rule } = rulesFor(deck.format)
+    const counts = use.get(deck.id) ?? { main: 0, side: 0, maybe: 0 }
+    const here = counts[board]
+    // What would break the format's rules: not legal, outside the commander's colors, too many copies.
+    const id = identity.get(deck.id)
+    const outside = id ? (card.color_identity ?? []).filter((c) => !id.colors.has(c)) : []
+    const played = board === 'maybe' ? 0 : counts.main + counts.side + amount
+    const warning =
+      board === 'maybe' ? null
+      : !fit.allowed ? fit.reason ?? 'Not allowed in this format'
+      : outside.length ? `Outside ${id!.names.join(' & ')}'s colors`
+      : rule.max != null && played > rule.max ? `Over the limit · ${rule.label.toLowerCase()}`
+      : null
+    const note = warning ?? (here > 0 ? `${here} ${IN_BOARD[board]}` : rule.label)
+    const noteColor = warning ? Colors.goldLight : here > 0 ? Colors.positive : Colors.textMuted
+    return { deck, note: warning ? `${note} · not legal` : note, noteColor }
+  })
 
-  // Decks picked that can still take the card (turning the rules back on can block some).
-  const chosen = rows.filter((r) => picked.includes(r.deck.id) && !r.blocked)
+  const chosen = rows.filter((r) => picked.includes(r.deck.id))
   const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((p) => p !== id) : [...picked, id])
 
   const add = async () => {
@@ -160,11 +155,12 @@ export function AddToDeckSheet({
     }
     await upsertCard(db, card).catch(() => undefined)
     const info = cardInfoOf(card)
-    for (const r of chosen) addDeckCards(r.deck.id, card.id, info, board, r.adds)
+    for (const r of chosen) addDeckCards(r.deck.id, card.id, info, board, amount)
     onClose()
-    // One deck: open it (or go back to it, as it was left). Several: the Decks list.
-    if (chosen.length === 1) router.navigate({ pathname: '/decks/deck/[deckId]', params: { deckId: chosen[0].deck.id } })
-    else router.navigate('/decks')
+    // dismissTo, not navigate: from Card detail (on the root stack) navigate pushes a second copy of
+    // the tabs, holding only the deck, so going back from it lands on Binder.
+    if (fromDeck && store.decks.some((d) => d.id === fromDeck))
+      router.dismissTo({ pathname: '/decks/deck/[deckId]', params: { deckId: fromDeck } })
   }
 
   return (
@@ -210,21 +206,6 @@ export function AddToDeckSheet({
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.optionRule} />
-          <Pressable
-            style={styles.option}
-            onPress={() => setIgnoreRules(!ignoreRules)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: ignoreRules }}
-          >
-            <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>Ignore format rules</Text>
-              <Text style={styles.optionHint}>Add it even if it isn&apos;t legal, or past the copy limit</Text>
-            </View>
-            <View style={[styles.box, ignoreRules && styles.boxOn]}>
-              {ignoreRules && <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={14} tintColor={Colors.onGold} weight="bold" />}
-            </View>
-          </Pressable>
         </View>
 
         <SectionLabel style={styles.label}>{rows.length ? 'Your decks · tap to pick' : 'Your decks'}</SectionLabel>
@@ -234,15 +215,14 @@ export function AddToDeckSheet({
           <View style={styles.list}>
             {rows.map((r, i) => {
               const folder = store.folders.find((f) => f.id === r.deck.folderId)
-              const on = picked.includes(r.deck.id) && !r.blocked
+              const on = picked.includes(r.deck.id)
               return (
                 <Pressable
                   key={r.deck.id}
-                  style={[styles.row, i > 0 && styles.rowRule, on && styles.rowOn, r.blocked != null && styles.rowOff]}
+                  style={[styles.row, i > 0 && styles.rowRule, on && styles.rowOn]}
                   onPress={() => toggle(r.deck.id)}
-                  disabled={r.blocked != null}
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked: on, disabled: r.blocked != null }}
+                  accessibilityState={{ checked: on }}
                   accessibilityLabel={`${r.deck.name}, ${r.deck.format}. ${r.note}`}
                 >
                   <View style={styles.rowText}>
@@ -266,7 +246,7 @@ export function AddToDeckSheet({
       </ScrollView>
 
       <PrimaryButton
-        label={chosen.length === 0 ? 'Done' : `Add ${amount} to ${chosen.length} ${chosen.length === 1 ? 'deck' : 'decks'}`}
+        label={chosen.length === 0 ? 'Done' : `Add ${amount} ${amount === 1 ? 'card' : 'cards'} to ${chosen.length} ${chosen.length === 1 ? 'deck' : 'decks'}`}
         onPress={add}
       />
     </Sheet>
@@ -333,24 +313,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  optionRule: {
-    height: 1,
-    marginHorizontal: 14,
-    backgroundColor: 'rgba(237,230,214,0.07)',
-  },
-  optionText: {
-    flex: 1,
-    gap: 2,
-  },
   optionTitle: {
     fontSize: 15,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
-  },
-  optionHint: {
-    fontSize: 12,
-    fontFamily: Fonts.regular,
-    color: Colors.textSecondary,
   },
   stepper: {
     height: 42,
@@ -439,9 +405,6 @@ const styles = StyleSheet.create({
   },
   rowOn: {
     backgroundColor: 'rgba(212,166,74,0.12)',
-  },
-  rowOff: {
-    opacity: 0.45,
   },
   rowText: {
     flex: 1,

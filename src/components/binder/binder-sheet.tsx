@@ -9,6 +9,7 @@ import { ColorSpectrum } from '@/components/color-spectrum';
 import { NameField } from '@/components/decks/parts';
 import { StartOptions, type Start } from '@/components/decks/new-sheet';
 import { BINDER_PRESETS, createBinder, updateBinder, type Binder } from '@/db/binders';
+import { moveEntries, type CollectionEntry } from '@/db/collection';
 import { setScanBinder } from '@/utils/scan-binder';
 
 const PREVIEW_SCALE = 0.85
@@ -19,7 +20,21 @@ const FIRST_COLOR = BINDER_PRESETS.gold.hex
 // "Empty" and "Paste list" create the binder and open it (pasting a list isn't built yet);
 // "Scan cards" creates it, sends scanned cards into it and opens the Scan tab.
 // Given a `binder`, it's "Edit binder" instead: name and color, saved with Save.
-export function BinderSheet({ visible, binder, onClose }: { visible: boolean; binder?: Binder | null; onClose: () => void }) {
+// Given `entries` (cards picked in a binder's edit mode), the new binder is made with those cards,
+// moved out of where they were: no "Start from", and no binder opens. `onCreated` gets its id and name.
+export function BinderSheet({
+  visible,
+  binder,
+  entries,
+  onClose,
+  onCreated,
+}: {
+  visible: boolean
+  binder?: Binder | null
+  entries?: CollectionEntry[]
+  onClose: () => void
+  onCreated?: (id: string, name: string) => void
+}) {
   const db = useSQLiteContext()
   const [name, setName] = useState('')
   const [color, setColor] = useState<string>(FIRST_COLOR)
@@ -38,7 +53,13 @@ export function BinderSheet({ visible, binder, onClose }: { visible: boolean; bi
     }
   }
 
-  const cta = binder ? 'Save' : start === 'scan' ? 'Create & start scanning' : start === 'paste' ? 'Create & paste list' : 'Create binder'
+  const copies = entries?.reduce((n, e) => n + e.quantity, 0) ?? 0
+  const cta =
+    binder ? 'Save'
+    : entries ? `Create binder with ${copies} ${copies === 1 ? 'card' : 'cards'}`
+    : start === 'scan' ? 'Create & start scanning'
+    : start === 'paste' ? 'Create & paste list'
+    : 'Create binder'
 
   const create = async () => {
     try {
@@ -47,7 +68,14 @@ export function BinderSheet({ visible, binder, onClose }: { visible: boolean; bi
         onClose()
         return
       }
-      const id = await createBinder(db, { name: name.trim() || 'New binder', color })
+      const binderName = name.trim() || 'New binder'
+      const id = await createBinder(db, { name: binderName, color })
+      if (entries) {
+        await moveEntries(db, entries.map((e) => e.id), id)
+        onClose()
+        onCreated?.(id, binderName)
+        return
+      }
       onClose()
       if (start === 'scan') {
         setScanBinder(id)
@@ -82,7 +110,7 @@ export function BinderSheet({ visible, binder, onClose }: { visible: boolean; bi
         <SectionLabel style={styles.label}>Color</SectionLabel>
         <ColorSpectrum value={color} onChange={setColor} presets={PRESETS} onDragging={setDragging} />
 
-        {!binder && (
+        {!binder && !entries && (
           <>
             <SectionLabel style={styles.label}>Start from</SectionLabel>
             <StartOptions value={start} onChange={setStart} />

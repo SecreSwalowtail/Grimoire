@@ -93,7 +93,8 @@ async function moveCards(db: SQLiteDatabase, fromId: string, toId: string) {
     `UPDATE collection AS t SET
        quantity = t.quantity + f.quantity,
        purchase_price = COALESCE(t.purchase_price, f.purchase_price),
-       for_trade = MAX(t.for_trade, f.for_trade)
+       for_trade = MAX(t.for_trade, f.for_trade),
+       traded = MAX(t.traded, f.traded)
      FROM collection AS f
      WHERE f.binder_id = ? AND t.binder_id = ? AND ${same}`,
     fromId,
@@ -114,6 +115,12 @@ export async function mergeBinders(db: SQLiteDatabase, fromId: string, intoId: s
     await moveCards(db, fromId, intoId);
     await db.runAsync('DELETE FROM binders WHERE id = ?', fromId);
   });
+  collectionChanged();
+}
+
+// Removes a binder only if no cards are in it (undoing "New binder" with picked cards).
+export async function deleteEmptyBinder(db: SQLiteDatabase, id: string) {
+  await db.runAsync('DELETE FROM binders WHERE id = ? AND NOT EXISTS (SELECT 1 FROM collection WHERE binder_id = ?)', id, id);
   collectionChanged();
 }
 

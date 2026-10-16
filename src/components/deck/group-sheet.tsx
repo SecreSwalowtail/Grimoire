@@ -9,16 +9,19 @@ import { GROUP_OPTIONS, groupLines, type DeckLine, type GroupBy } from '@/rules/
 
 // D2 · Group by: how the deck's cards are grouped, with a preview of the groups this deck would
 // get. "Group all" uses the choice for every deck.
+// A binder passes no `lines` and `groupAll={false}`: just the choices.
 export function GroupSheet({
   visible,
   value,
   lines,
+  groupAll = true,
   onApply,
   onClose,
 }: {
   visible: boolean
   value: GroupBy
-  lines: DeckLine[]
+  lines?: DeckLine[]
+  groupAll?: boolean
   onApply: (by: GroupBy, everyDeck: boolean) => void
   onClose: () => void
 }) {
@@ -35,7 +38,7 @@ export function GroupSheet({
     }
   }
 
-  const preview = groupLines(lines, pick)
+  const preview = lines ? groupLines(lines, pick) : []
   const shown = preview.slice(0, 5)
   const label = GROUP_OPTIONS.find((o) => o.value === pick)!.label
 
@@ -66,6 +69,7 @@ export function GroupSheet({
           })}
         </View>
 
+        {lines && (
         <View style={styles.preview}>
           <SectionLabel>Preview</SectionLabel>
           <View style={styles.chips}>
@@ -83,7 +87,9 @@ export function GroupSheet({
             {preview.length === 0 && <Text style={styles.none}>No cards yet.</Text>}
           </View>
         </View>
+        )}
 
+        {groupAll && (
         <Pressable
           style={styles.all}
           onPress={() => setAll(!all)}
@@ -98,6 +104,7 @@ export function GroupSheet({
             <Text style={styles.allHint}>Use this grouping in every deck</Text>
           </View>
         </Pressable>
+        )}
       </ScrollView>
       <PrimaryButton
         label={pick === 'none' ? 'Show as one list' : `Group by ${label.toLowerCase()}`}

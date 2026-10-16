@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 // Passed to <SQLiteProvider onInit>. Runs on every launch: creates the tables on first launch,
 // and applies migrations for users who already have an older database.
@@ -180,9 +180,17 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
     version = 7;
   }
 
-  // if (version === 7) {
+  if (version === 7) {
+    await db.execAsync(`
+      -- Copies got in a trade (as opposed to bought or opened).
+      ALTER TABLE collection ADD COLUMN traded INTEGER NOT NULL DEFAULT 0;
+    `);
+    version = 8;
+  }
+
+  // if (version === 8) {
   //   await db.execAsync(`ALTER TABLE ...`);
-  //   version = 8;
+  //   version = 9;
   // }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

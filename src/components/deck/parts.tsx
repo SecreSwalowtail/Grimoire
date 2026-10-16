@@ -13,6 +13,7 @@ export const ICON = {
   plus: 'M12 5v14M5 12h14',
   // Symmetric about the middle (x = 12, y from 4.5 to 19.5).
   filter: 'M4 4.5h16l-6 7.5v7.5l-4-2V12z',
+  minus: 'M5 12h14',
 }
 
 // The commander's crown.

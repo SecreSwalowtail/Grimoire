@@ -31,11 +31,16 @@ export type CollectionEntry = {
   added_at: number;
   purchase_price: number | null;
   for_trade: number;
+  // 1: got in a trade.
+  traded: number;
   name: string;
   set_code: string;
   set_name: string;
   collector_number: string;
   rarity: string;
+  type_line: string | null;
+  cmc: number | null;
+  // JSON array of color letters, e.g. '["B","R"]'.
   colors: string;
   image_uri: string | null;
   price_eur: number | null;
@@ -116,7 +121,7 @@ export async function getOwnedPricesDaysAgo(db: SQLiteDatabase, days: number) {
   )
 }
 
-const ENTRY_COLUMNS = `collection.*, cards.name, cards.set_code, cards.set_name, cards.collector_number, cards.rarity,
+const ENTRY_COLUMNS = `collection.*, cards.name, cards.set_code, cards.set_name, cards.collector_number, cards.rarity, cards.type_line, cards.cmc,
             cards.colors, cards.image_uri, cards.price_eur, cards.price_eur_foil, cards.price_usd, cards.price_usd_foil`;
 
 export async function getCollection(db: SQLiteDatabase) {
@@ -155,18 +160,18 @@ export type EntryChanges = {
 // other's price paid is kept if this has none.
 export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: EntryChanges) {
   await db.withTransactionAsync(async () => {
-    const entry = await db.getFirstAsync<{ card_id: string }>('SELECT card_id FROM collection WHERE id = ?', entryId);
+    const entry = await db.getFirstAsync<{ card_id: string; traded: number }>('SELECT card_id, traded FROM collection WHERE id = ?', entryId);
     if (!entry) return;
-    const twin = await db.getFirstAsync<{ id: number; quantity: number; purchase_price: number | null }>(
-      `SELECT id, quantity, purchase_price FROM collection
+    const twin = await db.getFirstAsync<{ id: number; quantity: number; purchase_price: number | null; traded: number }>(
+      `SELECT id, quantity, purchase_price, traded FROM collection
        WHERE binder_id = ? AND card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?`,
       changes.binderId, entry.card_id, changes.finish, changes.condition, changes.language, entryId,
     );
     if (twin) {
       await db.runAsync('DELETE FROM collection WHERE id = ?', entryId);
       await db.runAsync(
-        'UPDATE collection SET quantity = ?, purchase_price = ?, for_trade = ? WHERE id = ?',
-        twin.quantity + changes.quantity, changes.purchasePrice ?? twin.purchase_price, changes.forTrade ? 1 : 0, twin.id,
+        'UPDATE collection SET quantity = ?, purchase_price = ?, for_trade = ?, traded = ? WHERE id = ?',
+        twin.quantity + changes.quantity, changes.purchasePrice ?? twin.purchase_price, changes.forTrade ? 1 : 0, Math.max(twin.traded, entry.traded), twin.id,
       );
     } else {
       await db.runAsync(
@@ -183,6 +188,161 @@ export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: 
 
 export async function removeEntry(db: SQLiteDatabase, entryId: number) {
   await db.runAsync('DELETE FROM collection WHERE id = ?', entryId);
+  collectionChanged();
+}
+
+// A copy's row as saved, to put it back after removeEntries().
+export type EntryRow = {
+  id: number;
+  binder_id: string;
+  card_id: string;
+  quantity: number;
+  finish: Finish;
+  condition: Condition;
+  language: string;
+  added_at: number;
+  purchase_price: number | null;
+  for_trade: number;
+  traded: number;
+};
+
+const placeholders = (n: number) => Array<string>(n).fill('?').join(', ');
+
+// Removes entries (every copy of each) and returns them as they were, for restoreEntries().
+export async function removeEntries(db: SQLiteDatabase, ids: number[]) {
+  let rows: EntryRow[] = [];
+  if (ids.length === 0) return rows;
+  const list = placeholders(ids.length);
+  await db.withTransactionAsync(async () => {
+    rows = await db.getAllAsync<EntryRow>(
+      `SELECT id, binder_id, card_id, quantity, finish, condition, language, added_at, purchase_price, for_trade, traded
+       FROM collection WHERE id IN (${list})`,
+      ...ids,
+    );
+    await db.runAsync(`DELETE FROM collection WHERE id IN (${list})`, ...ids);
+  });
+  collectionChanged();
+  return rows;
+}
+
+// Puts a saved row back, in the first binder if its own is gone. One that matches a copy added
+// since (same printing, finish, condition and language in that binder) adds up with it.
+// Call inside a transaction.
+async function insertRow(db: SQLiteDatabase, r: EntryRow) {
+  await db.runAsync(
+    `INSERT INTO collection (id, binder_id, card_id, quantity, finish, condition, language, added_at, purchase_price, for_trade, traded)
+     VALUES (?, COALESCE((SELECT id FROM binders WHERE id = ?), ${FIRST_BINDER_SQL}), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (binder_id, card_id, finish, condition, language) DO UPDATE SET
+       quantity = quantity + excluded.quantity,
+       purchase_price = COALESCE(purchase_price, excluded.purchase_price),
+       for_trade = MAX(for_trade, excluded.for_trade),
+       traded = MAX(traded, excluded.traded)`,
+    r.id, r.binder_id, r.card_id, r.quantity, r.finish, r.condition, r.language, r.added_at, r.purchase_price, r.for_trade, r.traded,
+  );
+}
+
+// Puts removed entries back as they were (see insertRow).
+export async function restoreEntries(db: SQLiteDatabase, rows: EntryRow[]) {
+  await db.withTransactionAsync(async () => {
+    for (const r of rows) await insertRow(db, r);
+  });
+  collectionChanged();
+}
+
+// Changes made to many copies at once; what's left out stays as each copy has it.
+// `traded`: got in a trade. `purchasePrice` null: no price.
+export type CopyEdits = { condition?: Condition; finish?: Finish; traded?: boolean; purchasePrice?: number | null };
+
+type Place = Pick<CollectionEntry, 'binder_id' | 'card_id'>;
+
+// Every row of these printings in these binders: an edit can merge copies into others there.
+const placesSql = (places: Place[]) => ({
+  where: `(binder_id, card_id) IN (VALUES ${places.map(() => '(?, ?)').join(', ')})`,
+  args: places.flatMap((p) => [p.binder_id, p.card_id]),
+});
+
+// Edits copies. A copy whose new condition or finish matches another entry of the same printing in
+// its binder (same language too) becomes one with it: quantities add up. Returns the undo, which
+// puts back those printings' rows in those binders exactly as they were.
+export async function editEntries(db: SQLiteDatabase, entries: (Place & { id: number })[], edits: CopyEdits) {
+  if (entries.length === 0) return async () => undefined;
+  const { where, args } = placesSql(entries);
+  let before: EntryRow[] = [];
+  await db.withTransactionAsync(async () => {
+    before = await db.getAllAsync<EntryRow>(
+      `SELECT id, binder_id, card_id, quantity, finish, condition, language, added_at, purchase_price, for_trade, traded
+       FROM collection WHERE ${where}`,
+      ...args,
+    );
+    for (const { id } of entries) {
+      const e = await db.getFirstAsync<EntryRow>('SELECT * FROM collection WHERE id = ?', id);
+      if (!e) continue;
+      const condition = edits.condition ?? e.condition;
+      const finish = edits.finish ?? e.finish;
+      const paid = edits.purchasePrice !== undefined ? edits.purchasePrice : e.purchase_price;
+      const traded = edits.traded !== undefined ? (edits.traded ? 1 : 0) : e.traded;
+      const twin =
+        condition === e.condition && finish === e.finish
+          ? null
+          : await db.getFirstAsync<{ id: number; purchase_price: number | null; for_trade: number; traded: number }>(
+              `SELECT id, purchase_price, for_trade, traded FROM collection
+               WHERE binder_id = ? AND card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?`,
+              e.binder_id, e.card_id, finish, condition, e.language, e.id,
+            );
+      if (twin) {
+        await db.runAsync('DELETE FROM collection WHERE id = ?', e.id);
+        await db.runAsync(
+          'UPDATE collection SET quantity = quantity + ?, purchase_price = ?, for_trade = ?, traded = ? WHERE id = ?',
+          e.quantity,
+          edits.purchasePrice !== undefined ? edits.purchasePrice : twin.purchase_price ?? e.purchase_price,
+          Math.max(twin.for_trade, e.for_trade),
+          edits.traded !== undefined ? traded : Math.max(twin.traded, e.traded),
+          twin.id,
+        );
+      } else {
+        await db.runAsync(
+          'UPDATE collection SET condition = ?, finish = ?, purchase_price = ?, traded = ? WHERE id = ?',
+          condition, finish, paid, traded, e.id,
+        );
+      }
+    }
+  });
+  collectionChanged();
+  return async () => {
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(`DELETE FROM collection WHERE ${where}`, ...args);
+      for (const r of before) await insertRow(db, r);
+    });
+    collectionChanged();
+  };
+}
+
+// Moves entries to another binder. A printing already there (same finish, condition and language)
+// becomes one entry: quantities add up, a price paid and "for trade" are kept.
+export async function moveEntries(db: SQLiteDatabase, ids: number[], toId: string) {
+  if (ids.length === 0) return;
+  const list = placeholders(ids.length);
+  const twin = `t.binder_id = ? AND t.id != f.id AND t.card_id = f.card_id AND t.finish = f.finish
+                AND t.condition = f.condition AND t.language = f.language`;
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE collection AS t SET
+         quantity = t.quantity + f.quantity,
+         purchase_price = COALESCE(t.purchase_price, f.purchase_price),
+         for_trade = MAX(t.for_trade, f.for_trade),
+         traded = MAX(t.traded, f.traded)
+       FROM collection AS f
+       WHERE f.id IN (${list}) AND ${twin}`,
+      ...ids,
+      toId,
+    );
+    await db.runAsync(
+      `DELETE FROM collection AS f WHERE f.id IN (${list}) AND EXISTS (SELECT 1 FROM collection AS t WHERE ${twin})`,
+      ...ids,
+      toId,
+    );
+    await db.runAsync(`UPDATE collection SET binder_id = ? WHERE id IN (${list})`, toId, ...ids);
+  });
   collectionChanged();
 }
 

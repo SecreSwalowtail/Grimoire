@@ -31,7 +31,7 @@ const STARTS: { value: Start; label: string; icon: SymbolViewProps['name'] }[] =
 export type NewKind = 'deck' | 'folder'
 
 // "New deck / New folder" sheet. `folderId` preselects "Put in folder"; `deckIds` pre-checks
-// decks to file into a new folder (from Organize and Move).
+// decks to file into a new folder (from the Decks screen and Move).
 // "Paste list" only creates the deck for now; "Scan cards" creates it and opens the Scan tab.
 // `onDeckCreated` gets the new deck's id (Card detail uses it to put the card in). "Scan cards"
 // sends what you scan to the new deck's main deck too.

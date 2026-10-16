@@ -17,15 +17,16 @@ import {
 import { formatEur } from '@/utils/format';
 
 // C2 · Card — Prices. Today's price comes from Scryfall; the chart, average, low and high come
-// from the prices saved on the phone. Listings have no free source yet, so those show "No data
-// yet" (the user chose to keep the design's layout, minus the by-condition list).
+// from the published daily prices (see remote-prices.ts) and the days saved on the
+// phone. Listings have no free source yet, so those show "No data yet" (the user chose to keep
+// the design's layout, minus the by-condition list).
 
 const RANGES: { key: string; label: string; days: number | null; words: string }[] = [
   { key: '7D', label: '7D', days: 7, words: 'past 7 days' },
   { key: '1M', label: '1M', days: 30, words: 'past month' },
   { key: '3M', label: '3M', days: 91, words: 'past 3 months' },
   { key: '1Y', label: '1Y', days: 365, words: 'past year' },
-  { key: 'All', label: 'All', days: null, words: 'since you started' },
+  { key: 'All', label: 'All', days: null, words: 'since prices were first recorded' },
 ]
 
 const NO_DATA = 'No data yet'
@@ -52,7 +53,7 @@ export function PricesTab({
   const fmt = (v: number) => formatPrice(v, source)
 
   const now = priceOf(card, shownFinish, source)
-  // Past prices are off for now (a source for them is still to be chosen): the chart stays empty.
+  // Without the published prices set up (PRICES_URL), the chart stays empty.
   const points = SHOW_HISTORY ? pricesWithin(history, current.days, shownFinish, source) : []
   const values = points.map((p) => p.value)
   const enough = values.length >= 2

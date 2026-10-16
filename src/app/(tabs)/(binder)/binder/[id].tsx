@@ -1,42 +1,203 @@
-import { Link, router, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BlurTargetView } from 'expo-blur';
+import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { useCallback, useRef, useState } from 'react';
+import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BinderSheet } from '@/components/binder/binder-sheet';
+import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet';
 import { CardGrid, searchAndSort } from '@/components/binder/card-grid';
-import { SearchField, SortButton, ValueSummary } from '@/components/binder/parts';
+import { setBinderGroupBy, useBinderGroupBy } from '@/components/binder/group-prefs';
+import { SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts';
+import { QuickLook } from '@/components/binder/quick-look';
+import { addEntriesToDecks, BinderToDeckSheet, type Copies } from '@/components/binder/to-deck-sheet';
 import { summarize, useCollection } from '@/components/binder/use-collection';
+import {
+  dragGesture,
+  DragGhost,
+  DropZone,
+  EDIT_BAR,
+  EditBar,
+  TrashBubble,
+  useCardDrag,
+  type CardDrag,
+  type DropTarget,
+} from '@/components/deck/card-drag';
+import { GroupSheet } from '@/components/deck/group-sheet';
+import { NewSheet } from '@/components/decks/new-sheet';
 import { CARD_SORTS, SortMenu, type CardSort } from '@/components/sort-menu';
 import { Colors, Fonts } from '@/constants/theme';
-import { binderSpine } from '@/db/binders';
+import { binderSpine, deleteEmptyBinder } from '@/db/binders';
+import { moveEntries, removeEntries, restoreEntries, type CollectionEntry } from '@/db/collection';
+import { GROUP_OPTIONS } from '@/rules/deck-stats';
+import type { Board } from '@/utils/deck-store';
 
-// One binder opened: its value, a search, and its cards in a 3-column grid.
+// A change made in edit mode, undone with Undo.
+type Undo = () => Promise<unknown>
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+// One binder opened: its value, a search, and its cards in a 3-column grid, grouped as picked in
+// Group by (the button in the search field; the same groups as a deck's, saved per binder).
+// Hold a card to edit: it's selected (not picked up), and every card lies still (no tilt, shimmer or
+// pulse). Tap cards to select more; holding any selected card then picks up the whole selection. Sort
+// and the search make way for Add to deck (put the cards in one or more decks; they stay here too)
+// and New binder (a new binder with just these cards, moved out of this one): tap them, or drop the
+// cards on them. Dragging the cards down into the trash bubble removes them from the collection.
+// The bar at the bottom has Undo and Done; going back (or Done) leaves edit mode.
 export default function BinderScreen() {
+  const db = useSQLiteContext()
   const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { binders, entries, weekAgo, loaded } = useCollection()
+  const { binders, entries, weekAgo, loaded, reload } = useCollection()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<CardSort>('recent')
   const [sortOpen, setSortOpen] = useState(false)
+  const groupBy = useBinderGroupBy(id)
+  const groupOption = GROUP_OPTIONS.find((o) => o.value === groupBy)!
+  const [groupOpen, setGroupOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [selected, setSelected] = useState<number[]>([])
+  // This edit session's changes, latest last, for Undo.
+  const [undos, setUndos] = useState<Undo[]>([])
+  // What the last change did, shown in the edit bar.
+  const [note, setNote] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  // Cards removed or moved out, hidden until the reload that follows (which takes a moment).
+  const [gone, setGone] = useState<number[]>([])
+  const [deckOpen, setDeckOpen] = useState(false)
+  const [newDeck, setNewDeck] = useState<{ board: Board; copies: Copies } | null>(null)
+  const [binderOpen, setBinderOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  // Whether the New deck sheet just made a deck (it closes right after).
+  const deckMade = useRef(false)
+  // The screen, for the quick look to blur behind it.
+  const page = useRef<View>(null)
+  const drag = useCardDrag()
 
   const binder = binders.find((b) => b.id === id)
   // No useMemo needed: the React Compiler (enabled in app.json) memoizes these.
-  const inside = entries.filter((e) => e.binder_id === id)
+  const inside = entries.filter((e) => e.binder_id === id && !gone.includes(e.id))
   const { value, cards, change } = summarize(inside, weekAgo)
   const visible = searchAndSort(inside, query, sort)
+  // Cards removed meanwhile drop out of the selection.
+  const picked = inside.filter((e) => selected.includes(e.id))
+  // The quick look (tap a card): the cards it goes through, in the grid's order, and the one tapped.
+  const [look, setLook] = useState<{ ids: number[]; openId: number } | null>(null)
+  const byId = new Map(inside.map((e) => [e.id, e]))
+  const lookEntries = (look?.ids ?? []).flatMap((x) => byId.get(x) ?? [])
+
+  const stopEditing = () => {
+    setEditing(false)
+    setSelected([])
+    setUndos([])
+    setNote(null)
+  }
+  // Android's back button leaves edit mode first.
+  useFocusEffect(
+    useCallback(() => {
+      if (!editing) return
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setEditing(false)
+        setSelected([])
+        setUndos([])
+        setNote(null)
+        return true
+      })
+      return () => sub.remove()
+    }, [editing, setEditing, setSelected, setUndos, setNote]),
+  )
+
+  const run = (work: Promise<unknown>) => work.then(reload).catch((e) => console.warn('Binder change failed', e))
+  // A change is done: what it did, and how to take it back.
+  const changed = (what: string, undo: Undo) => {
+    setUndos((list) => [...list, undo])
+    setNote(what)
+    setSelected([])
+  }
+  const undo = () => {
+    const last = undos[undos.length - 1]
+    if (!last) return
+    setUndos(undos.slice(0, -1))
+    setSelected([])
+    setNote(null)
+    run(last())
+  }
+
+  // Holding a card outside edit mode starts editing with it selected (it isn't picked up). While
+  // editing, only selected cards can be picked up, and they bring the rest of the selection.
+  const startEditing = (entry: CollectionEntry) => {
+    Keyboard.dismiss()
+    setEditing(true)
+    setSelected([entry.id])
+    setNote(null)
+  }
+  const toggle = (entry: CollectionEntry) => {
+    setNote(null)
+    setSelected(selected.includes(entry.id) ? selected.filter((x) => x !== entry.id) : [...selected, entry.id])
+  }
+
+  const remove = () => {
+    const ids = picked.map((e) => e.id)
+    const what = `Removed ${plural(picked.reduce((n, e) => n + e.quantity, 0), 'card', 'cards')}`
+    setGone((list) => [...list, ...ids])
+    setSelected([])
+    run(
+      removeEntries(db, ids).then((rows) =>
+        changed(what, async () => {
+          await restoreEntries(db, rows)
+          setGone((list) => list.filter((x) => !ids.includes(x)))
+        }),
+      ),
+    )
+  }
+  const onDrop = (target: DropTarget | null) => {
+    setDragging(false)
+    if (target == null || picked.length === 0) return
+    if (target === 'trash') remove()
+    else if (target === 'to-deck') setDeckOpen(true)
+    else if (target === 'new-binder') setBinderOpen(true)
+    else if (target === 'edit-cards') setEditOpen(true)
+  }
+  // Only selected cards drag, and only in edit mode (holding outside it is the card's long press).
+  const gestureFor = (entry: CollectionEntry) =>
+    dragGesture(drag, entry, () => setDragging(true), onDrop).enabled(editing && selected.includes(entry.id))
+
+  // The cards went into decks: they stay in the binder.
+  const addedToDecks = (undo: () => void, decks: number, copies: number) =>
+    changed(`Added ${plural(copies, 'card', 'cards')} to ${plural(decks, 'deck', 'decks')}`, async () => undo())
+  const movedToBinder = (newId: string, name: string) => {
+    const ids = picked.map((e) => e.id)
+    const from = id
+    setGone((list) => [...list, ...ids])
+    reload()
+    changed(`Moved ${plural(picked.reduce((n, e) => n + e.quantity, 0), 'card', 'cards')} to ${name}`, async () => {
+      await moveEntries(db, ids, from)
+      await deleteEmptyBinder(db, newId)
+      setGone((list) => list.filter((x) => !ids.includes(x)))
+    })
+  }
+
+  const actionsOff = picked.length === 0
 
   return (
-    <View style={styles.root}>
+    <BlurTargetView ref={page} style={styles.root}>
       <View pointerEvents="none" style={styles.glow} />
       {/* Header stays fixed; only the card grid below scrolls. */}
       <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityRole="button">
+          <TouchableOpacity
+            style={styles.back}
+            onPress={() => (editing ? stopEditing() : router.back())}
+            accessibilityRole="button"
+            accessibilityHint={editing ? 'Leaves edit mode' : undefined}
+          >
             <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel}>Binders</Text>
           </TouchableOpacity>
-          <SortButton label="Sort cards" onPress={() => setSortOpen(true)} />
+          {!editing && <SortButton label="Sort cards" onPress={() => setSortOpen(true)} />}
         </View>
 
         {binder && (
@@ -48,11 +209,56 @@ export default function BinderScreen() {
 
         <ValueSummary label="Binder value" value={value} cards={cards} change={change} />
 
-        <SearchField value={query} onChange={setQuery} placeholder="Search this binder" />
+        {editing ? (
+          <View style={styles.actions}>
+            <EditAction
+              drag={drag}
+              id="to-deck"
+              label="Add to deck"
+              icon={{ ios: 'rectangle.stack.badge.plus', android: 'library_add' }}
+              disabled={actionsOff}
+              onPress={() => setDeckOpen(true)}
+            />
+            <EditAction
+              drag={drag}
+              id="new-binder"
+              label="New binder"
+              icon={{ ios: 'folder.badge.plus', android: 'create_new_folder' }}
+              disabled={actionsOff}
+              onPress={() => setBinderOpen(true)}
+            />
+            <EditAction
+              drag={drag}
+              id="edit-cards"
+              label="Edit"
+              icon={{ ios: 'pencil', android: 'edit' }}
+              iconOnly
+              disabled={actionsOff}
+              onPress={() => setEditOpen(true)}
+            />
+          </View>
+        ) : (
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder="Search this binder"
+            trailing={
+              <SearchTool
+                icon={groupOption.icon}
+                label={groupBy === 'none' ? 'List' : groupOption.label}
+                onPress={() => setGroupOpen(true)}
+                accessibilityLabel={`Group by: ${groupOption.label}`}
+              />
+            }
+          />
+        )}
       </View>
 
       <CardGrid
         entries={visible}
+        groupBy={groupBy}
+        onOpen={(entry, shown) => setLook({ ids: shown, openId: entry.id })}
+        edit={{ editing, selected, dragging, onToggle: toggle, onHold: startEditing, gestureFor }}
         empty={
           !loaded ? null : inside.length === 0 ? (
             <View style={styles.empty}>
@@ -72,6 +278,20 @@ export default function BinderScreen() {
         }
       />
 
+      {editing && (
+        <>
+          <EditBar
+            canUndo={undos.length > 0}
+            onUndo={undo}
+            onDone={stopEditing}
+            selected={picked.length}
+            note={note}
+          />
+          <TrashBubble drag={drag} bottom={EDIT_BAR + 20} />
+        </>
+      )}
+      <DragGhost drag={drag} lines={picked.map((e) => ({ key: String(e.id), name: e.name, image: e.image_uri, quantity: e.quantity }))} />
+
       <SortMenu
         visible={sortOpen}
         top={insets.top + 56}
@@ -80,7 +300,98 @@ export default function BinderScreen() {
         onSelect={setSort}
         onClose={() => setSortOpen(false)}
       />
-    </View>
+      <QuickLook
+        entries={lookEntries}
+        openId={look?.openId ?? null}
+        title={binder?.name ?? 'Binder'}
+        binders={binders}
+        collection={entries}
+        weekAgo={weekAgo}
+        blurTarget={page}
+        onClose={() => setLook(null)}
+        onChanged={reload}
+      />
+      <GroupSheet
+        visible={groupOpen}
+        value={groupBy}
+        groupAll={false}
+        onApply={(by) => setBinderGroupBy(id, by)}
+        onClose={() => setGroupOpen(false)}
+      />
+      <BinderToDeckSheet
+        visible={deckOpen}
+        entries={picked}
+        onClose={() => setDeckOpen(false)}
+        onAdded={addedToDecks}
+        onNewDeck={(board, copies) => {
+          setDeckOpen(false)
+          setNewDeck({ board, copies })
+        }}
+      />
+      <NewSheet
+        visible={newDeck != null}
+        kind="deck"
+        onClose={() => {
+          // Closed without a deck: back to Add to deck. With one, the cards are in it: done.
+          setNewDeck(null)
+          if (!deckMade.current) setDeckOpen(true)
+          deckMade.current = false
+        }}
+        onDeckCreated={(deckId) => {
+          if (!newDeck) return
+          deckMade.current = true
+          addEntriesToDecks(db, picked, [deckId], newDeck.board, newDeck.copies)
+            .then(({ undo, count }) => addedToDecks(undo, 1, count))
+            .catch((e) => console.warn('Failed to add cards to the new deck', e))
+        }}
+      />
+      <BinderSheet visible={binderOpen} entries={picked} onClose={() => setBinderOpen(false)} onCreated={movedToBinder} />
+      <EditCopiesSheet
+        visible={editOpen}
+        entries={picked}
+        onClose={() => setEditOpen(false)}
+        onSaved={(undoEdit, n) => {
+          reload()
+          changed(`Edited ${plural(n, 'card', 'cards')}`, undoEdit)
+        }}
+      />
+    </BlurTargetView>
+  )
+}
+
+// Add to deck / New binder / Edit, in the search field's place while editing. Tap it, or drop the
+// cards on it. `iconOnly`: a square button, its label only read out.
+function EditAction({
+  drag,
+  id,
+  label,
+  icon,
+  iconOnly,
+  disabled,
+  onPress,
+}: {
+  drag: CardDrag
+  id: DropTarget
+  label: string
+  icon: SymbolViewProps['name']
+  iconOnly?: boolean
+  disabled: boolean
+  onPress: () => void
+}) {
+  return (
+    <DropZone drag={drag} id={id} style={!iconOnly && styles.actionZone}>
+      <TouchableOpacity
+        style={[styles.action, iconOnly && styles.actionSquare, disabled && styles.actionOff]}
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={iconOnly ? `${label} the selected cards` : undefined}
+        accessibilityHint="Or drag the selected cards onto it"
+      >
+        <SymbolView name={icon} size={18} tintColor={Colors.goldLight} />
+        {!iconOnly && <Text style={styles.actionLabel} numberOfLines={1}>{label}</Text>}
+      </TouchableOpacity>
+    </DropZone>
   )
 }
 
@@ -106,6 +417,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // The sort button's height, so the header doesn't jump when it hides in edit mode.
+    minHeight: 44,
   },
   back: {
     height: 44,
@@ -142,6 +455,39 @@ const styles = StyleSheet.create({
     fontSize: 38,
     lineHeight: 44,
     fontFamily: Fonts.serif,
+    color: Colors.text,
+  },
+  // Same height as the search field they replace.
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionZone: {
+    flex: 1,
+  },
+  action: {
+    height: 48,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(212,166,74,0.45)',
+    backgroundColor: 'rgba(212,166,74,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  actionSquare: {
+    width: 48,
+    paddingHorizontal: 0,
+  },
+  actionOff: {
+    opacity: 0.4,
+  },
+  actionLabel: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontFamily: Fonts.extraBold,
     color: Colors.text,
   },
   empty: {

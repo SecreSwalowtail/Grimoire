@@ -3,11 +3,12 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
 
-export type CardSort = 'recent' | 'price' | 'name'
+export type CardSort = 'recent' | 'price' | 'priceAsc' | 'name'
 
 export const CARD_SORTS: { value: CardSort; label: string }[] = [
   { value: 'recent', label: 'Recently added' },
   { value: 'price', label: 'Price: high to low' },
+  { value: 'priceAsc', label: 'Price: low to high' },
   { value: 'name', label: 'Name: A to Z' },
 ]
 

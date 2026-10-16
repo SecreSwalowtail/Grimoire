@@ -1,7 +1,8 @@
+import { BlurTargetView } from 'expo-blur';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +12,7 @@ import { MergeBindersDialog, RemoveBinderDialog } from '@/components/binder/bind
 import { BinderSheet } from '@/components/binder/binder-sheet';
 import { CardGrid, searchAndSort } from '@/components/binder/card-grid';
 import { SearchField, SortButton, ValueSummary } from '@/components/binder/parts';
+import { QuickLook } from '@/components/binder/quick-look';
 import { ReorderGrid } from '@/components/binder/reorder-grid';
 import { summarize, useCollection } from '@/components/binder/use-collection';
 import { SortMenu } from '@/components/sort-menu';
@@ -20,11 +22,12 @@ import type { CollectionEntry } from '@/db/collection';
 import { formatEur } from '@/utils/format';
 import { forgetScanBinder } from '@/utils/scan-binder';
 
-type BinderSort = 'custom' | 'value' | 'name'
+type BinderSort = 'custom' | 'value' | 'valueAsc' | 'name'
 
 const BINDER_SORTS: { value: BinderSort; label: string }[] = [
   { value: 'custom', label: 'Your order' },
   { value: 'value', label: 'Value: high to low' },
+  { value: 'valueAsc', label: 'Value: low to high' },
   { value: 'name', label: 'Name: A to Z' },
 ]
 
@@ -57,6 +60,10 @@ export default function BindersScreen() {
   const [editOpen, setEditOpen] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [merge, setMerge] = useState<{ from: string; into: string } | null>(null)
+  // The quick look over search results (tap a card): the cards it goes through and the one tapped.
+  const [look, setLook] = useState<{ ids: number[]; openId: number } | null>(null)
+  // The screen, for the quick look to blur behind it.
+  const page = useRef<View>(null)
   // Height of a binder with its text, which depends on the font size: the tallest one measured.
   const [measured, setMeasured] = useState<number | null>(null)
   const cellHeight = measured ?? COVER_BOX.height * coverScale + 80
@@ -89,6 +96,7 @@ export default function BindersScreen() {
   )
 
   // No useMemo needed: the React Compiler (enabled in app.json) memoizes this.
+  const entryById = new Map(entries.map((e) => [e.id, e]))
   const byBinder = new Map<string, CollectionEntry[]>()
   for (const e of entries) {
     const list = byBinder.get(e.binder_id)
@@ -101,6 +109,7 @@ export default function BindersScreen() {
   const sorted =
     editing ? rows
     : sort === 'value' ? [...rows].sort((a, b) => b.value - a.value)
+    : sort === 'valueAsc' ? [...rows].sort((a, b) => a.value - b.value)
     : sort === 'name' ? [...rows].sort((a, b) => a.binder.name.localeCompare(b.binder.name))
     : rows
   const searching = query.trim() !== ''
@@ -176,7 +185,7 @@ export default function BindersScreen() {
   const selectionLabel = selected.length === 1 ? selected[0].name : `${selected.length} binders`
 
   return (
-    <View style={styles.root}>
+    <BlurTargetView ref={page} style={styles.root}>
       <View pointerEvents="none" style={styles.glow} />
       {/* Header stays fixed; the binders (or search results) below scroll. */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -253,6 +262,7 @@ export default function BindersScreen() {
       {searching && !editing ? (
         <CardGrid
           entries={searchAndSort(entries, query, 'recent')}
+          onOpen={(entry, shown) => setLook({ ids: shown, openId: entry.id })}
           empty={
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No cards match your search.</Text>
@@ -303,6 +313,17 @@ export default function BindersScreen() {
         onSelect={setSort}
         onClose={() => setSortOpen(false)}
       />
+      <QuickLook
+        entries={(look?.ids ?? []).flatMap((x) => entryById.get(x) ?? [])}
+        openId={look?.openId ?? null}
+        title="Search"
+        binders={binders}
+        collection={entries}
+        weekAgo={weekAgo}
+        blurTarget={page}
+        onClose={() => setLook(null)}
+        onChanged={reload}
+      />
       <BinderSheet visible={newOpen} onClose={() => setNewOpen(false)} />
       <BinderSheet
         visible={editOpen && one != null}
@@ -326,7 +347,7 @@ export default function BindersScreen() {
         onMerge={doMerge}
         onClose={() => setMerge(null)}
       />
-    </View>
+    </BlurTargetView>
   )
 }
 
