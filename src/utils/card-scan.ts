@@ -4,13 +4,13 @@ import { scheduleOnRN } from 'react-native-worklets';
 // Tuning knobs for auto-capture. Brightness values are on the camera's 0-255 (Y) scale.
 export const SCAN = {
   intervalMs: 120, // analyse at most this often
-  readyChecks: 4, // consecutive good checks before capturing (~0.5s)
+  readyChecks: 6, // consecutive good checks before capturing (~0.75s: focus settles, the hand leaves)
   cooldownMs: 2500, // ignore further triggers for this long after one fires
   rearmChecks: 3, // after a capture, the frame must be empty this many checks in a row before the next one
   minBrightness: 60, // mean brightness inside the card below this = too dark
   glareLevel: 245, // a sample at/above this counts as blown-out
   maxGlare: 0.05, // more than this fraction of blown-out samples = glare
-  minSharpness: 4, // mean neighbour difference below this = blurry / moving
+  minSharpness: 3.5, // mean neighbour difference below this = blurry / moving
   edgeContrast: 25, // brightness jump that counts as an edge
   edgeOutside: 0.05, // search this far outside the white frame for the card edge (fraction of frame size)
   edgeInside: 0.2, // ...and this far inside it

@@ -21,15 +21,21 @@ import { ScanToast, ScanToastData } from '@/components/scan-toast';
 import { Colors, Fonts } from '@/constants/theme';
 import { getBinders, type Binder } from '@/db/binders';
 import { addToCollection, removeOneCopy } from '@/db/collection';
-import { cardImage, getCardBySetNumber, type ScryfallCard } from '@/db/scryfall';
+import { cardImage, getCardBySetNumber, getSets, type ScryfallCard } from '@/db/scryfall';
 import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button';
 import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan';
-import { parseCollectorLine } from '@/utils/collector-line';
+import { ocrRows, parseCollectorLine } from '@/utils/collector-line';
 import { addCardsToDecks, cardInfoOf, getDeckStore, useDeckStore, type Undo } from '@/utils/deck-store';
 import { getScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target';
 
-// Where the set code + collector number sit on a card, as fractions of the card. Tune these.
-const STRIP = { x: 0, y: 0.88, width: 0.6, height: 0.12 }
+// Where the set code + collector number sit on a card, as fractions of the card: the bottom-left
+// corner, with room around it (it reaches past the card's edges) because the card found in the
+// photo can be off by a few percent. In test scans the two lines sat between 88% and 105% of the
+// card's height and left of 45% of its width; a small strip reads much faster than a big one.
+// The text in it is found by what it says, not where it is.
+const STRIP = { x: -0.03, y: 0.84, width: 0.48, height: 0.23 }
+// Photos taken of one card before giving up on reading it.
+const MAX_ATTEMPTS = 2
 
 const BRACKET_COLORS: Record<ScanState, string> = {
   searching: Colors.goldLight,
@@ -82,8 +88,22 @@ export default function ScanScreen() {
   } | null>(null)
   const busy = useRef(false)
   const lastRect = useRef<NormalizedRect | null>(null)
+  // Whether the camera is running: a retake only happens while it is.
+  const running = useRef(false)
+  // Every set code, to tell the set line from other text (loaded once a session; offline, any
+  // code-looking word passes).
+  const setCodes = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!isFocused || setCodes.current) return
+    getSets()
+      .then((list) => {
+        setCodes.current = new Set(list.map((s) => s.code))
+      })
+      .catch((e) => console.warn('Failed to load the set list', e))
+  }, [isFocused])
 
-  // Both 4:3 so the analysed frames and the photo show the same area of the sensor.
+  // Both 4:3 so the analysed frames and the photo show the same area of the sensor. 12 MP: smaller
+  // photos load faster but read the small collector text worse.
   const photoOutput = usePhotoOutput({ targetResolution: CommonResolutions.UHD_4_3 })
 
   // Card frame corners: view coordinates -> camera coordinates, once the preview is running.
@@ -102,8 +122,11 @@ export default function ScanScreen() {
     }
   }, [previewStarted, cardRect])
 
-  const capture = useCallback(async (rect: NormalizedRect | null) => {
+  // `attempt`: a card that couldn't be read or found is photographed once more by itself (it's
+  // still in the frame), before saying so.
+  const capture = useCallback(async (rect: NormalizedRect | null, attempt = 1) => {
     if (busy.current || !rect) return
+    let again = false
     // Decks only, but none picked (or they're gone): nowhere to put the card.
     const target = getScanTarget()
     if (!target.binder && scanDecks(target, getDeckStore().decks).length === 0) {
@@ -116,49 +139,49 @@ export default function ScanScreen() {
     try {
       const { filePath } = await photoOutput.capturePhotoToFile({}, {})
 
-      // Load the real bitmap (EXIF rotation applied) and crop the card using the frame-relative rect.
+      // Load the real bitmap (EXIF rotation applied). The card, in its pixels, from the frame-relative rect.
       const full = await ImageManipulator.manipulate(`file://${filePath}`).renderAsync()
-      const width = Math.min(Math.floor(full.width * rect.width), full.width)
-      const height = Math.min(Math.floor(full.height * rect.height), full.height)
-      const originX = Math.min(Math.max(0, Math.round(full.width * rect.x)), full.width - width)
-      const originY = Math.min(Math.max(0, Math.round(full.height * rect.y)), full.height - height)
+      const cardX = full.width * rect.x
+      const cardY = full.height * rect.y
+      const cardW = full.width * rect.width
+      const cardH = full.height * rect.height
 
-      const context = ImageManipulator.manipulate(full)
-      context.crop({ originX, originY, width, height })
-      const card = await context.renderAsync()
-
-      // Second crop: only the strip with set code + collector number, as fractions of the card.
-      const stripX = Math.round(card.width * STRIP.x)
-      const stripY = Math.round(card.height * STRIP.y)
-      const stripW = Math.min(Math.round(card.width * STRIP.width), card.width - stripX)
-      const stripH = Math.min(Math.round(card.height * STRIP.height), card.height - stripY)
-      const stripContext = ImageManipulator.manipulate(card)
-      stripContext.crop({ originX: stripX, originY: stripY, width: stripW, height: stripH })
-      const strip = await (await stripContext.renderAsync()).saveAsync({ format: SaveFormat.PNG })
+      // The strip with the set code + collector number (fractions of the card, reaching past its
+      // edges), clamped to the photo.
+      const x0 = Math.max(0, Math.round(cardX + cardW * STRIP.x))
+      const y0 = Math.max(0, Math.round(cardY + cardH * STRIP.y))
+      const x1 = Math.min(full.width, Math.round(cardX + cardW * (STRIP.x + STRIP.width)))
+      const y1 = Math.min(full.height, Math.round(cardY + cardH * (STRIP.y + STRIP.height)))
+      const stripContext = ImageManipulator.manipulate(full)
+      stripContext.crop({ originX: x0, originY: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) })
+      const strip = await (await stripContext.renderAsync()).saveAsync({ format: SaveFormat.JPEG, compress: 0.92 })
 
       const recognized = await TextRecognition.recognize(strip.uri)
-      console.log('Text recognition result:', recognized.text)
+      const lines = recognized.blocks.flatMap((b) => b.lines.map((l) => ({ text: l.text, frame: l.frame })))
 
       // OCR text -> set code + collector number -> Scryfall card -> collection.
-      const line = parseCollectorLine(recognized.text)
+      const line = parseCollectorLine(ocrRows(lines), setCodes.current)
       if (!line) {
+        again = attempt < MAX_ATTEMPTS && running.current
+        if (again) return
         setLastAdded(null)
         setToast({ ok: false, title: "Couldn't read card", message: 'Set code and number not found — try again with less glare.' })
         return
       }
-      // Try the likeliest numbers first. If OCR saw a rarity letter, prefer the card that matches it
-      // (e.g. a stray "2" must not win over "278" when the card says "M").
+      // Try the likeliest numbers first. If OCR saw a rarity letter, only a card of that rarity
+      // will do (e.g. a stray "2" must not win over "278" when the card says "M"): a card that
+      // doesn't match is a misread, and a wrong card is worse than taking the photo again.
       let found: ScryfallCard | null = null
       for (const number of line.collectorNumbers.slice(0, 3)) {
         const card = await getCardBySetNumber(line.set, number)
-        if (!card) continue
-        if (!line.rarity || card.rarity === line.rarity) {
+        if (card && (!line.rarity || card.rarity === line.rarity)) {
           found = card
           break
         }
-        found ??= card
       }
       if (!found) {
+        again = attempt < MAX_ATTEMPTS && running.current
+        if (again) return
         setLastAdded(null)
         setToast({ ok: false, title: 'Card not found', message: `No card for ${line.set.toUpperCase()} #${line.collectorNumbers[0]}.` })
         return
@@ -185,9 +208,14 @@ export default function ScanScreen() {
       setToast({ ok: false, title: 'Scan failed', message: e instanceof Error ? e.message : 'Something went wrong.' })
     } finally {
       busy.current = false
-      setProcessing(false)
+      if (again) setTimeout(() => captureRef.current(lastRect.current ?? rect, attempt + 1), 0)
+      else setProcessing(false)
     }
   }, [photoOutput, db])
+  const captureRef = useRef(capture)
+  useEffect(() => {
+    captureRef.current = capture
+  }, [capture])
 
   const undo = async () => {
     if (!lastAdded) return
@@ -271,9 +299,13 @@ export default function ScanScreen() {
         orientationSource="interface"
         torchMode={cameraRunning ? (torch ? 'on' : 'off') : undefined}
         outputs={[photoOutput, frameOutput]}
-        onStarted={() => setCameraRunning(true)}
+        onStarted={() => {
+          running.current = true
+          setCameraRunning(true)
+        }}
         onStopped={() => {
           // The light goes off with the camera (e.g. switching tabs); keep the button in sync.
+          running.current = false
           setCameraRunning(false)
           setTorch(false)
         }}
@@ -347,6 +379,7 @@ export default function ScanScreen() {
         </View>
 
         <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>
+
 
         {toast && (
           <View style={styles.toastWrap}>

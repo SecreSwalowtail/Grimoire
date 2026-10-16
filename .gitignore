@@ -44,3 +44,6 @@ example
 
 # VS Code Counter output
 .VSCodeCounter/
+
+# Scan logs saved while testing
+camera_log/
