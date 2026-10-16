@@ -19,7 +19,8 @@ export type MarketFilters = {
   colorCount: [number, number] // min and max number of colors, 0-5
   cost: string[] // mana symbols, e.g. ['2', 'G', 'W']
   costMatch: CostMatch
-  sets: { code: string; name: string; year: string; size: number }[]
+  // `icon`: the set's symbol (Scryfall's icon_svg_uri).
+  sets: { code: string; name: string; year: string; size: number; icon?: string }[]
   exactPrint: boolean
   rarities: string[] // Scryfall rarities
   legendaryOnly: boolean

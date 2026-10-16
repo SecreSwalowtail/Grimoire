@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { Chip, SectionLabel, Segmented, ToggleRow } from '@/components/controls';
+import { SetIcon } from '@/components/set-icon';
 import { Colors, Fonts, RarityColors } from '@/constants/theme';
 import { getSets, type ScryfallSet } from '@/db/scryfall';
 import type { MarketFilters } from '@/utils/market-filters';
@@ -20,6 +21,7 @@ const RARITIES = [
 // Token and memorabilia "sets" hold no cards a search returns.
 const HIDDEN_SET_TYPES = ['token', 'memorabilia']
 const MAX_MATCHES = 6
+const SYMBOL = '#F0D8A0'
 
 // Sets for the search field: an exact code first, then codes starting with the text, then names
 // containing it, newest first within each (Scryfall lists sets newest first).
@@ -63,7 +65,7 @@ export function SetTab({ filters, onChange }: { filters: MarketFilters; onChange
     onChange({
       sets: [
         ...filters.sets,
-        { code: set.code.toUpperCase(), name: set.name, year: set.released_at?.slice(0, 4) ?? '', size: set.card_count },
+        { code: set.code.toUpperCase(), name: set.name, year: set.released_at?.slice(0, 4) ?? '', size: set.card_count, icon: set.icon_svg_uri },
       ],
     })
   }
@@ -113,11 +115,11 @@ export function SetTab({ filters, onChange }: { filters: MarketFilters; onChange
               accessibilityLabel={`Add ${set.name}`}
             >
               <View style={styles.code}>
-                <Text style={styles.codeLabel}>{set.code.toUpperCase()}</Text>
+                <SetIcon code={set.code} uri={set.icon_svg_uri} size={22} color={SYMBOL} />
               </View>
               <View style={styles.setText}>
                 <Text style={styles.setName} numberOfLines={1}>{set.name}</Text>
-                <Text style={styles.setMeta}>{set.released_at?.slice(0, 4) ?? '—'} · {set.card_count} cards</Text>
+                <Text style={styles.setMeta}>{set.code.toUpperCase()} · {set.released_at?.slice(0, 4) ?? '—'} · {set.card_count} cards</Text>
               </View>
               <View style={styles.remove}>
                 <SymbolView name={{ ios: 'plus', android: 'add' }} size={16} tintColor={Colors.goldLight} />
@@ -130,11 +132,11 @@ export function SetTab({ filters, onChange }: { filters: MarketFilters; onChange
       {filters.sets.map((set) => (
         <View key={set.code} style={styles.set}>
           <View style={styles.code}>
-            <Text style={styles.codeLabel}>{set.code}</Text>
+            <SetIcon code={set.code} uri={set.icon} size={22} color={SYMBOL} />
           </View>
           <View style={styles.setText}>
             <Text style={styles.setName} numberOfLines={1}>{set.name}</Text>
-            <Text style={styles.setMeta}>{set.year} · {set.size} cards</Text>
+            <Text style={styles.setMeta}>{set.code} · {set.year} · {set.size} cards</Text>
           </View>
           <TouchableOpacity
             style={styles.remove}
@@ -245,12 +247,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.selected,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  codeLabel: {
-    fontSize: 13,
-    fontFamily: Fonts.bold,
-    letterSpacing: 0.5,
-    color: '#F0D8A0',
   },
   setText: {
     flex: 1,

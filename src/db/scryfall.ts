@@ -190,6 +190,7 @@ export type ScryfallSet = {
   set_type: string;
   released_at?: string;
   card_count: number;
+  icon_svg_uri?: string;
 };
 
 // Every set (newest first), asked for once per session: about 1,000 sets, for the set filter.
