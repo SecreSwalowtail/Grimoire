@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -183,8 +183,18 @@ export default function DeckScreen() {
     setSelected([])
   }
   // Only selected cards drag, and only in edit mode (holding outside it is the row's long press).
+  // A row keeps its gesture until the row itself changes, so the gesture calls the latest handlers
+  // (the selection it drops may have grown since).
+  const latestDrag = useRef({ onDragStart, onDrop })
+  useEffect(() => {
+    latestDrag.current = { onDragStart, onDrop }
+  })
+  const [dragHandlers] = useState(() => ({
+    start: () => latestDrag.current.onDragStart(),
+    drop: (target: DropTarget | null) => latestDrag.current.onDrop(target),
+  }))
   const gestureFor = (line: DeckLine) =>
-    dragGesture(drag, line, onDragStart, onDrop, topZone).enabled(editing && selected.includes(keyOf(line)))
+    dragGesture(drag, line, dragHandlers.start, dragHandlers.drop, topZone).enabled(editing && selected.includes(keyOf(line)))
 
   if (!deck) return <View style={styles.root}>{deckSheets.sheets}</View>
 

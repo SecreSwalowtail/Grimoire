@@ -4,9 +4,17 @@ import { useCallback, useState } from 'react'
 
 import type { ScryfallCard } from '@/db/scryfall'
 import { lineFrom, type DeckLine } from '@/rules/deck-stats'
-import { isCommander, useDeckStore } from '@/utils/deck-store'
+import { isCommander, useDeckStore, type CardInfo, type DeckCard } from '@/utils/deck-store'
 
 type Extra = { cards: Map<string, ScryfallCard>; owned: Map<string, number> }
+
+// Kept between visits, so the Cards tab redraws only what changed:
+// - each card's parsed data, used again while its saved JSON is the same;
+// - what a deck loaded last time, so reopening it shows every cost at once;
+// - each deck card's line, used again while what it's made from is the same.
+const parsed = new Map<string, { data: string; card: ScryfallCard }>()
+const lastExtra = new Map<string, Extra>()
+const made = new WeakMap<DeckCard, { info: CardInfo; card: ScryfallCard | null; owned: number; commander: boolean; line: DeckLine }>()
 
 // A deck's cards as DeckLines: the deck store's cards, plus each card's full data saved on the
 // phone (mana cost, produced mana, rules text) and how many copies your binders hold. The saved
@@ -17,7 +25,7 @@ export function useDeckLines(deckId: string) {
   const deckCards = store.cards.filter((c) => c.deckId === deckId)
   const ids = [...new Set(deckCards.map((c) => c.cardId))]
   const key = ids.join(',')
-  const [extra, setExtra] = useState<Extra>(() => ({ cards: new Map(), owned: new Map() }))
+  const [extra, setExtra] = useState<Extra>(() => lastExtra.get(deckId) ?? { cards: new Map(), owned: new Map() })
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -29,8 +37,15 @@ export function useDeckLines(deckId: string) {
     const cards = new Map<string, ScryfallCard>()
     for (const r of rows) {
       if (!r.data) continue
+      const seen = parsed.get(r.id)
+      if (seen?.data === r.data) {
+        cards.set(r.id, seen.card)
+        continue
+      }
       try {
-        cards.set(r.id, JSON.parse(r.data))
+        const card = JSON.parse(r.data) as ScryfallCard
+        parsed.set(r.id, { data: r.data, card })
+        cards.set(r.id, card)
       } catch {
         // Unreadable data: the card shows without its cost.
       }
@@ -46,9 +61,11 @@ export function useDeckLines(deckId: string) {
       )
       for (const c of counts) owned.set(c.name, c.n)
     }
-    setExtra({ cards, owned })
+    const next = { cards, owned }
+    lastExtra.set(deckId, next)
+    setExtra(next)
     setLoadedKey(key)
-  }, [db, key])
+  }, [db, key, deckId])
 
   useFocusEffect(
     useCallback(() => {
@@ -59,7 +76,14 @@ export function useDeckLines(deckId: string) {
   const lines: DeckLine[] = deckCards.flatMap((c) => {
     const info = store.info[c.cardId]
     if (!info) return []
-    return [lineFrom(c.cardId, c.board, c.quantity, info, extra.cards.get(c.cardId) ?? null, extra.owned.get(info.name) ?? 0, isCommander(c, store.decks))]
+    const card = extra.cards.get(c.cardId) ?? null
+    const owned = extra.owned.get(info.name) ?? 0
+    const commander = isCommander(c, store.decks)
+    const was = made.get(c)
+    if (was && was.info === info && was.card === card && was.owned === owned && was.commander === commander) return [was.line]
+    const line = lineFrom(c.cardId, c.board, c.quantity, info, card, owned, commander)
+    made.set(c, { info, card, owned, commander, line })
+    return [line]
   })
   return { lines, loaded: loadedKey === key }
 }

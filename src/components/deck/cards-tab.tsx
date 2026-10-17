@@ -47,6 +47,11 @@ const BOARDS: { value: Board; label: string }[] = [
 
 const count = (lines: DeckLine[]) => lines.reduce((n, l) => n + l.quantity, 0)
 
+// Card rows drawn when the deck opens (about a screenful), and how many more each frame after
+// (about 20 ms of work), until all are there.
+const FIRST_ROWS = 12
+const ROWS_PER_FRAME = 10
+
 // D1 · The deck's cards: search, sort by name, group (opens Group by), filter (opens Filter),
 // which part of the deck, then the groups, each opening and closing with a tap. Tap a card for
 // Card detail. Cards your binders don't cover are tagged "Not owned"; commanders lead the list.
@@ -104,6 +109,16 @@ export function CardsTab({
   // Groups closed by the user (all open to start).
   const [closed, setClosed] = useState<string[]>([])
   const [market, setMarket] = useState<MarketResult | null>(null)
+  // Opening the deck draws the first screenful of cards, then a few more each frame: the deck shows
+  // up sooner, and no frame is held up drawing a big deck all at once.
+  const [rowsDrawn, setRowsDrawn] = useState(FIRST_ROWS)
+  // Another part of the deck or grouping is a whole new list: it starts the same way.
+  const view = `${board}|${groupBy}`
+  const [drawnFor, setDrawnFor] = useState(view)
+  if (drawnFor !== view) {
+    setDrawnFor(view)
+    setRowsDrawn(FIRST_ROWS)
+  }
 
   const inBoard = lines.filter((l) => l.board === board)
   const found = filterLines(inBoard, filters, query).sort((a, b) => (desc ? -1 : 1) * a.name.localeCompare(b.name))
@@ -117,6 +132,12 @@ export function CardsTab({
   // Cards from the Market list show there only.
   const shown = marketOn ? found.filter((l) => !marketIds.has(l.cardId)) : found
   const groups = groupLines(shown, groupBy)
+  const rowsToDraw = groups.reduce((n, g) => n + (closed.includes(g.key) ? 0 : g.lines.length), 0)
+  useEffect(() => {
+    if (rowsDrawn >= rowsToDraw) return
+    const frame = requestAnimationFrame(() => setRowsDrawn((n) => n + ROWS_PER_FRAME))
+    return () => cancelAnimationFrame(frame)
+  }, [rowsDrawn, rowsToDraw])
 
   useEffect(() => {
     if (!nothingHere) return
@@ -143,6 +164,27 @@ export function CardsTab({
   }
   const lineInfo = (l: DeckLine): CardInfo =>
     store.info[l.cardId] ?? { name: l.name, typeLine: l.typeLine, cmc: l.cmc, priceEur: l.price, priceEurFoil: null, image: l.image }
+
+  // What a card row does, behind one object that never changes, calling this render's handlers: a
+  // row then redraws only when its own card, selection or the edit mode changes.
+  const latest = useRef({ deckId, editing, onToggle, onHold, gestureFor, setCount, lineInfo })
+  useEffect(() => {
+    latest.current = { deckId, editing, onToggle, onHold, gestureFor, setCount, lineInfo }
+  })
+  const [rowActions] = useState<RowActions>(() => ({
+    open: (l) => {
+      const now = latest.current
+      if (now.editing) now.onToggle(l)
+      else router.push({ pathname: '/card/[id]', params: { id: l.cardId, fromDeck: now.deckId } })
+    },
+    hold: (l) => {
+      if (!latest.current.editing) latest.current.onHold(l)
+    },
+    gesture: (l, enabled) => latest.current.gestureFor(l).enabled(enabled),
+    count: (l, n) => latest.current.setCount(l.cardId, latest.current.lineInfo(l), n),
+  }))
+  // Rows left to draw this frame (see rowsDrawn).
+  let budget = rowsDrawn
   // A Market card is saved first, so the deck can show its cost and rules.
   const setMarketCount = (card: ScryfallCard, n: number) =>
     upsertCard(db, card)
@@ -298,38 +340,10 @@ export function CardsTab({
                 </Pressable>
                 {open &&
                   g.lines.map((l) => {
-                    const missing = missingCopies(l)
+                    if (budget <= 0) return null
+                    budget -= 1
                     const key = `${l.cardId}|${l.board}`
-                    const on = selected.includes(key)
-                    return (
-                      <GestureDetector key={key} gesture={gestureFor(l)}>
-                        <Pressable
-                          style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
-                          onPress={() => (editing ? onToggle(l) : router.push({ pathname: '/card/[id]', params: { id: l.cardId, fromDeck: deckId } }))}
-                          // A long press replaces the tap, so letting go doesn't open (or deselect)
-                          // the card. It stays set in edit mode: removed mid-press, letting go would
-                          // count as a tap.
-                          onLongPress={() => !editing && onHold(l)}
-                          delayLongPress={300}
-                          accessibilityRole={editing ? 'checkbox' : 'button'}
-                          accessibilityState={editing ? { checked: on } : undefined}
-                          accessibilityHint={editing ? undefined : 'Hold to select and drag'}
-                          accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? money.eur(l.price * l.quantity) : 'no price'}`}
-                        >
-                          <CardText
-                            name={l.name}
-                            cost={l.manaCost}
-                            price={l.price != null ? money.eur(l.price * l.quantity) : '—'}
-                            tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
-                          />
-                          {editing ? (
-                            <Text style={styles.qty}>{l.quantity}×</Text>
-                          ) : (
-                            <Stepper name={l.name} count={l.quantity} onChange={(n) => setCount(l.cardId, lineInfo(l), n)} />
-                          )}
-                        </Pressable>
-                      </GestureDetector>
-                    )
+                    return <CardRow key={key} line={l} editing={editing} on={selected.includes(key)} actions={rowActions} />
                   })}
               </View>
             )
@@ -391,6 +405,49 @@ export function CardsTab({
   )
 }
 
+type RowActions = {
+  open: (line: DeckLine) => void
+  hold: (line: DeckLine) => void
+  // `enabled`: it can be picked up (selected, in edit mode).
+  gesture: (line: DeckLine, enabled: boolean) => GestureType
+  count: (line: DeckLine, n: number) => void
+}
+
+// One card of the deck: tap for Card detail (selects it in edit mode), hold to start editing, −/+
+// for its copies. `on`: selected. Only a selected card in edit mode can be picked up, so only it
+// carries a drag gesture (one per row made every row costly to draw).
+function CardRow({ line: l, editing, on, actions }: { line: DeckLine; editing: boolean; on: boolean; actions: RowActions }) {
+  const money = useMoney()
+  const missing = missingCopies(l)
+  const row = (
+    <Pressable
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed, on && styles.rowOn]}
+      onPress={() => actions.open(l)}
+      // A long press replaces the tap, so letting go doesn't open (or deselect) the card. It stays
+      // set in edit mode: removed mid-press, letting go would count as a tap.
+      onLongPress={() => actions.hold(l)}
+      delayLongPress={300}
+      accessibilityRole={editing ? 'checkbox' : 'button'}
+      accessibilityState={editing ? { checked: on } : undefined}
+      accessibilityHint={editing ? undefined : 'Hold to select and drag'}
+      accessibilityLabel={`${l.quantity} ${l.name}${missing ? `, ${missing} not owned` : ''}, ${l.price != null ? money.eur(l.price * l.quantity) : 'no price'}`}
+    >
+      <CardText
+        name={l.name}
+        cost={l.manaCost}
+        price={l.price != null ? money.eur(l.price * l.quantity) : '—'}
+        tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
+      />
+      {editing ? (
+        <Text style={styles.qty}>{l.quantity}×</Text>
+      ) : (
+        <Stepper name={l.name} count={l.quantity} onChange={(n) => actions.count(l, n)} />
+      )}
+    </Pressable>
+  )
+  return editing && on ? <GestureDetector gesture={actions.gesture(l, true)}>{row}</GestureDetector> : row
+}
+
 // A card row's text: the name, then its cost, price and tag (Not owned / Not in deck) under it.
 function CardText({ name, cost, price, tag, tagMuted }: { name: string; cost: string; price: string; tag: string | null; tagMuted?: boolean }) {
   return (
@@ -417,7 +474,7 @@ function Stepper({ name, count, onChange }: { name: string; count: number; onCha
         accessibilityRole="button"
         accessibilityLabel={`One copy less of ${name}`}
       >
-        <PathIcon d={ICON.minus} color={Colors.text} size={14} weight={2.2} />
+        <View style={[styles.bar, { backgroundColor: Colors.text }]} />
       </TouchableOpacity>
       <Text style={[styles.stepCount, count === 0 && styles.stepCountZero]} accessibilityLabel={`${count} in the deck`}>{count}</Text>
       <TouchableOpacity
@@ -427,7 +484,8 @@ function Stepper({ name, count, onChange }: { name: string; count: number; onCha
         accessibilityRole="button"
         accessibilityLabel={`One copy more of ${name}`}
       >
-        <PathIcon d={ICON.plus} color={Colors.goldLight} size={14} weight={2.2} />
+        <View style={[styles.bar, { backgroundColor: Colors.goldLight }]} />
+        <View style={[styles.bar, styles.barUp, { backgroundColor: Colors.goldLight }]} />
       </TouchableOpacity>
     </View>
   )
@@ -680,6 +738,17 @@ const styles = StyleSheet.create({
   },
   stepOff: {
     opacity: 0.3,
+  },
+  // The − and the two strokes of +, drawn as views (an SVG per button made every row costly):
+  // a 14 px icon's 14-of-24 stroke, 2.2 of 24 thick with round ends.
+  bar: {
+    position: 'absolute',
+    width: (14 * 14) / 24 + (14 * 2.2) / 24,
+    height: (14 * 2.2) / 24,
+    borderRadius: (14 * 1.1) / 24,
+  },
+  barUp: {
+    transform: [{ rotate: '90deg' }],
   },
   stepCount: {
     minWidth: 26,
