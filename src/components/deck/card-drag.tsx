@@ -143,6 +143,14 @@ const accepts = (drag: CardDrag, target: DropTarget) => {
 // Gesture handler's scroll view, animatable so a drag can scroll it.
 export const DragScrollView = Animated.createAnimatedComponent(ScrollView)
 
+// Whether a finger at (px, py) on screen is close enough to the trash bubble to be pulled in.
+// `rects`: the drag's (passed on its own: a worklet shouldn't take the whole drag along).
+export const nearTrash = (rects: CardDrag['rects'], px: number, py: number) => {
+  'worklet'
+  const t = rects.get().trash
+  return t != null && Math.hypot(px - (t.x + t.w / 2), py - (t.y + t.h / 2)) < TRASH_PULL
+}
+
 // Hold a card to pick it up (with whatever is selected); let go over a target to drop.
 // `onStart` gets the held card, `onDrop` the target under the finger (null: none). `topZone`: how
 // far down the screen (from the top) taking the cards scrolls the list to the top (0: never).
@@ -159,8 +167,7 @@ export function dragGesture<T>(
     'worklet'
     const all = rects.get()
     // The trash pulls from a distance.
-    const t = all.trash
-    if (t && Math.hypot(px - (t.x + t.w / 2), py - (t.y + t.h / 2)) < TRASH_PULL) return 'trash'
+    if (nearTrash(rects, px, py)) return 'trash'
     for (const key in all) {
       if (key === 'trash' || skip.get().includes(key)) continue
       const r = all[key as DropTarget]!

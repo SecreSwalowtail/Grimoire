@@ -121,13 +121,49 @@ async function moveCards(db: SQLiteDatabase, fromId: string, toId: string) {
   await db.runAsync('UPDATE collection SET binder_id = ? WHERE binder_id = ?', toId, fromId)
 }
 
-// Drag-and-drop merge: `fromId`'s cards go into `intoId`, and `fromId` is removed.
-export async function mergeBinders(db: SQLiteDatabase, fromId: string, intoId: string) {
+type Row = Record<string, string | number | null>
+
+// These binders and every copy in them, as saved, for an undo.
+async function snapshot(db: SQLiteDatabase, ids: string[]) {
+  const list = ids.map(() => '?').join(', ')
+  return {
+    ids,
+    binders: await db.getAllAsync<Row>(`SELECT * FROM binders WHERE id IN (${list})`, ...ids),
+    copies: await db.getAllAsync<Row>(`SELECT * FROM collection WHERE binder_id IN (${list})`, ...ids),
+  }
+}
+
+// Puts binders and their copies back exactly as in the snapshot (same ids, places and copies).
+async function restore(db: SQLiteDatabase, snap: Awaited<ReturnType<typeof snapshot>>) {
+  const list = snap.ids.map(() => '?').join(', ')
+  const insert = async (table: string, row: Row) => {
+    const cols = Object.keys(row)
+    await db.runAsync(
+      `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+      ...cols.map((c) => row[c]),
+    )
+  }
   await db.withTransactionAsync(async () => {
-    await moveCards(db, fromId, intoId)
-    await db.runAsync('DELETE FROM binders WHERE id = ?', fromId)
+    await db.runAsync(`DELETE FROM collection WHERE binder_id IN (${list})`, ...snap.ids)
+    await db.runAsync(`DELETE FROM binders WHERE id IN (${list})`, ...snap.ids)
+    for (const b of snap.binders) await insert('binders', b)
+    for (const c of snap.copies) await insert('collection', c)
   })
   collectionChanged()
+}
+
+// Drag-and-drop merge: the cards of `fromIds` go into `intoId`, and those binders are removed.
+// Returns the undo.
+export async function mergeBinders(db: SQLiteDatabase, fromIds: string[], intoId: string) {
+  const before = await snapshot(db, [...fromIds, intoId])
+  await db.withTransactionAsync(async () => {
+    for (const id of fromIds) {
+      await moveCards(db, id, intoId)
+      await db.runAsync('DELETE FROM binders WHERE id = ?', id)
+    }
+  })
+  collectionChanged()
+  return () => restore(db, before)
 }
 
 // Removes a binder only if no cards are in it (undoing "New binder" with picked cards).
@@ -136,13 +172,17 @@ export async function deleteEmptyBinder(db: SQLiteDatabase, id: string) {
   collectionChanged()
 }
 
-// Removes a binder. Its cards move to `moveTo`, or are deleted with it when that's null.
-// The last one can go too: the next copy added makes a new one (ensureBinder).
-export async function deleteBinder(db: SQLiteDatabase, id: string, moveTo: string | null) {
+// Removes binders. Their cards move to `moveTo`, or are deleted with them when that's null.
+// The last one can go too: the next copy added makes a new one (ensureBinder). Returns the undo.
+export async function deleteBinders(db: SQLiteDatabase, ids: string[], moveTo: string | null) {
+  const before = await snapshot(db, moveTo ? [...ids, moveTo] : ids)
   await db.withTransactionAsync(async () => {
-    if (moveTo) await moveCards(db, id, moveTo)
-    else await db.runAsync('DELETE FROM collection WHERE binder_id = ?', id)
-    await db.runAsync('DELETE FROM binders WHERE id = ?', id)
+    for (const id of ids) {
+      if (moveTo) await moveCards(db, id, moveTo)
+      else await db.runAsync('DELETE FROM collection WHERE binder_id = ?', id)
+      await db.runAsync('DELETE FROM binders WHERE id = ?', id)
+    }
   })
   collectionChanged()
+  return () => restore(db, before)
 }

@@ -14,10 +14,11 @@ import { SearchField, SortButton, ValueSummary } from '@/components/binder/parts
 import { QuickLook } from '@/components/binder/quick-look'
 import { ReorderGrid } from '@/components/binder/reorder-grid'
 import { summarize, useCollection } from '@/components/binder/use-collection'
+import { DragGhost, EDIT_BAR, EditBar, TrashBubble, useCardDrag } from '@/components/deck/card-drag'
 import { Icon } from '@/components/icon'
 import { SortMenu } from '@/components/sort-menu'
 import { Colors, Fonts } from '@/constants/theme'
-import { deleteBinder, mergeBinders, reorderBinders, type Binder } from '@/db/binders'
+import { deleteBinders, mergeBinders, reorderBinders, type Binder } from '@/db/binders'
 import type { CollectionEntry } from '@/db/collection'
 import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
@@ -39,9 +40,11 @@ type Row = { id: string; binder: Binder; value: number; cards: number; change: n
 
 // Binder tab: every binder as a closed binder with its value, the total of all of them, and a
 // search across all of them (which shows the matching cards instead of the binders).
-// Hold a binder to edit: sort and + make way for Edit, Remove and Done, and the held binder is
-// selected (tap another to pick it instead). Keep holding to drag it: drop it in another place to
-// reorder, or on the middle of another binder to merge the two.
+// Hold a binder to edit: sort and + make way for Edit, the bar at the bottom has Undo and Done, and
+// the held binder is selected (tap others to select them too). Keep holding to drag it: drop it in
+// another place to reorder, on the middle of another binder to merge the two, or into the trash
+// bubble that rises at the bottom to remove it (it asks first what to do with the cards). Holding
+// one of several selected binders carries them all, shown under the finger like dragged cards.
 export default function BindersScreen() {
   const money = useMoney()
   const db = useSQLiteContext()
@@ -56,11 +59,17 @@ export default function BindersScreen() {
   const [newOpen, setNewOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  // No scrolling while a binder is being dragged.
+  // The trash bubble a dragged binder can go into.
+  const trash = useCardDrag()
+  // No scrolling while a binder is being dragged; `groupDrag`: the drag carries every selected one.
   const [dragging, setDragging] = useState(false)
+  const [groupDrag, setGroupDrag] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [removing, setRemoving] = useState(false)
-  const [merge, setMerge] = useState<{ from: string; into: string } | null>(null)
+  const [merge, setMerge] = useState<{ from: string[]; into: string } | null>(null)
+  // This edit session's changes, latest last, for Undo, and what the last one did.
+  const [undos, setUndos] = useState<(() => Promise<unknown>)[]>([])
+  const [note, setNote] = useState<string | null>(null)
   // The quick look over search results (tap a card): the cards it goes through and the one tapped.
   const [look, setLook] = useState<{ ids: number[]; openId: number } | null>(null)
   // The screen, for the quick look to blur behind it.
@@ -82,6 +91,8 @@ export default function BindersScreen() {
   const stopEditing = () => {
     setEditing(false)
     setSelectedIds([])
+    setUndos([])
+    setNote(null)
   }
   // Android's back button leaves edit mode first.
   useFocusEffect(
@@ -90,6 +101,8 @@ export default function BindersScreen() {
       const sub = BackHandler.addEventListener('hardwareBackPress', () => {
         setEditing(false)
         setSelectedIds([])
+        setUndos([])
+        setNote(null)
         return true
       })
       return () => sub.remove()
@@ -119,30 +132,47 @@ export default function BindersScreen() {
   const one = selected.length === 1 ? selected[0] : null
   const cardsIn = (id: string | undefined) => rows.find((r) => r.id === id)?.cards ?? 0
   const byId = (id: string | undefined) => binders.find((b) => b.id === id) ?? null
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    setNote(null)
     setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
+  }
+  // Holding one of several selected binders drags them all (as ReorderGrid does).
+  const carried = (id: string) => (selectedIds.length > 1 && selectedIds.includes(id) ? selected.map((b) => b.id) : [id])
+  const names = (ids: string[]) => (ids.length === 1 ? `“${byId(ids[0])?.name ?? 'binder'}”` : plural(ids.length, 'binder'))
 
   const run = (work: Promise<unknown>) => work.then(reload).catch((e) => console.warn('Binder change failed', e))
+  // A change is done: what it did, and how to take it back.
+  const changed = (what: string, undo: () => Promise<unknown>) => {
+    setUndos((list) => [...list, undo])
+    setNote(what)
+    setSelectedIds([])
+  }
+  const undo = () => {
+    const last = undos[undos.length - 1]
+    if (!last) return
+    setUndos(undos.slice(0, -1))
+    setSelectedIds([])
+    setNote(null)
+    run(last())
+  }
+  const doReorder = (ids: string[]) => {
+    const before = binders.map((b) => b.id)
+    run(reorderBinders(db, ids).then(() => changed('Changed the order', () => reorderBinders(db, before))))
+  }
   const doMerge = () => {
     if (!merge) return
     const { from, into } = merge
+    const what = `Merged ${names(from)} into “${byId(into)?.name ?? 'binder'}”`
     setMerge(null)
-    forgetScanBinder(from)
-    setSelectedIds(selectedIds.filter((x) => x !== from))
-    run(mergeBinders(db, from, into))
+    from.forEach(forgetScanBinder)
+    run(mergeBinders(db, from, into).then((back) => changed(what, back)))
   }
   const doRemove = (moveTo: string | null) => {
     const ids = selected.map((b) => b.id)
+    const what = `Removed ${names(ids)}`
     setRemoving(false)
-    setSelectedIds([])
-    // Nothing left to edit.
-    if (ids.length === binders.length) setEditing(false)
     ids.forEach(forgetScanBinder)
-    run(
-      (async () => {
-        for (const id of ids) await deleteBinder(db, id, moveTo)
-      })(),
-    )
+    run(deleteBinders(db, ids, moveTo).then((back) => changed(what, back)))
   }
 
   const binderItem = ({ binder, value, cards, change }: Row) => {
@@ -183,8 +213,15 @@ export default function BindersScreen() {
     )
   }
 
-  const canRemove = selected.length > 0
-  const selectionLabel = selected.length === 1 ? selected[0].name : `${selected.length} binders`
+  // Dropped into the trash: what the drag carried, once the dialog says what happens to the cards.
+  const trashBinder = (id: string) => {
+    setSelectedIds(carried(id))
+    setRemoving(true)
+  }
+
+  // A group under the finger: up to 5 fanned out, more as a bundle with the count.
+  const ghost = selected.map((b) => ({ key: b.id, name: b.name, image: null, quantity: 1 }))
+  const ghostLabel = `${plural(selected.length, 'binder')} · ${plural(selected.reduce((n, b) => n + cardsIn(b.id), 0), 'card')}`
 
   return (
     <BlurTargetView ref={page} style={styles.root}>
@@ -207,18 +244,6 @@ export default function BindersScreen() {
                   <Icon name={{ ios: 'pencil', android: 'edit' }} size={20} tintColor={Colors.text} />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                style={[styles.iconBtn, styles.removeBtn, !canRemove && styles.disabled]}
-                onPress={() => setRemoving(true)}
-                disabled={!canRemove}
-                accessibilityRole="button"
-                accessibilityLabel={selected.length ? `Remove ${selectionLabel}` : 'Remove binder'}
-              >
-                <Icon name={{ ios: 'trash', android: 'delete' }} size={20} tintColor={Colors.danger} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.done} onPress={stopEditing} accessibilityRole="button">
-                <Text style={styles.doneLabel}>Done</Text>
-              </TouchableOpacity>
             </View>
           ) : (
             !searching && (
@@ -248,16 +273,8 @@ export default function BindersScreen() {
           )}
         </View>
 
-        {editing ? (
-          <View style={styles.hint}>
-            <Icon name={{ ios: 'hand.draw', android: 'drag_pan' }} size={18} tintColor={Colors.textSecondary} />
-            <Text style={styles.hintText}>
-              {selected.length > 1 ? `${selected.length} selected · ` : 'Tap to select · '}hold & drag to reorder or merge
-            </Text>
-          </View>
-        ) : (
-          <SearchField value={query} onChange={setQuery} placeholder="Search all binders" />
-        )}
+        {/* While editing, the bar at the bottom says what to do. */}
+        {!editing && <SearchField value={query} onChange={setQuery} placeholder="Search all binders" />}
       </View>
 
       {searching && !editing ? (
@@ -271,7 +288,11 @@ export default function BindersScreen() {
           }
         />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content} scrollEnabled={!dragging}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.content, editing && { paddingBottom: EDIT_BAR + 24 }]}
+          scrollEnabled={!dragging}
+        >
           <ReorderGrid
             items={sorted}
             columns={2}
@@ -280,16 +301,23 @@ export default function BindersScreen() {
             columnGap={COLUMN_GAP}
             rowGap={ROW_GAP}
             renderItem={binderItem}
-            onReorder={(ids) => run(reorderBinders(db, ids))}
-            onMerge={(from, into) => setMerge({ from, into })}
+            onReorder={doReorder}
+            onMerge={(id, into) => setMerge({ from: carried(id), into })}
             onHold={(id) => {
               // Holding starts editing with that binder picked; while editing it only drags.
               if (editing) return
               setEditing(true)
               setSelectedIds([id])
+              setNote(null)
             }}
-            onDragChange={setDragging}
+            onDragChange={(on, all) => {
+              setDragging(on)
+              setGroupDrag(on && all)
+            }}
             glow={frame}
+            trash={trash}
+            onTrash={trashBinder}
+            selected={editing ? selectedIds : undefined}
           />
 
           {loaded && entries.length === 0 && !editing && (
@@ -309,6 +337,22 @@ export default function BindersScreen() {
           )}
         </ScrollView>
       )}
+      {editing && (
+        <EditBar
+          canUndo={undos.length > 0}
+          onUndo={undo}
+          onDone={stopEditing}
+          selected={selected.length}
+          note={
+            note ??
+            (selected.length > 1
+              ? `${selected.length} selected · hold one to drag them all`
+              : 'Tap binders to select · hold one to reorder, merge or remove')
+          }
+        />
+      )}
+      <TrashBubble drag={trash} bottom={EDIT_BAR + 20} />
+      {groupDrag && <DragGhost drag={trash} lines={ghost} label={ghostLabel} />}
 
       <SortMenu
         visible={sortOpen}
@@ -345,9 +389,9 @@ export default function BindersScreen() {
         onClose={() => setRemoving(false)}
       />
       <MergeBindersDialog
-        from={byId(merge?.from)}
+        from={(merge?.from ?? []).flatMap((id) => byId(id) ?? [])}
         into={byId(merge?.into)}
-        cards={cardsIn(merge?.from)}
+        cards={(merge?.from ?? []).reduce((n, id) => n + cardsIn(id), 0)}
         onMerge={doMerge}
         onClose={() => setMerge(null)}
       />
@@ -401,24 +445,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  removeBtn: {
-    borderColor: 'rgba(238,132,102,0.35)',
-    backgroundColor: 'rgba(181,65,42,0.16)',
-  },
   disabled: {
     opacity: 0.4,
-  },
-  done: {
-    height: 44,
-    paddingHorizontal: 18,
-    borderRadius: 14,
-    backgroundColor: Colors.gold,
-    justifyContent: 'center',
-  },
-  doneLabel: {
-    fontSize: 15,
-    fontFamily: Fonts.extraBold,
-    color: Colors.onGold,
   },
   title: {
     fontSize: 42,
@@ -436,23 +464,6 @@ const styles = StyleSheet.create({
   },
   share: {
     borderRadius: 4,
-  },
-  hint: {
-    height: 48,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(237,230,214,0.16)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  hintText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: Fonts.semiBold,
-    color: Colors.textSecondary,
   },
   content: {
     paddingHorizontal: 20,

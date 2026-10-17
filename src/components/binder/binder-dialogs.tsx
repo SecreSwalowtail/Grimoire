@@ -131,7 +131,7 @@ export function RemoveBinderDialog({
   )
 }
 
-// "Merge binders?" after dropping one binder on another.
+// "Merge binders?" after dropping one binder (or several) on another.
 export function MergeBindersDialog({
   from,
   into,
@@ -139,21 +139,23 @@ export function MergeBindersDialog({
   onMerge,
   onClose,
 }: {
-  from: Binder | null
+  from: Binder[]
   into: Binder | null
   cards: number
   onMerge: () => void
   onClose: () => void
 }) {
+  const one = from.length === 1
+  const names = one ? `“${from[0]?.name}”` : `the ${from.length} binders`
   return (
     <Dialog
-      visible={from != null && into != null}
+      visible={from.length > 0 && into != null}
       icon={{ ios: 'arrow.triangle.merge', android: 'merge' }}
       title="Merge binders?"
       body={
         cards === 0
-          ? `“${from?.name}” is empty, so it's just removed. “${into?.name}” stays as it is.`
-          : `The ${plural(cards, 'card')} in “${from?.name}” move into “${into?.name}”, and “${from?.name}” is removed. Copies of the same printing add up.`
+          ? `${one ? `${names} is` : 'They are'} empty, so ${one ? "it's" : "they're"} just removed. “${into?.name}” stays as it is.`
+          : `The ${plural(cards, 'card')} in ${names} move into “${into?.name}”, and ${one ? names : 'those binders'} ${one ? 'is' : 'are'} removed. Copies of the same printing add up.`
       }
       action="Merge"
       onAction={onMerge}
