@@ -74,7 +74,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ReducedMotionConfig mode={animations ? ReduceMotion.System : ReduceMotion.Always} />
       <SQLiteProvider databaseName="binder.db" onInit={initDb}>
-        <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+        <Stack screenOptions={{ headerShown: false, animation: 'none', freezeOnBlur: true }} />
         <UpdateSheet />
         {fpsMeter && <FpsMeter />}
       </SQLiteProvider>

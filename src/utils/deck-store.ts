@@ -1,5 +1,6 @@
+import { useIsFocused } from 'expo-router'
 import type { SQLiteDatabase } from 'expo-sqlite'
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 
 import { getDecksAndFolders, saveDeckChanges, type DeckSnapshot } from '@/db/decks'
 import { cardImage, type ScryfallCard } from '@/db/scryfall'
@@ -201,7 +202,17 @@ export async function loadDeckStore(database: SQLiteDatabase) {
 // The decks as they are now, outside a component (e.g. in a callback made earlier).
 export const getDeckStore = () => state
 
-export const useDeckStore = () => useSyncExternalStore(changes.subscribe, getDeckStore)
+// The deck store, for a component on a screen. While its screen is out of view it keeps the store as
+// it was when the screen left, so it doesn't redraw on every change (the Decks list under an open
+// deck, which the stack doesn't freeze, redrew all its decks on each −/+); it catches up when the
+// screen is shown again.
+export function useDeckStore() {
+  const focused = useIsFocused()
+  // The store as it was when the screen last came into or out of view (state adjusted during render).
+  const [kept, setKept] = useState(() => ({ focused, store: getDeckStore() }))
+  if (kept.focused !== focused) setKept({ focused, store: getDeckStore() })
+  return useSyncExternalStore(changes.subscribe, focused ? getDeckStore : () => kept.store)
+}
 
 const cardKey = (deckId: string, cardId: string, board: Board) => `${deckId}|${cardId}|${board}`
 

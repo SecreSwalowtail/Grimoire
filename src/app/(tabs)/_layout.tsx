@@ -15,6 +15,9 @@ export default function TabLayout() {
         headerShown: false,
         // Screens change instantly (no transition), here and in every stack.
         animation: 'none',
+        // Screens out of sight don't re-render (a deck edit redrew the whole Decks list behind the
+        // deck); they catch up once when shown again. Here and in every stack.
+        freezeOnBlur: true,
         tabBarActiveTintColor: Colors.gold,
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarStyle: styles.tabBar,
