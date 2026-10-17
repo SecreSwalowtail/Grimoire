@@ -36,15 +36,16 @@ export async function getDecksAndFolders(db: SQLiteDatabase) {
   return { folders, decks, cards }
 }
 
-// Rows of `after` that are new, changed or moved (with their new position), and rows that are gone.
-// The store never edits objects in place, so an unchanged item is the very same object.
-function diff<T extends { id: string }>(before: T[], after: T[]) {
+// Rows of `after` that are new, changed or (with `moves`) moved, with their new position, and rows
+// that are gone. The store never edits objects in place, so an unchanged item is the very same
+// object.
+function diff<T extends { id: string }>(before: T[], after: T[], moves = true) {
   const old = new Map(before.map((item, position) => [item.id, { item, position }]))
   const upserts = after
     .map((item, position) => ({ item, position }))
     .filter(({ item, position }) => {
       const prev = old.get(item.id)
-      return !prev || prev.item !== item || prev.position !== position
+      return !prev || prev.item !== item || (moves && prev.position !== position)
     })
   const kept = new Set(after.map((item) => item.id))
   const deletes = before.filter((item) => !kept.has(item.id))
@@ -55,10 +56,12 @@ function diff<T extends { id: string }>(before: T[], after: T[]) {
 // before the decks that point at them, decks before their cards, and they come out the other way
 // round, so the foreign keys always hold. Upserts (not INSERT OR REPLACE): a replace deletes the
 // folder row first, which would clear folder_id on its decks.
+// A deck card keeps the position it was first saved with (a new one goes after every other), so
+// taking a card out doesn't rewrite all the cards after it in every deck.
 export async function saveDeckChanges(db: SQLiteDatabase, before: DeckSnapshot, after: DeckSnapshot) {
   const folders = diff(before.folders, after.folders)
   const decks = diff(before.decks, after.decks)
-  const cards = diff(before.cards, after.cards)
+  const cards = diff(before.cards, after.cards, false)
   if ([folders, decks, cards].every((d) => !d.upserts.length && !d.deletes.length)) return
 
   await db.withTransactionAsync(async () => {
@@ -87,17 +90,20 @@ export async function saveDeckChanges(db: SQLiteDatabase, before: DeckSnapshot, 
         position,
       )
     }
-    for (const { item: c, position } of cards.upserts) {
+    // The next free position (only a new row takes it; a changed one keeps its own).
+    let next = cards.upserts.length
+      ? ((await db.getFirstAsync<{ p: number | null }>('SELECT MAX(position) AS p FROM deck_cards'))?.p ?? -1) + 1
+      : 0
+    for (const { item: c } of cards.upserts) {
       await db.runAsync(
         `INSERT INTO deck_cards (deck_id, card_id, board, quantity, commander, position) VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT (deck_id, card_id, board) DO UPDATE SET quantity = excluded.quantity, commander = excluded.commander,
-           position = excluded.position`,
+         ON CONFLICT (deck_id, card_id, board) DO UPDATE SET quantity = excluded.quantity, commander = excluded.commander`,
         c.deckId,
         c.cardId,
         c.board,
         c.quantity,
         c.commander ? 1 : 0,
-        position,
+        next++,
       )
     }
     for (const c of cards.deletes) {
