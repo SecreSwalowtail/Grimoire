@@ -147,11 +147,27 @@ export function Sheet({
 }
 
 // Title, optional Reset, and a close button unless `onClose` is left out (then the sheet closes by
-// dragging it down, the backdrop, or going back). The sheet can be dragged down by its header.
-export function SheetHeader({ title, onClose, onReset }: { title: string; onClose?: () => void; onReset?: () => void }) {
+// dragging it down, the backdrop, or going back). `onBack`: a back button before the title, for a
+// step inside the sheet. The sheet can be dragged down by its header.
+export function SheetHeader({
+  title,
+  onClose,
+  onReset,
+  onBack,
+}: {
+  title: string
+  onClose?: () => void
+  onReset?: () => void
+  onBack?: () => void
+}) {
   return (
     <DragArea>
       <View style={styles.header}>
+        {onBack && (
+          <TouchableOpacity style={styles.close} onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
+            <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={18} tintColor={Colors.text} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.headerTitle} accessibilityRole="header">{title}</Text>
         {onReset && (
           <TouchableOpacity style={styles.reset} onPress={onReset} accessibilityRole="button">

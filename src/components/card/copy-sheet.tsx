@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 import { CardThumb } from '@/components/card/card-thumb'
+import { PrintingPicker } from '@/components/card/printing-picker'
 import type { Tilt } from '@/components/card-effects/tilt'
 import { PrimaryButton, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls'
 import { Colors, Fonts } from '@/constants/theme'
 import { getBinders, type Binder } from '@/db/binders'
+import { upsertCard } from '@/db/cards'
 import {
   addToCollection,
   removeEntry,
@@ -22,10 +24,13 @@ import { mainFinish } from '@/utils/card-prices'
 import { currencyName, parsePaid, useMoney, type Money } from '@/utils/money'
 
 // C5 · Add / edit a copy. Adding uses the printing on show ("Change" goes to Printings to pick
-// another); editing keeps the copy's printing. Under it, the binder the copy goes in (your first
-// binder to start with; editing can move the copy). Nothing is saved until the gold button.
+// another); editing starts from the copy's printing ("Change" picks another right in the sheet).
+// Under it, the binder the copy goes in (your first binder to start with; editing can move the
+// copy). Nothing is saved until the gold button.
 
 type Draft = {
+  // Editing: another printing picked for the copy (null: it keeps its own).
+  printing: ScryfallCard | null
   // null: the first binder, until the binders have loaded.
   binderId: string | null
   qty: number
@@ -60,10 +65,9 @@ export function CopySheet({
   const money = useMoney()
   const db = useSQLiteContext()
   const editing = entry != null
-  // The copy's own printing when editing (it may not be the one on show).
-  const samePrinting = !entry || entry.card_id === card.id
-  const finishes = (samePrinting ? card.finishes ?? ['nonfoil'] : ['nonfoil', 'foil']) as Finish[]
   const [draft, setDraft] = useState<Draft | null>(null)
+  // Picking another printing (the list takes the sheet's place).
+  const [picking, setPicking] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [busy, setBusy] = useState(false)
   const [binders, setBinders] = useState<Binder[]>([])
@@ -86,10 +90,12 @@ export function CopySheet({
   if (openKey !== loadedFor) {
     setLoadedFor(openKey)
     setConfirmRemove(false)
+    setPicking(false)
     if (openKey) {
       setDraft(
         entry
           ? {
+              printing: null,
               binderId: entry.binder_id,
               qty: entry.quantity,
               finish: entry.finish,
@@ -99,6 +105,7 @@ export function CopySheet({
               forTrade: entry.for_trade === 1,
             }
           : {
+              printing: null,
               binderId: null,
               qty: 1,
               finish: mainFinish(card),
@@ -121,20 +128,34 @@ export function CopySheet({
     ? COPY_LANGUAGES
     : [...COPY_LANGUAGES, { code: draft.language, name: LANGUAGE_NAMES[draft.language] ?? draft.language }]
 
-  const unit = entry && !samePrinting
-    ? draft.finish === 'nonfoil' ? entry.price_eur ?? entry.price_eur_foil : entry.price_eur_foil ?? entry.price_eur
-    : Number((draft.finish === 'nonfoil' ? card.prices.eur ?? card.prices.eur_foil : card.prices.eur_foil ?? card.prices.eur) ?? NaN)
+  // The printing the copy is (or will be): the one picked, else the copy's own when that's the one
+  // on show; null when it's another one only known from the copy's row.
+  const printing = draft.printing ?? (!entry || entry.card_id === card.id ? card : null)
+  const finishes = (printing ? printing.finishes ?? ['nonfoil'] : ['nonfoil', 'foil']) as Finish[]
+  const unit = printing
+    ? Number((draft.finish === 'nonfoil' ? printing.prices.eur ?? printing.prices.eur_foil : printing.prices.eur_foil ?? printing.prices.eur) ?? NaN)
+    : draft.finish === 'nonfoil' ? entry!.price_eur ?? entry!.price_eur_foil : entry!.price_eur_foil ?? entry!.price_eur
   const value = unit != null && Number.isFinite(unit) ? money.eur(unit * draft.qty) : '—'
-  const printingTitle = entry && !samePrinting
-    ? `${entry.set_name} #${entry.collector_number}`
-    : `${printingLabel(card)} · ${card.set_name} #${card.collector_number}`
-  const thumb = entry && !samePrinting ? entry.image_uri : cardThumb(card)
+  const printingTitle = printing
+    ? `${printingLabel(printing)} · ${printing.set_name} #${printing.collector_number}`
+    : `${entry!.set_name} #${entry!.collector_number}`
+  const thumb = printing ? cardThumb(printing) : entry!.image_uri
+
+  const pick = (p: ScryfallCard) => {
+    // A printing that doesn't come in the finish picked so far takes its main one.
+    const available = p.finishes ?? ['nonfoil']
+    set({ printing: p, finish: available.includes(draft.finish) ? draft.finish : mainFinish(p) })
+    setPicking(false)
+  }
 
   const save = async () => {
     if (busy) return
     setBusy(true)
     try {
+      const moved = entry && draft.printing && draft.printing.id !== entry.card_id ? draft.printing : null
+      if (moved) await upsertCard(db, moved)
       const changes = {
+        cardId: moved?.id,
         binderId: binder?.id ?? entry?.binder_id,
         quantity: draft.qty,
         finish: draft.finish,
@@ -164,23 +185,37 @@ export function CopySheet({
     }
   }
 
+  if (picking && entry) {
+    return (
+      <Sheet visible={visible} onClose={onClose}>
+        <PrintingPicker
+          printingId={entry.card_id}
+          oracleId={card.oracle_id}
+          selectedId={draft.printing?.id ?? entry.card_id}
+          onPick={pick}
+          onBack={() => setPicking(false)}
+          onClose={onClose}
+        />
+      </Sheet>
+    )
+  }
+
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={editing ? 'Edit copy' : 'Add to binder'} onClose={onClose} />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Pressable
           style={styles.printing}
-          onPress={editing ? undefined : onChangePrinting}
-          disabled={editing}
-          accessibilityRole={editing ? 'text' : 'button'}
-          accessibilityHint={editing ? undefined : 'Pick another printing'}
+          onPress={editing ? () => setPicking(true) : onChangePrinting}
+          accessibilityRole="button"
+          accessibilityHint="Pick another printing"
         >
           <CardThumb uri={thumb} foil={draft.finish !== 'nonfoil'} tilt={tilt} radius={4} style={styles.thumb} />
           <View style={styles.printingText}>
             <Text style={styles.small}>Printing</Text>
             <Text style={styles.printingTitle} numberOfLines={2}>{printingTitle}</Text>
           </View>
-          {!editing && <Text style={styles.change}>Change</Text>}
+          <Text style={styles.change}>Change</Text>
         </Pressable>
 
         {binders.length > 0 && (

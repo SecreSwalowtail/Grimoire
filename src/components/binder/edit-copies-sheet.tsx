@@ -1,19 +1,25 @@
+import { Image } from 'expo-image'
 import { useSQLiteContext } from 'expo-sqlite'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
+import { PrintingPicker } from '@/components/card/printing-picker'
 import { PrimaryButton, Sheet, SheetHeader } from '@/components/controls'
 import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
+import { upsertCard } from '@/db/cards'
 import { editEntries, type CollectionEntry, type Condition, type CopyEdits, type Finish } from '@/db/collection'
+import { cardThumb, type ScryfallCard } from '@/db/scryfall'
 import { CONDITIONS, FINISH_NAME } from '@/rules/collection'
+import { printingLabel } from '@/rules/printings'
+import { mainFinish } from '@/utils/card-prices'
 import { plural } from '@/utils/format'
 import { currencyName, parsePaid, useMoney } from '@/utils/money'
 
-// Edit cards: condition, finish, and whether you got them in a trade (checked, the price paid per
-// copy opens under it), for one card (the quick look) or every card picked in a binder's edit mode
-// at once. A setting the cards don't share shows as mixed and stays as each card has it unless you
-// pick something.
+// Edit cards: the printing (when they're all the same card), condition, finish, and whether you
+// got them in a trade (checked, the price paid per copy opens under it), for one card (the quick
+// look) or every card picked in a binder's edit mode at once. A setting the cards don't share shows
+// as mixed and stays as each card has it unless you pick something.
 
 const FINISHES: Finish[] = ['nonfoil', 'foil', 'etched']
 
@@ -45,8 +51,15 @@ export function EditCopiesSheet({
   const [paid, setPaid] = useState('')
   // Untouched, the prices stay as they are.
   const [paidTouched, setPaidTouched] = useState(false)
+  // Another printing picked for them all (null: each keeps its own).
+  const [printing, setPrinting] = useState<ScryfallCard | null>(null)
+  // Picking it (the list takes the sheet's place).
+  const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // The printing can change only when they're all the same card.
+  const sameName = shared(entries, (e) => e.name)
+  const samePrinting = shared(entries, (e) => e.card_id)
   const sameCondition = shared(entries, (e) => e.condition)
   const sameFinish = shared(entries, (e) => e.finish)
   const sameTraded = shared(entries, (e) => e.traded === 1)
@@ -62,16 +75,31 @@ export function EditCopiesSheet({
       setTraded(sameTraded ?? null)
       setPaid(samePaid != null ? money.fromEur(samePaid).toFixed(2) : '')
       setPaidTouched(false)
+      setPrinting(null)
+      setPicking(false)
     }
   }
 
   const one = entries.length === 1
   const copies = entries.reduce((n, e) => n + e.quantity, 0)
   const conditionInfo = CONDITIONS.find((c) => c.code === condition)
+  // Finishes the picked printing comes in (any, while each keeps its own).
+  const finishes = printing ? FINISHES.filter((f) => (printing.finishes ?? ['nonfoil']).includes(f)) : FINISHES
+
+  const pick = (p: ScryfallCard) => {
+    setPrinting(p)
+    setPicking(false)
+    // A finish the printing doesn't come in (the one set, or any copy's) becomes its main one.
+    const available = p.finishes ?? ['nonfoil']
+    const kept = finish != null ? [finish] : entries.map((e) => e.finish)
+    if (kept.some((f) => !available.includes(f))) setFinish(mainFinish(p))
+  }
 
   const save = async () => {
     if (busy || entries.length === 0) return
     const edits: CopyEdits = {}
+    const moved = printing && printing.id !== samePrinting ? printing : null
+    if (moved) edits.cardId = moved.id
     if (condition != null && condition !== sameCondition) edits.condition = condition
     if (finish != null && finish !== sameFinish) edits.finish = finish
     if (traded != null && traded !== sameTraded) edits.traded = traded
@@ -88,6 +116,7 @@ export function EditCopiesSheet({
     }
     setBusy(true)
     try {
+      if (moved) await upsertCard(db, moved)
       const undo = await editEntries(db, entries, edits)
       onSaved(undo, entries.length)
       onClose()
@@ -97,6 +126,29 @@ export function EditCopiesSheet({
       setBusy(false)
     }
   }
+
+  if (picking && entries.length > 0) {
+    return (
+      <Sheet visible={visible} onClose={onClose}>
+        <PrintingPicker
+          printingId={entries[0].card_id}
+          selectedId={printing?.id ?? samePrinting ?? null}
+          onPick={pick}
+          onBack={() => setPicking(false)}
+          onClose={onClose}
+        />
+      </Sheet>
+    )
+  }
+
+  // The printing row: the one picked, else theirs when they share one.
+  const shownEntry = samePrinting != null ? entries[0] : null
+  const printingTitle = printing
+    ? `${printingLabel(printing)} · ${printing.set_name} #${printing.collector_number}`
+    : shownEntry
+      ? `${shownEntry.set_name} #${shownEntry.collector_number}`
+      : 'Mixed · pick one to set them all'
+  const printingThumb = printing ? cardThumb(printing) : shownEntry?.image_uri ?? null
 
   return (
     <Sheet visible={visible} onClose={onClose}>
@@ -108,7 +160,24 @@ export function EditCopiesSheet({
             : `${copies} copies · what you set here goes for all of them`}
         </Text>
 
-        <Text style={styles.label}>Condition</Text>
+        {sameName != null && (
+          <TouchableOpacity
+            style={styles.printing}
+            onPress={() => setPicking(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Printing: ${printingTitle}`}
+            accessibilityHint="Pick another printing"
+          >
+            <Image source={{ uri: printingThumb ?? undefined }} style={styles.thumb} contentFit="cover" />
+            <View style={styles.printingText}>
+              <Text style={styles.small}>Printing</Text>
+              <Text style={styles.printingTitle} numberOfLines={2}>{printingTitle}</Text>
+            </View>
+            <Text style={styles.change}>Change</Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={[styles.label, sameName != null && styles.gap]}>Condition</Text>
         <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Condition">
           {CONDITIONS.map((c) => {
             const on = c.code === condition
@@ -138,7 +207,7 @@ export function EditCopiesSheet({
 
         <Text style={[styles.label, styles.gap]}>Finish</Text>
         <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Finish">
-          {FINISHES.map((f) => {
+          {finishes.map((f) => {
             const on = f === finish
             return (
               <TouchableOpacity
@@ -228,6 +297,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: Fonts.regular,
     color: Colors.textSecondary,
+  },
+  printing: {
+    height: 68,
+    paddingLeft: 10,
+    paddingRight: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(237,230,214,0.10)',
+    backgroundColor: Colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  thumb: {
+    width: 36,
+    height: 50,
+    borderRadius: 4,
+    backgroundColor: Colors.surface,
+  },
+  printingText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  small: {
+    fontSize: 12,
+    fontFamily: Fonts.regular,
+    color: Colors.textSecondary,
+  },
+  printingTitle: {
+    fontSize: 15,
+    fontFamily: Fonts.extraBold,
+    color: Colors.text,
+  },
+  change: {
+    fontSize: 14,
+    fontFamily: Fonts.extraBold,
+    color: Colors.goldLight,
   },
   label: {
     marginBottom: 8,

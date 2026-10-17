@@ -75,16 +75,15 @@ type PrintingsState = { list: ScryfallCard[]; total: number; page: number; more:
 const printingsCache = new Map<string, PrintingsState>()
 const rulingsCache = new Map<string, Ruling[]>()
 
-export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
-  const oracleId = card?.oracle_id ?? null
-  const cardId = card?.id ?? null
+// Every printing of a card (by oracle id): the first page, then more on demand. `failed`: the
+// first page couldn't be loaded (try again with `retry`).
+export function usePrintings(oracleId: string | null) {
   const [printings, setPrintings] = useState<Keyed<PrintingsState> | null>(null)
-  const [rulings, setRulings] = useState<Keyed<Ruling[]> | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
-  const rulingsFor = useRef<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   const current = oracleId ? (printings?.key === oracleId ? printings.value : printingsCache.get(oracleId) ?? null) : null
-  const currentRulings = oracleId ? (rulings?.key === oracleId ? rulings.value : rulingsCache.get(oracleId) ?? null) : null
 
   useEffect(() => {
     if (!oracleId || printingsCache.has(oracleId)) return
@@ -95,11 +94,45 @@ export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
         printingsCache.set(oracleId, value)
         if (live) setPrintings({ key: oracleId, value })
       })
-      .catch(() => undefined)
+      .catch(() => live && setFailed(oracleId))
     return () => {
       live = false
     }
-  }, [oracleId])
+  }, [oracleId, attempt])
+
+  const loadMore = async () => {
+    if (!oracleId || !current?.more || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const res = await getPrintings(oracleId, current.page + 1)
+      const value = { list: [...current.list, ...res.data], total: res.total_cards, page: current.page + 1, more: res.has_more }
+      printingsCache.set(oracleId, value)
+      setPrintings({ key: oracleId, value })
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  return {
+    printings: current,
+    loadMore,
+    loadingMore,
+    failed: failed != null && failed === oracleId && current == null,
+    retry: () => {
+      setFailed(null)
+      setAttempt((n) => n + 1)
+    },
+  }
+}
+
+export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
+  const oracleId = card?.oracle_id ?? null
+  const cardId = card?.id ?? null
+  const { printings: current, loadMore, loadingMore } = usePrintings(oracleId)
+  const [rulings, setRulings] = useState<Keyed<Ruling[]> | null>(null)
+  const rulingsFor = useRef<string | null>(null)
+
+  const currentRulings = oracleId ? (rulings?.key === oracleId ? rulings.value : rulingsCache.get(oracleId) ?? null) : null
 
   // Rulings belong to the card, not the printing: once per card, for the first printing seen.
   const wantRulings = onRulesTab || current != null
@@ -115,19 +148,6 @@ export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
         rulingsFor.current = null
       })
   }, [oracleId, cardId, wantRulings])
-
-  const loadMore = async () => {
-    if (!oracleId || !current?.more || loadingMore) return
-    setLoadingMore(true)
-    try {
-      const res = await getPrintings(oracleId, current.page + 1)
-      const value = { list: [...current.list, ...res.data], total: res.total_cards, page: current.page + 1, more: res.has_more }
-      printingsCache.set(oracleId, value)
-      setPrintings({ key: oracleId, value })
-    } finally {
-      setLoadingMore(false)
-    }
-  }
 
   return {
     printings: current,

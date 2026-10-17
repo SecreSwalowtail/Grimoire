@@ -149,6 +149,8 @@ export async function getCopiesOfCard(db: SQLiteDatabase, name: string) {
 type EntryChanges = {
   // Moves the copy to this binder.
   binderId: string
+  // Another printing of the card (already saved with upsertCard); left out, it stays.
+  cardId?: string
   quantity: number
   finish: Finish
   condition: Condition
@@ -157,17 +159,18 @@ type EntryChanges = {
   forTrade: boolean
 }
 
-// Edit a copy (and move it to another binder). If it now matches another entry of the same printing
-// in that binder (same finish, condition and language), the two become one: quantities add up, the
-// other's price paid is kept if this has none.
+// Edit a copy (and move it to another binder, or make it another printing). If it now matches
+// another entry of the same printing in that binder (same finish, condition and language), the two
+// become one: quantities add up, the other's price paid is kept if this has none.
 export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: EntryChanges) {
   await db.withTransactionAsync(async () => {
     const entry = await db.getFirstAsync<{ card_id: string; traded: number }>('SELECT card_id, traded FROM collection WHERE id = ?', entryId)
     if (!entry) return
+    const cardId = changes.cardId ?? entry.card_id
     const twin = await db.getFirstAsync<{ id: number; quantity: number; purchase_price: number | null; traded: number }>(
       `SELECT id, quantity, purchase_price, traded FROM collection
        WHERE binder_id = ? AND card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?`,
-      changes.binderId, entry.card_id, changes.finish, changes.condition, changes.language, entryId,
+      changes.binderId, cardId, changes.finish, changes.condition, changes.language, entryId,
     )
     if (twin) {
       await db.runAsync('DELETE FROM collection WHERE id = ?', entryId)
@@ -177,10 +180,11 @@ export async function updateEntry(db: SQLiteDatabase, entryId: number, changes: 
       )
     } else {
       await db.runAsync(
-        `UPDATE collection SET binder_id = ?, quantity = ?, finish = ?, condition = ?, language = ?, purchase_price = ?,
+        `UPDATE collection SET binder_id = ?, card_id = ?, quantity = ?, finish = ?, condition = ?, language = ?, purchase_price = ?,
            for_trade = ?
          WHERE id = ?`,
         changes.binderId,
+        cardId,
         changes.quantity, changes.finish, changes.condition, changes.language, changes.purchasePrice, changes.forTrade ? 1 : 0, entryId,
       )
     }
@@ -253,8 +257,9 @@ export async function restoreEntries(db: SQLiteDatabase, rows: EntryRow[]) {
 }
 
 // Changes made to many copies at once; what's left out stays as each copy has it.
-// `traded`: got in a trade. `purchasePrice` null: no price.
-export type CopyEdits = { condition?: Condition; finish?: Finish; traded?: boolean; purchasePrice?: number | null }
+// `traded`: got in a trade. `purchasePrice` null: no price. `cardId`: another printing of the card
+// (already saved with upsertCard).
+export type CopyEdits = { condition?: Condition; finish?: Finish; traded?: boolean; purchasePrice?: number | null; cardId?: string }
 
 type Place = Pick<CollectionEntry, 'binder_id' | 'card_id'>
 
@@ -264,12 +269,14 @@ const placesSql = (places: Place[]) => ({
   args: places.flatMap((p) => [p.binder_id, p.card_id]),
 })
 
-// Edits copies. A copy whose new condition or finish matches another entry of the same printing in
-// its binder (same language too) becomes one with it: quantities add up. Returns the undo, which
-// puts back those printings' rows in those binders exactly as they were.
+// Edits copies. A copy whose new printing, condition or finish matches another entry of that
+// printing in its binder (same language too) becomes one with it: quantities add up. Returns the
+// undo, which puts back those printings' rows in those binders (the new printing's too) exactly as
+// they were.
 export async function editEntries(db: SQLiteDatabase, entries: (Place & { id: number })[], edits: CopyEdits) {
   if (entries.length === 0) return async () => undefined
-  const { where, args } = placesSql(entries)
+  const newCard = edits.cardId
+  const { where, args } = placesSql(newCard ? [...entries, ...entries.map((e) => ({ ...e, card_id: newCard }))] : entries)
   let before: EntryRow[] = []
   await db.withTransactionAsync(async () => {
     before = await db.getAllAsync<EntryRow>(
@@ -280,17 +287,18 @@ export async function editEntries(db: SQLiteDatabase, entries: (Place & { id: nu
     for (const { id } of entries) {
       const e = await db.getFirstAsync<EntryRow>('SELECT * FROM collection WHERE id = ?', id)
       if (!e) continue
+      const cardId = newCard ?? e.card_id
       const condition = edits.condition ?? e.condition
       const finish = edits.finish ?? e.finish
       const paid = edits.purchasePrice !== undefined ? edits.purchasePrice : e.purchase_price
       const traded = edits.traded !== undefined ? (edits.traded ? 1 : 0) : e.traded
       const twin =
-        condition === e.condition && finish === e.finish
+        cardId === e.card_id && condition === e.condition && finish === e.finish
           ? null
           : await db.getFirstAsync<{ id: number; purchase_price: number | null; for_trade: number; traded: number }>(
               `SELECT id, purchase_price, for_trade, traded FROM collection
                WHERE binder_id = ? AND card_id = ? AND finish = ? AND condition = ? AND language = ? AND id != ?`,
-              e.binder_id, e.card_id, finish, condition, e.language, e.id,
+              e.binder_id, cardId, finish, condition, e.language, e.id,
             )
       if (twin) {
         await db.runAsync('DELETE FROM collection WHERE id = ?', e.id)
@@ -304,8 +312,8 @@ export async function editEntries(db: SQLiteDatabase, entries: (Place & { id: nu
         )
       } else {
         await db.runAsync(
-          'UPDATE collection SET condition = ?, finish = ?, purchase_price = ?, traded = ? WHERE id = ?',
-          condition, finish, paid, traded, e.id,
+          'UPDATE collection SET card_id = ?, condition = ?, finish = ?, purchase_price = ?, traded = ? WHERE id = ?',
+          cardId, condition, finish, paid, traded, e.id,
         )
       }
     }
