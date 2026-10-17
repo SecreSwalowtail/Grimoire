@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSavedCard, upsertCard } from '@/db/cards'
 import { getCopiesOfCard, getPriceHistory, type CollectionEntry, type PricePoint } from '@/db/collection'
 import { cachedCard, getCard, getPrintings, getRulings, rememberCard, type Ruling, type ScryfallCard } from '@/db/scryfall'
-import { timed } from '@/utils/perf'
 import { getRemotePrices, mergeHistory } from '@/utils/remote-prices'
 
 // Data for Card detail. Each piece is stored with the key it was loaded for (printing id, or the
@@ -34,7 +33,7 @@ export function useCard(id: string) {
     if (cachedCard(id)) return
     let live = true
     const load = async () => {
-      const saved = await timed('card detail: read saved card', () => getSavedCard(db, id).catch(() => null))
+      const saved = await getSavedCard(db, id).catch(() => null)
       if (saved && live) {
         fromPhone.add(saved.card)
         rememberCard(saved.card)
@@ -42,7 +41,7 @@ export function useCard(id: string) {
       }
       if (saved && Date.now() - saved.updatedAt < FRESH_FOR) return
       try {
-        const fresh = await timed('card detail: fetch card', () => getCard(id))
+        const fresh = await getCard(id)
         // Keep the saved copy if Scryfall no longer knows the printing.
         if (live && (fresh || !saved)) setLoaded({ key: id, value: fresh })
       } catch {
@@ -88,7 +87,7 @@ export function usePrintings(oracleId: string | null) {
   useEffect(() => {
     if (!oracleId || printingsCache.has(oracleId)) return
     let live = true
-    timed('card detail: fetch printings', () => getPrintings(oracleId), (r) => `${r.data.length} of ${r.total_cards}`)
+    getPrintings(oracleId)
       .then((res) => {
         const value = { list: res.data, total: res.total_cards, page: 1, more: res.has_more }
         printingsCache.set(oracleId, value)
@@ -139,7 +138,7 @@ export function useOracleData(card: ScryfallCard | null, onRulesTab: boolean) {
   useEffect(() => {
     if (!oracleId || !cardId || !wantRulings || rulingsCache.has(oracleId) || rulingsFor.current === oracleId) return
     rulingsFor.current = oracleId
-    timed('card detail: fetch rulings', () => getRulings(cardId))
+    getRulings(cardId)
       .then((value) => {
         rulingsCache.set(oracleId, value)
         setRulings({ key: oracleId, value })

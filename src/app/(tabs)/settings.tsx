@@ -1,11 +1,10 @@
 import Constants from 'expo-constants'
 import { useSQLiteContext } from 'expo-sqlite'
 import { useState, type ReactNode } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Chip, SectionLabel, Segmented, Toggle } from '@/components/controls'
-import { DevTools } from '@/components/dev/dev-tools'
 import { Icon, type IconName } from '@/components/icon'
 import { CurrencySheet } from '@/components/settings/currency-sheet'
 import { Colors, Fonts } from '@/constants/theme'
@@ -21,13 +20,11 @@ const VERSION = Constants.expoConfig?.version ?? '1.0.0'
 
 // Settings: prices (currency, which market), scanning (condition), the app (animations,
 // vibration), the collection (export / import CSV) and about (version, sources). Tools: to come.
-// Holding the title for a second opens the Developer tools (performance pass).
 export default function SettingsScreen() {
   const db = useSQLiteContext()
   const settings = useSettings()
   const money = useMoney()
   const [tab, setTab] = useState<Tab>('settings')
-  const [devTools, setDevTools] = useState(false)
   const [currencyOpen, setCurrencyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -63,9 +60,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <Pressable onLongPress={() => setDevTools(!devTools)} delayLongPress={900} accessibilityRole="header">
-        <Text style={styles.title}>Settings</Text>
-      </Pressable>
+      <Text style={styles.title} accessibilityRole="header">Settings</Text>
       <View style={styles.tabs}>
         <Segmented
           label="Settings or tools"
@@ -162,7 +157,6 @@ export default function SettingsScreen() {
             </Text>
           </>
         )}
-        {devTools && <DevTools />}
       </ScrollView>
 
       <CurrencySheet visible={currencyOpen} onClose={() => setCurrencyOpen(false)} />

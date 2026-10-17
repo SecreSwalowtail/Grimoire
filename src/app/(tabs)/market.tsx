@@ -32,7 +32,6 @@ import {
   type FilterTab,
   type MarketFilters,
 } from '@/utils/market-filters'
-import { timed } from '@/utils/perf'
 import { getSettings } from '@/utils/settings'
 import { useSearchBack } from '@/utils/use-search-back'
 
@@ -134,8 +133,7 @@ export default function MarketScreen() {
   useEffect(() => {
     let cancelled = false
     const { query, options } = JSON.parse(searchKey) as ReturnType<typeof searchRequest>
-    const label = query === trendingQuery() ? 'market: trending' : 'market: search'
-    timed(label, () => searchCards(query, options), (r) => `${r.data.length} cards`)
+    searchCards(query, options)
       .then((result) => {
         if (!cancelled) setSearch({ key: searchKey, cards: result.data, total: result.total_cards, error: null })
       })

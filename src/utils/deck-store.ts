@@ -453,24 +453,6 @@ export function deleteFolders(ids: string[], withDecks: boolean): Undo {
   }
 }
 
-// Test data for the performance pass (utils/dev-seed.ts): adds many folders, decks and cards in
-// one change.
-export function addTestDecks(add: { folders: Folder[]; decks: Deck[]; cards: DeckCard[]; info: Record<string, CardInfo> }) {
-  set({
-    folders: [...state.folders, ...add.folders],
-    decks: [...state.decks, ...add.decks],
-    cards: [...state.cards, ...add.cards],
-    info: { ...state.info, ...add.info },
-  })
-}
-
-// After the database was wiped (Developer tools → Clear database): empty, and nothing to save.
-export function resetDeckStore() {
-  state = { folders: [], decks: [], cards: [], info: {} }
-  saved = state
-  changes.notify()
-}
-
 // Everything the deck numbers below read. Pass the snapshot from useDeckStore(), so a screen
 // re-renders (and the React Compiler recomputes) when cards change.
 export type DeckData = Pick<State, 'cards' | 'info'>

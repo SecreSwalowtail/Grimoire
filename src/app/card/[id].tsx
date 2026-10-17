@@ -2,7 +2,7 @@ import { BlurTargetView } from 'expo-blur'
 import { useIsFocused, useLocalSearchParams } from 'expo-router'
 import { usePreventRemove } from 'expo-router/react-navigation'
 import { useSQLiteContext } from 'expo-sqlite'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -24,7 +24,6 @@ import type { ScryfallCard } from '@/db/scryfall'
 import { mainFinish } from '@/utils/card-prices'
 import { cardInfoOf, cardUse, setDeckCardCount, useDeckStore, type Board } from '@/utils/deck-store'
 import { useAnimationsOff } from '@/utils/motion'
-import { record } from '@/utils/perf'
 import { useCard, useLocalCardData, useOracleData } from '@/utils/use-card-detail'
 
 // Card detail (design C1–C6): opened from a Binder card or a Market row with the printing's
@@ -60,15 +59,6 @@ export default function CardScreen() {
   const { printings, rulings, loadMore, loadingMore } = useOracleData(card, tab === 'rules')
   const { copies, history, reloadCopies } = useLocalCardData(card)
   const store = useDeckStore()
-
-  // Performance pass: time from opening the screen to having the card to show.
-  const [openedAt] = useState(() => Date.now())
-  const timedOpen = useRef(false)
-  useEffect(() => {
-    if (!card || timedOpen.current) return
-    timedOpen.current = true
-    record('card detail: open → card ready', Date.now() - openedAt)
-  }, [card, openedAt])
 
   const openTab = (next: CardTab) => {
     setTab(next)
