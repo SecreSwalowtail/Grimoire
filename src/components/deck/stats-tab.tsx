@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 
 import { Segmented, SectionLabel } from '@/components/controls'
@@ -32,10 +32,28 @@ const WAFFLE_GAP = 4
 const OTHER = '#6F93BA'
 
 const pct = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0)
-// "Sol Ring, Arcane Signet, +5 more".
-function names(lines: DeckLine[], max = 4) {
+// "Sol Ring, Arcane Signet, +5 more": tapping "+5 more" shows them all.
+function Names({ lines, max, style }: { lines: DeckLine[]; max: number; style: StyleProp<TextStyle> }) {
   const list = [...new Set(lines.map((l) => l.name))]
-  return list.length > max ? `${list.slice(0, max).join(', ')}, +${list.length - max} more` : list.join(', ')
+  // Open for this list only: another mana value or cost starts short again.
+  const key = list.join('\n')
+  const [openFor, setOpenFor] = useState<string | null>(null)
+  const hidden = list.length - max
+  if (hidden <= 0 || openFor === key) return <Text style={style}>{list.join(', ')}</Text>
+  return (
+    <Text style={style}>
+      {list.slice(0, max).join(', ')},{' '}
+      <Text
+        style={styles.more}
+        onPress={() => setOpenFor(key)}
+        accessibilityRole="button"
+        accessibilityLabel={`Show ${hidden} more cards`}
+        suppressHighlighting
+      >
+        +{hidden} more
+      </Text>
+    </Text>
+  )
 }
 
 // D4–D8 · The main deck's numbers, one view at a time: mana value, mana cost, mana production,
@@ -181,7 +199,11 @@ function ManaValue({ lines }: { lines: DeckLine[] }) {
           <Text style={styles.calloutTitle}>Mana value {label} · {cur.creatures + cur.other} cards</Text>
           <Text style={styles.calloutMeta}>{cur.creatures} creatures · {cur.other} other</Text>
         </View>
-        <Text style={styles.calloutText}>{cur.lines.length ? names(cur.lines, 5) : 'No cards at this mana value.'}</Text>
+        {cur.lines.length ? (
+          <Names lines={cur.lines} max={5} style={styles.calloutText} />
+        ) : (
+          <Text style={styles.calloutText}>No cards at this mana value.</Text>
+        )}
       </View>
     </View>
   )
@@ -291,7 +313,7 @@ function ManaCost({ lines }: { lines: DeckLine[] }) {
                   <ManaSymbol key={k} symbol={c} size={18} />
                 ))}
               </View>
-              <Text style={styles.heavyCards} numberOfLines={2}>{names(h.lines, 3)}</Text>
+              <Names lines={h.lines} max={3} style={styles.heavyCards} />
               <Text style={styles.heavyN}>{h.n}</Text>
             </View>
           ))}
@@ -588,6 +610,11 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   gold: {
+    color: Colors.goldLight,
+  },
+  // "+5 more", tappable inside a list of names.
+  more: {
+    fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
   },
   legend: {

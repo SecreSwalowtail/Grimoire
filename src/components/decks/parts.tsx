@@ -1,13 +1,13 @@
 import { Image } from 'expo-image'
 import { useEffect, useRef, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, Text, TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
 
 import { SectionLabel } from '@/components/controls'
 import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
 import { withAlpha } from '@/utils/color'
-import { FOLDER_COLORS, isCommander, useDeckStore, type FolderColor } from '@/utils/deck-store'
+import { isCommander, useDeckStore } from '@/utils/deck-store'
 
 // Pieces shared by the Decks screens and sheets.
 
@@ -155,40 +155,6 @@ export function NameField({
   )
 }
 
-// The six folder colors (or the binder colors) as round swatches, the picked one ringed in its own color.
-export function ColorPicker<K extends string = FolderColor>({
-  value,
-  onChange,
-  colors = FOLDER_COLORS as Record<K, { label: string; hex: string }>,
-  label: groupLabel = 'Folder color',
-}: {
-  value: K
-  onChange: (value: K) => void
-  colors?: Record<K, { label: string; hex: string }>
-  label?: string
-}) {
-  return (
-    <View style={styles.colors} accessibilityRole="radiogroup" accessibilityLabel={groupLabel}>
-      {(Object.keys(colors) as K[]).map((key) => {
-        const { label, hex } = colors[key]
-        const selected = key === value
-        return (
-          <Pressable
-            key={key}
-            style={[styles.colorRing, selected && { borderColor: hex }]}
-            onPress={() => onChange(key)}
-            accessibilityRole="radio"
-            accessibilityLabel={label}
-            accessibilityState={{ checked: selected }}
-          >
-            <View style={[styles.colorDot, { backgroundColor: hex }]} />
-          </Pressable>
-        )
-      })}
-    </View>
-  )
-}
-
 // Square checkbox (New folder's deck list) or round one, gold when checked.
 export function CheckBox({ checked, round }: { checked: boolean; round?: boolean }) {
   return (
@@ -307,24 +273,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Fonts.bold,
     color: Colors.text,
-  },
-  colors: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  colorRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  colorDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
   },
   box: {
     width: 24,

@@ -8,7 +8,7 @@ import { withAlpha } from '@/utils/color'
 import {
   deckCardCount,
   deckValue,
-  FOLDER_COLORS,
+  folderHex,
   useDeckStore,
   type Deck,
   type DeckData,
@@ -99,7 +99,7 @@ export function FolderCard({
   edit?: RowEdit
   onHold?: () => void
 }) {
-  const hex = FOLDER_COLORS[folder.color].hex
+  const hex = folderHex(folder.color)
   const decksText = plural(count, 'deck')
   return (
     <View style={styles.folder}>

@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ColorSpectrum } from '@/components/color-spectrum'
 import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader, Toggle } from '@/components/controls'
-import { ColorPicker, FolderIcon, NameField } from '@/components/decks/parts'
+import { FolderIcon, NameField } from '@/components/decks/parts'
 import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
-import { FOLDER_COLORS, updateFolder, useDeckStore, type FolderColor, type FolderSort } from '@/utils/deck-store'
+import { FOLDER_COLORS, folderHex, updateFolder, useDeckStore, type FolderSort } from '@/utils/deck-store'
+
+const PRESETS = Object.values(FOLDER_COLORS)
 
 // "Edit folder" sheet: name, color, how decks inside are sorted, pin to top. Changes are a draft
 // until Save. "Delete folder…" asks first.
@@ -21,16 +24,18 @@ export function FolderEditSheet({
   const { folders } = useDeckStore()
   const folder = folders.find((f) => f.id === folderId)
   const [name, setName] = useState('')
-  const [color, setColor] = useState<FolderColor>('gold')
+  const [color, setColor] = useState(FOLDER_COLORS.gold.hex)
   const [sort, setSort] = useState<FolderSort>('custom')
   const [pinned, setPinned] = useState(false)
+  // No scrolling while a color is being dragged.
+  const [dragging, setDragging] = useState(false)
 
   // Load the folder each time the sheet opens for one (state adjusted during render).
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   if (folder && loadedFor !== folder.id) {
     setLoadedFor(folder.id)
     setName(folder.name)
-    setColor(folder.color)
+    setColor(folderHex(folder.color))
     setSort(folder.sort)
     setPinned(folder.pinned)
   } else if (!folderId && loadedFor != null) {
@@ -40,17 +45,24 @@ export function FolderEditSheet({
   return (
     <Sheet visible={folder != null} onClose={onClose}>
       <SheetHeader title="Edit folder" onClose={onClose} />
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        scrollEnabled={!dragging}
+      >
         <NameField
           label="Name"
           value={name}
           onChange={setName}
           accent
-          icon={<FolderIcon color={FOLDER_COLORS[color].hex} width={30} fill={0.25} />}
+          icon={<FolderIcon color={color} width={30} fill={0.25} />}
         />
 
         <SectionLabel style={styles.label}>Color</SectionLabel>
-        <ColorPicker value={color} onChange={setColor} />
+        <ColorSpectrum value={color} onChange={setColor} presets={PRESETS} onDragging={setDragging} />
 
         <SectionLabel style={styles.label}>Sort decks inside</SectionLabel>
         <Segmented
@@ -82,7 +94,9 @@ export function FolderEditSheet({
       <PrimaryButton
         label="Save changes"
         onPress={() => {
-          if (folder) updateFolder(folder.id, { name: name.trim() || folder.name, color, sort, pinned })
+          // An untouched preset stays saved by its name.
+          const changed = color !== folderHex(folder?.color ?? '')
+          if (folder) updateFolder(folder.id, { name: name.trim() || folder.name, color: changed ? color : folder.color, sort, pinned })
           onClose()
         }}
       />

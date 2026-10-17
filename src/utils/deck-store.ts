@@ -64,6 +64,8 @@ export function isCommander(card: DeckCard, decks: Deck[]) {
 // Shown first when picking a format; the rest are behind "More formats".
 export const POPULAR_FORMATS: DeckFormat[] = ['Commander', 'Standard', 'Modern', 'Pioneer', 'Pauper', 'Legacy']
 
+// Quick picks in the color picker. Folders made before any color could be picked are saved with
+// these names instead of a hex.
 export const FOLDER_COLORS = {
   gold: { label: 'Gold', hex: '#D4A64A' },
   oxblood: { label: 'Oxblood', hex: '#B5523E' },
@@ -74,10 +76,14 @@ export const FOLDER_COLORS = {
 }
 export type FolderColor = keyof typeof FOLDER_COLORS
 
+// A folder's color as "#RRGGBB" (it's saved as one, or as a preset's name).
+export const folderHex = (color: string) => FOLDER_COLORS[color as FolderColor]?.hex ?? color
+
 const FOLDER_SORTS = ['custom', 'name', 'value'] as const
 export type FolderSort = (typeof FOLDER_SORTS)[number]
 
-export type Folder = { id: string; name: string; color: FolderColor; sort: FolderSort; pinned: boolean }
+// `color`: "#RRGGBB", or a FOLDER_COLORS name (see folderHex).
+export type Folder = { id: string; name: string; color: string; sort: FolderSort; pinned: boolean }
 export type Deck = { id: string; name: string; format: DeckFormat; folderId: string | null }
 
 // The parts of a deck: the deck itself, its sideboard, and cards you're considering.
@@ -153,7 +159,6 @@ const pick = <T extends string>(value: string, allowed: readonly T[], fallback: 
 // Called once at launch, after the migrations (see app/_layout.tsx).
 export async function loadDeckStore(database: SQLiteDatabase) {
   const rows = await getDecksAndFolders(database)
-  const colors = Object.keys(FOLDER_COLORS) as FolderColor[]
   const info: Record<string, CardInfo> = {}
   for (const c of rows.cards) {
     info[c.card_id] = {
@@ -181,7 +186,7 @@ export async function loadDeckStore(database: SQLiteDatabase) {
     folders: rows.folders.map((f) => ({
       id: f.id,
       name: f.name,
-      color: pick(f.color, colors, 'gold'),
+      color: f.color || 'gold',
       sort: pick(f.sort, FOLDER_SORTS, 'custom'),
       pinned: f.pinned === 1,
     })),

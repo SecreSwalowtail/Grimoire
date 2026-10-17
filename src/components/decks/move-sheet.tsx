@@ -7,7 +7,7 @@ import { FolderIcon, RadioDot } from '@/components/decks/parts'
 import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
 import { withAlpha } from '@/utils/color'
-import { FOLDER_COLORS, moveDecks, useDeckStore } from '@/utils/deck-store'
+import { folderHex, moveDecks, useDeckStore } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
 
 // "Move to folder" sheet for one or more decks. "New folder…" hands the decks to the New folder
@@ -73,7 +73,7 @@ export function MoveSheet({
           onPress={() => setDest(null)}
         />
         {folders.map((f) => {
-          const hex = FOLDER_COLORS[f.color].hex
+          const hex = folderHex(f.color)
           const n = count(f.id)
           return (
             <Destination

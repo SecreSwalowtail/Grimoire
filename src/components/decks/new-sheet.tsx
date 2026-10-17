@@ -2,24 +2,27 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ColorSpectrum } from '@/components/color-spectrum'
 import { PrimaryButton, SectionLabel, Segmented, Sheet, SheetHeader } from '@/components/controls'
-import { CheckBox, ColorPicker, NameField } from '@/components/decks/parts'
+import { CheckBox, FolderIcon, NameField } from '@/components/decks/parts'
 import { Icon, type IconName } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
 import {
   createDeck,
   createFolder,
   FOLDER_COLORS,
+  folderHex,
   FORMATS,
   POPULAR_FORMATS,
   useDeckStore,
   type DeckFormat,
-  type FolderColor,
 } from '@/utils/deck-store'
 import { setScanDeck } from '@/utils/scan-target'
 
 // The formats behind "More formats".
 const MORE_FORMATS = FORMATS.filter((f) => !POPULAR_FORMATS.includes(f))
+const PRESETS = Object.values(FOLDER_COLORS)
+const FIRST_COLOR = FOLDER_COLORS.gold.hex
 
 export type Start = 'empty' | 'paste' | 'scan'
 const STARTS: { value: Start; label: string; icon: IconName }[] = [
@@ -57,7 +60,9 @@ export function NewSheet({
   const [moreFormats, setMoreFormats] = useState(false)
   const [start, setStart] = useState<Start>('empty')
   const [place, setPlace] = useState<string | null>(folderId)
-  const [color, setColor] = useState<FolderColor>('gold')
+  const [color, setColor] = useState(FIRST_COLOR)
+  // No scrolling while a color is being dragged.
+  const [dragging, setDragging] = useState(false)
   const [picked, setPicked] = useState<string[]>(deckIds)
 
   // Start every opening fresh (state adjusted during render, no effect needed).
@@ -71,7 +76,7 @@ export function NewSheet({
       setMoreFormats(false)
       setStart('empty')
       setPlace(folderId)
-      setColor('gold')
+      setColor(FIRST_COLOR)
       setPicked(deckIds)
     }
   }
@@ -102,7 +107,14 @@ export function NewSheet({
   return (
     <Sheet visible={visible} onClose={onClose}>
       <SheetHeader title={isDeck ? 'New deck' : 'New folder'} onClose={onClose} />
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        scrollEnabled={!dragging}
+      >
         <Segmented
           label="What to create"
           options={[
@@ -120,6 +132,7 @@ export function NewSheet({
             onChange={setName}
             placeholder={isDeck ? 'e.g. Izzet Murktide' : 'e.g. Legacy'}
             accent
+            icon={isDeck ? undefined : <FolderIcon color={color} width={30} fill={0.25} />}
           />
         </View>
 
@@ -164,7 +177,7 @@ export function NewSheet({
                 <Place
                   key={f.id}
                   label={f.name}
-                  dot={FOLDER_COLORS[f.color].hex}
+                  dot={folderHex(f.color)}
                   selected={place === f.id}
                   onPress={() => setPlace(f.id)}
                 />
@@ -174,7 +187,7 @@ export function NewSheet({
         ) : (
           <>
             <SectionLabel style={styles.label}>Color</SectionLabel>
-            <ColorPicker value={color} onChange={setColor} />
+            <ColorSpectrum value={color} onChange={setColor} presets={PRESETS} onDragging={setDragging} />
 
             <SectionLabel style={styles.label}>Add decks now · optional</SectionLabel>
             {choosable.length === 0 ? (

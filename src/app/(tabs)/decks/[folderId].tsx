@@ -9,7 +9,7 @@ import { useDeckSheets } from '@/components/decks/use-deck-sheets'
 import { Icon, type IconName } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
 import { withAlpha } from '@/utils/color'
-import { deckValue, deleteDecks, FOLDER_COLORS, folderDecks, useDeckStore } from '@/utils/deck-store'
+import { deckValue, deleteDecks, folderDecks, folderHex, useDeckStore } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 
@@ -26,7 +26,7 @@ export default function FolderScreen() {
 
   if (!folder) return <View style={styles.root}>{deckSheets.sheets}</View>
 
-  const hex = FOLDER_COLORS[folder.color].hex
+  const hex = folderHex(folder.color)
   const inside = folderDecks(decks, folder, store)
   const value = money.eur(inside.reduce((sum, d) => sum + deckValue(d, store), 0))
 
