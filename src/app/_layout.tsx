@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated'
 
 import { FpsMeter } from '@/components/dev/fps-meter'
+import { UpdateSheet } from '@/components/update-sheet'
 import { migrateDbIfNeeded } from '@/db/schema'
 import { loadDeckStore } from '@/utils/deck-store'
 import { refreshRates } from '@/utils/money'
@@ -74,6 +75,7 @@ export default function RootLayout() {
       <ReducedMotionConfig mode={animations ? ReduceMotion.System : ReduceMotion.Always} />
       <SQLiteProvider databaseName="binder.db" onInit={initDb}>
         <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
+        <UpdateSheet />
         {fpsMeter && <FpsMeter />}
       </SQLiteProvider>
     </GestureHandlerRootView>

@@ -239,10 +239,9 @@ export default function BindersScreen() {
               accessible
               accessibilityLabel={`Share of total value: ${rows.map((r) => `${r.binder.name} ${Math.round((r.value / total.value) * 100)}%`).join(', ')}`}
             >
-              {rows.map((r) =>
-                r.value > 0 ? (
-                  <View key={r.id} style={[styles.share, { flex: r.value, backgroundColor: r.binder.color }]} />
-                ) : null,
+              {/* Destructured: Reanimated's Babel plugin warns about any `.value` in an inline style. */}
+              {rows.map(({ id, binder, value }) =>
+                value > 0 ? <View key={id} style={[styles.share, { flex: value, backgroundColor: binder.color }]} /> : null,
               )}
             </View>
           )}

@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useRef, useState } from 'react'
-import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { BackHandler, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -37,8 +37,6 @@ import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 import { useSearchBack } from '@/utils/use-search-back'
 
-const NEW_FOLDER = 'new-folder'
-
 // [a, b, c] -> [[a, b], [c]], for the 2-column folder grid.
 function pairs<T>(items: T[]) {
   const rows: T[][] = []
@@ -67,9 +65,8 @@ function placed(order: string[], moving: string[], target: string) {
 // Decks: folders as a grid of cards, then the decks that aren't in a folder.
 // Hold a deck or folder to edit: it's selected (not picked up). Tap others to select them too;
 // holding any selected one then picks up the whole selection. Drop decks on a folder to file them
-// there, on New folder for a new folder with them, on Duplicate, or into the trash bubble that rises
-// at the bottom. In your own order (no sort, no search), dropping on a deck or folder of the same
-// kind puts them in its place. Sort, + and the search make way for Duplicate (tap it, or drop on
+// there, on Duplicate, or into the trash bubble that rises at the bottom. In your own order (no
+// sort, no search), dropping on a deck or folder of the same kind puts them in its place. Sort, + and the search make way for Duplicate (tap it, or drop on
 // it); the bar at the bottom has Undo and Done. Deleting folders asks what to do with their decks.
 export default function DecksScreen() {
   const money = useMoney()
@@ -106,8 +103,6 @@ export default function DecksScreen() {
   const shownDecks = sortDecks(q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose, sort, store)
   const totalValue = money.eur(decks.reduce((sum, d) => sum + deckValue(d, store), 0))
   const count = (folderId: string) => decks.filter((d) => d.folderId === folderId).length
-  // Grid tiles: folder ids, then the "New folder" card (hidden while searching).
-  const tiles = [...shownFolders.map((f) => f.id), ...(q ? [] : [NEW_FOLDER])]
 
   // Things deleted meanwhile drop out of the selection.
   const pickedDecks = decks.filter((d) => selected.includes(`deck:${d.id}`))
@@ -119,7 +114,7 @@ export default function DecksScreen() {
   // What the selection can go to: a folder takes decks (not when they're all in it already), or
   // folders in your order; a deck takes decks in your order. Rows that don't take it aren't targets
   // at all (nor are the dragged ones), so passing over them on the way to the trash shows nothing;
-  // Duplicate and New folder turn red without decks.
+  // Duplicate turns red without decks.
   const folderTakes = (folderId: string) =>
     pickedDecks.length > 0 ? pickedDecks.some((d) => d.folderId !== folderId) : reorderable && pickedFolders.length > 0
   const decksTake = reorderable && pickedDecks.length > 0 && pickedFolders.length === 0
@@ -128,7 +123,7 @@ export default function DecksScreen() {
     ...shownFolders.filter((f) => !folderTakes(f.id)).map((f) => `folder:${f.id}`),
     ...(decksTake ? [] : shownDecks.map((d) => `deck:${d.id}`)),
   ]
-  const refuse: DropTarget[] = pickedDecks.length ? [] : ['duplicate', 'new-folder']
+  const refuse: DropTarget[] = pickedDecks.length ? [] : ['duplicate']
 
   const scrollRef = useAnimatedRef<Animated.ScrollView>()
   const scrollY = useSharedValue(0)
@@ -191,11 +186,6 @@ export default function DecksScreen() {
     if (!pickedDecks.length) return
     changed(`Duplicated ${plural(pickedDecks.length, 'deck')}`, duplicateDecks(pickedDecks.map((d) => d.id)))
   }
-  const newFolder = () => {
-    if (!pickedDecks.length) return
-    deckSheets.openNew({ kind: 'folder', deckIds: pickedDecks.map((d) => d.id) })
-    setSelected([])
-  }
   const onFolder = (folderId: string) => {
     const folder = folders.find((f) => f.id === folderId)
     if (!folder || !folderTakes(folderId)) return
@@ -220,7 +210,6 @@ export default function DecksScreen() {
     if (target == null || picked === 0) return
     if (target === 'trash') remove()
     else if (target === 'duplicate') duplicate()
-    else if (target === 'new-folder') newFolder()
     else if (target.startsWith('folder:')) onFolder(target.slice('folder:'.length))
     else if (target.startsWith('deck:')) onDeck(target.slice('deck:'.length))
   }
@@ -324,48 +313,43 @@ export default function DecksScreen() {
         scrollEnabled={!dragging}
       >
         <Text style={[styles.sectionLabel, styles.sectionGap]}>Folders</Text>
-        <View style={styles.grid}>
-          {pairs(tiles).map((pair, i) => (
-            <View key={i} style={styles.gridRow}>
-              {pair.map((tile) => (
-                <View key={tile} style={styles.cell}>
-                  {tile === NEW_FOLDER ? (
-                    <DropZone drag={drag} id="new-folder">
-                      <Pressable
-                        style={[styles.newFolder, editing && pickedDecks.length === 0 && styles.off]}
-                        onPress={() => (editing ? newFolder() : deckSheets.openNew({ kind: 'folder' }))}
-                        disabled={editing && pickedDecks.length === 0}
-                        accessibilityRole="button"
-                        accessibilityHint={editing ? 'A new folder with the selected decks. Or drag them onto it' : undefined}
-                      >
-                        <Icon name={{ ios: 'folder.badge.plus', android: 'create_new_folder' }} size={24} tintColor={Colors.goldLight} />
-                        <Text style={styles.newFolderLabel}>New folder</Text>
-                      </Pressable>
-                    </DropZone>
-                  ) : (
-                    <DropZone drag={drag} id={`folder:${tile}`}>
-                      <GestureDetector gesture={gestureFor(`folder:${tile}`)}>
-                        {/* A plain view for the gesture to attach to (FolderCard takes no ref). */}
-                        <View collapsable={false}>
-                          <FolderCard
-                            folder={shownFolders.find((f) => f.id === tile)!}
-                            count={count(tile)}
-                            onOpen={() => router.push({ pathname: '/decks/[folderId]', params: { folderId: tile } })}
-                            onOptions={() => deckSheets.openFolderEdit(tile)}
-                            edit={editOf(`folder:${tile}`)}
-                            onHold={() => startEditing(`folder:${tile}`)}
-                          />
-                        </View>
-                      </GestureDetector>
-                    </DropZone>
-                  )}
+        {shownFolders.length === 0 && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>{q ? 'Nothing found' : 'No folders yet'}</Text>
+            <Text style={styles.emptyText}>{q ? 'Try a different folder name.' : 'Tap + to make your first folder.'}</Text>
+          </View>
+        )}
+        {shownFolders.length > 0 && (
+          <>
+            <View style={styles.grid}>
+              {pairs(shownFolders).map((pair, i) => (
+                <View key={i} style={styles.gridRow}>
+                  {pair.map((folder) => (
+                    <View key={folder.id} style={styles.cell}>
+                      <DropZone drag={drag} id={`folder:${folder.id}`}>
+                        <GestureDetector gesture={gestureFor(`folder:${folder.id}`)}>
+                          {/* A plain view for the gesture to attach to (FolderCard takes no ref). */}
+                          <View collapsable={false}>
+                            <FolderCard
+                              folder={folder}
+                              count={count(folder.id)}
+                              onOpen={() => router.push({ pathname: '/decks/[folderId]', params: { folderId: folder.id } })}
+                              onOptions={() => deckSheets.openFolderEdit(folder.id)}
+                              edit={editOf(`folder:${folder.id}`)}
+                              onHold={() => startEditing(`folder:${folder.id}`)}
+                            />
+                          </View>
+                        </GestureDetector>
+                      </DropZone>
+                    </View>
+                  ))}
+                  {/* Keeps a lone last card at half width. */}
+                  {pair.length === 1 && <View style={styles.cell} />}
                 </View>
               ))}
-              {/* Keeps a lone last card at half width. */}
-              {pair.length === 1 && <View style={styles.cell} />}
             </View>
-          ))}
-        </View>
+          </>
+        )}
 
         <View style={styles.decksHeader}>
           <Text style={styles.sectionLabel}>Decks</Text>
@@ -601,22 +585,6 @@ const styles = StyleSheet.create({
   },
   cell: {
     flex: 1,
-  },
-  newFolder: {
-    height: 96,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(212,166,74,0.45)',
-    backgroundColor: 'rgba(212,166,74,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  newFolderLabel: {
-    fontSize: 14,
-    fontFamily: Fonts.extraBold,
-    color: Colors.goldLight,
   },
   decksHeader: {
     marginTop: 22,

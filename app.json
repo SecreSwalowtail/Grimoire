@@ -4,6 +4,7 @@
     "slug": "Grimoire",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
     "scheme": "grimoire",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -12,6 +13,12 @@
       }
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png",
+        "backgroundColor": "#2E2B8C"
+      },
       "permissions": [
         "android.permission.CAMERA"
       ],
@@ -19,7 +26,8 @@
       "package": "com.anonymous.Grimoire"
     },
     "web": {
-      "output": "static"
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",

@@ -23,11 +23,11 @@ import type { Board } from '@/utils/deck-store'
 // the bottom, which pulls the cards in when they come close (like deleting in Instagram). Taking the
 // cards up into the top third of the screen scrolls to the top, where the chips and commander are.
 // In a binder: onto its Deck and Binder buttons, or into the trash. In Decks: decks and folders
-// onto a folder, another deck or folder (to take its place), New folder, Duplicate, or the trash.
+// onto a folder, another deck or folder (to take its place), Duplicate, or the trash.
 
 // 'commander-group': the Commander group's header, another way to the commander slot.
 // 'to-deck' / 'new-binder' / 'edit-cards': a binder's Add to deck, New binder and Edit buttons.
-// 'duplicate' / 'new-folder' and `folder:<id>` / `deck:<id>`: the Decks screen's buttons and rows.
+// 'duplicate' and `folder:<id>` / `deck:<id>`: the Decks screen's button and rows.
 export type DropTarget =
   | 'trash'
   | 'commander'
@@ -36,7 +36,6 @@ export type DropTarget =
   | 'new-binder'
   | 'edit-cards'
   | 'duplicate'
-  | 'new-folder'
   | `folder:${string}`
   | `deck:${string}`
   | Board
