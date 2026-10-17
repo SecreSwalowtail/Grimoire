@@ -56,8 +56,7 @@ collection stays on your phone.
 ## Install
 
 - **Android**: download the APK from the [latest release](https://github.com/SecreSwalowtail/Grimoire/releases/latest)
-  and open it on your phone. Android asks you to allow installing apps from your browser or
-  file manager the first time.
+  and open it on your phone
 - **iOS**: no App Store build yet. You can build it yourself from source on a Mac (see below).
 
 ## Run it from source
