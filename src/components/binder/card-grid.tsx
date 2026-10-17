@@ -1,5 +1,5 @@
 import { useIsFocused } from 'expo-router'
-import { useCallback, useState, type ReactElement } from 'react'
+import { useCallback, useState, useSyncExternalStore, type ComponentProps, type ReactElement } from 'react'
 import { Pressable, StyleSheet, Text, View, type ViewToken } from 'react-native'
 import { FlatList, type GestureType } from 'react-native-gesture-handler'
 import { useSharedValue } from 'react-native-reanimated'
@@ -13,6 +13,7 @@ import type { CardSort } from '@/components/sort-menu'
 import { Colors, Fonts } from '@/constants/theme'
 import { entryPrice, type CollectionEntry } from '@/db/collection'
 import { groupLines, parseColors, primaryType, type Group, type Groupable, type GroupBy } from '@/rules/deck-stats'
+import { createListeners } from '@/utils/listeners'
 import { useMoney } from '@/utils/money'
 import { useAnimationsOff } from '@/utils/motion'
 
@@ -86,15 +87,18 @@ export function CardGrid({
   const tiltY = useSharedValue(0)
   // One stable object: a new one each render would re-render every card through the context.
   const [tilt] = useState(() => ({ x: tiltX, y: tiltY }))
-  const [visibleIds, setVisibleIds] = useState<Set<number>>(() => new Set())
+  const [visibility] = useState(createVisibility)
   // Groups closed by the user (all open to start).
   const [closed, setClosed] = useState<string[]>([])
 
   // Fires only when the set of visible cards changes, not on every scroll frame.
   // Must keep the same identity: FlatList doesn't allow changing it on the fly.
-  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<Item>[] }) => {
-    setVisibleIds(new Set(viewableItems.flatMap((v) => (v.item.kind === 'row' ? v.item.cards.map((c) => c.id) : []))))
-  }, [])
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<Item>[] }) => {
+      visibility.set(new Set(viewableItems.flatMap((v) => (v.item.kind === 'row' ? v.item.cards.map((c) => c.id) : []))))
+    },
+    [visibility],
+  )
 
   // No useMemo needed: the React Compiler (enabled in app.json) memoizes this.
   const items: Item[] =
@@ -109,10 +113,10 @@ export function CardGrid({
   const shown = () => items.flatMap((item) => (item.kind === 'row' ? item.cards.map((c) => c.id) : []))
 
   const tile = (entry: CollectionEntry) => (
-    <CardTile
+    <GridTile
       key={entry.id}
+      visibility={visibility}
       entry={entry}
-      active={visibleIds.has(entry.id)}
       onOpen={onOpen && (() => onOpen(entry, shown()))}
       edit={
         edit && {
@@ -172,7 +176,7 @@ export function CardGrid({
               </View>
             )
           }}
-          extraData={edit ? [visibleIds, edit] : visibleIds}
+          extraData={edit}
           scrollEnabled={!edit?.dragging}
           // Only on-screen cards follow the tilt (see CardTile's `active`).
           viewabilityConfig={VIEWABILITY}
@@ -187,6 +191,30 @@ export function CardGrid({
       </TiltContext>
     </>
   )
+}
+
+// Which cards are on screen, kept outside React state: each tile reads its own part, so when the
+// set changes only the tiles that came into or went out of view redraw. (As the list's extraData
+// it redrew every row of cards on each change.)
+type Visibility = ReturnType<typeof createVisibility>
+
+function createVisibility() {
+  let ids = new Set<number>()
+  const changes = createListeners()
+  return {
+    set(next: Set<number>) {
+      ids = next
+      changes.notify()
+    },
+    has: (id: number) => ids.has(id),
+    subscribe: changes.subscribe,
+  }
+}
+
+// A card in the grid, tilting with the phone only while it's on screen (see CardTile's `active`).
+function GridTile({ visibility, entry, ...props }: { visibility: Visibility } & Omit<ComponentProps<typeof CardTile>, 'active'>) {
+  const active = useSyncExternalStore(visibility.subscribe, () => visibility.has(entry.id))
+  return <CardTile entry={entry} active={active} {...props} />
 }
 
 const styles = StyleSheet.create({
