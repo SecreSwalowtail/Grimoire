@@ -4,6 +4,7 @@ import { ensureBinder, FIRST_BINDER_SQL } from '@/db/binders'
 import { upsertCard } from '@/db/cards'
 import type { ScryfallCard } from '@/db/scryfall'
 import { collectionChanged } from '@/db/version'
+import { euros } from '@/utils/card-prices'
 
 export type Finish = 'nonfoil' | 'foil' | 'etched'
 export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG'
@@ -100,12 +101,14 @@ export async function setQuantity(db: SQLiteDatabase, entryId: number, quantity:
   collectionChanged()
 }
 
-// Price of one copy of an entry in EUR, using the foil price for foil/etched copies.
-// Falls back to the other price when Scryfall only has one (e.g. foil-only printings).
-export function entryPrice(entry: Pick<CollectionEntry, 'finish' | 'price_eur' | 'price_eur_foil'>) {
-  return entry.finish === 'nonfoil'
-    ? entry.price_eur ?? entry.price_eur_foil
-    : entry.price_eur_foil ?? entry.price_eur
+// Price of one copy of an entry in EUR, using the foil price for foil/etched copies. Falls back to
+// the other finish's price when there's only one (e.g. foil-only printings), then to TCGplayer's in
+// euros when Cardmarket has none (see euros).
+export function entryPrice(entry: Pick<CollectionEntry, 'finish' | 'price_eur' | 'price_eur_foil'> & Partial<Pick<CollectionEntry, 'price_usd' | 'price_usd_foil'>>) {
+  return euros(
+    { eur: entry.price_eur, eurFoil: entry.price_eur_foil, usd: entry.price_usd ?? null, usdFoil: entry.price_usd_foil ?? null },
+    entry.finish !== 'nonfoil',
+  )
 }
 
 // The most recent price snapshot at least `days` days old, per owned card.

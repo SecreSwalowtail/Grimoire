@@ -30,18 +30,25 @@ function shared<T>(entries: CollectionEntry[], get: (e: CollectionEntry) => T): 
   return entries.every((e) => get(e) === first) ? first : undefined
 }
 
-export function EditCopiesSheet({
-  visible,
-  entries,
-  onClose,
-  onSaved,
-}: {
-  visible: boolean
+type EditProps = {
   entries: CollectionEntry[]
   onClose: () => void
   // After saving: the undo and how many cards were edited.
   onSaved: (undo: () => Promise<unknown>, cards: number) => void
-}) {
+}
+
+// In a sheet of its own (a binder's edit mode).
+export function EditCopiesSheet({ visible, ...props }: EditProps & { visible: boolean }) {
+  return (
+    <Sheet visible={visible} onClose={props.onClose}>
+      <EditCopiesForm active={visible} {...props} />
+    </Sheet>
+  )
+}
+
+// The form itself: its header, the settings, and Save. `active`: on show (it starts from the
+// cards' own settings each time it becomes active). The quick look shows it in its own panel.
+export function EditCopiesForm({ active, entries, onClose, onSaved }: EditProps & { active: boolean }) {
   const db = useSQLiteContext()
   const money = useMoney()
   const [condition, setCondition] = useState<Condition | null>(null)
@@ -66,10 +73,10 @@ export function EditCopiesSheet({
   const samePaid = shared(entries, (e) => e.purchase_price)
 
   // Start from the cards' own settings each time it opens (state adjusted during render).
-  const [wasVisible, setWasVisible] = useState(visible)
-  if (visible !== wasVisible) {
-    setWasVisible(visible)
-    if (visible) {
+  const [wasActive, setWasActive] = useState(active)
+  if (active !== wasActive) {
+    setWasActive(active)
+    if (active) {
       setCondition(sameCondition ?? null)
       setFinish(sameFinish ?? null)
       setTraded(sameTraded ?? null)
@@ -129,7 +136,7 @@ export function EditCopiesSheet({
 
   if (picking && entries.length > 0) {
     return (
-      <Sheet visible={visible} onClose={onClose}>
+      <>
         <PrintingPicker
           printingId={entries[0].card_id}
           selectedId={printing?.id ?? samePrinting ?? null}
@@ -137,7 +144,7 @@ export function EditCopiesSheet({
           onBack={() => setPicking(false)}
           onClose={onClose}
         />
-      </Sheet>
+      </>
     )
   }
 
@@ -151,7 +158,7 @@ export function EditCopiesSheet({
   const printingThumb = printing ? cardThumb(printing) : shownEntry?.image_uri ?? null
 
   return (
-    <Sheet visible={visible} onClose={onClose}>
+    <>
       <SheetHeader title={one ? 'Edit card' : `Edit ${entries.length} cards`} onClose={onClose} />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" bounces={false}>
         <Text style={styles.lead} numberOfLines={2}>
@@ -279,7 +286,7 @@ export function EditCopiesSheet({
         )}
       </ScrollView>
       <PrimaryButton label={one ? 'Save changes' : `Save ${entries.length} cards`} onPress={save} />
-    </Sheet>
+    </>
   )
 }
 

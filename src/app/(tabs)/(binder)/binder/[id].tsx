@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BinderSheet } from '@/components/binder/binder-sheet'
 import { CardGrid, searchAndSort } from '@/components/binder/card-grid'
 import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet'
-import { SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts'
+import { HoldHint, SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts'
 import { QuickLook } from '@/components/binder/quick-look'
 import { addEntriesToDecks, BinderToDeckSheet, type Copies } from '@/components/binder/to-deck-sheet'
 import { summarize, useCollection } from '@/components/binder/use-collection'
@@ -24,6 +24,7 @@ import {
   type DropTarget,
 } from '@/components/deck/card-drag'
 import { GroupSheet } from '@/components/deck/group-sheet'
+import { ImportSheet } from '@/components/decks/import-sheet'
 import { NewSheet } from '@/components/decks/new-sheet'
 import { Icon, type IconName } from '@/components/icon'
 import { CARD_SORTS, SortMenu, type CardSort } from '@/components/sort-menu'
@@ -49,8 +50,10 @@ type Undo = () => Promise<unknown>
 export default function BinderScreen() {
   const db = useSQLiteContext()
   const insets = useSafeAreaInsets()
-  const { id } = useLocalSearchParams<{ id: string }>()
-  const { binders, entries, weekAgo, loaded, reload } = useCollection()
+  // `import`: just made with "Import from…" (Import cards opens straight to the file picker).
+  const { id, import: importNow } = useLocalSearchParams<{ id: string; import?: string }>()
+  const [importing, setImporting] = useState<{ autoPick: boolean } | null>(() => (importNow === '1' ? { autoPick: true } : null))
+  const { binders, entries, oldPrices, loaded, reload } = useCollection()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<CardSort>('recent')
   const [sortOpen, setSortOpen] = useState(false)
@@ -79,12 +82,22 @@ export default function BinderScreen() {
   const binder = binders.find((b) => b.id === id)
   // No useMemo needed: the React Compiler (enabled in app.json) memoizes these.
   const inside = entries.filter((e) => e.binder_id === id && !gone.includes(e.id))
-  const { value, cards, change } = summarize(inside, weekAgo)
+  const { value, cards, change } = summarize(inside, oldPrices)
   const visible = searchAndSort(inside, query, sort)
   // Cards removed meanwhile drop out of the selection.
   const picked = inside.filter((e) => selected.includes(e.id))
   // The quick look (tap a card): the cards it goes through, in the grid's order, and the one tapped.
   const [look, setLook] = useState<{ ids: number[]; openId: number } | null>(null)
+  // The quick look Card detail was opened from: it comes back, on that card, when the screen does.
+  const lookToResume = useRef<{ ids: number[]; openId: number } | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      const back = lookToResume.current
+      if (!back) return
+      lookToResume.current = null
+      setLook(back)
+    }, [setLook]),
+  )
   const byId = new Map(inside.map((e) => [e.id, e]))
   const lookEntries = (look?.ids ?? []).flatMap((x) => byId.get(x) ?? [])
 
@@ -196,7 +209,19 @@ export default function BinderScreen() {
             <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel}>Binders</Text>
           </TouchableOpacity>
-          {!editing && <SortButton label="Sort cards" onPress={() => setSortOpen(true)} />}
+          {!editing && (
+            <View style={styles.topActions}>
+              <SortButton label="Sort cards" onPress={() => setSortOpen(true)} />
+              <TouchableOpacity
+                style={styles.add}
+                onPress={() => setImporting({ autoPick: false })}
+                accessibilityRole="button"
+                accessibilityLabel="Import cards from a file"
+              >
+                <Icon name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {binder && (
@@ -258,6 +283,7 @@ export default function BinderScreen() {
         groupBy={groupBy}
         onOpen={(entry, shown) => setLook({ ids: shown, openId: entry.id })}
         edit={{ editing, selected, dragging, onToggle: toggle, onHold: startEditing, gestureFor }}
+        header={!editing && inside.length > 0 ? <HoldHint label="Hold a card to select and edit it" /> : null}
         empty={
           !loaded ? null : inside.length === 0 ? (
             <View style={styles.empty}>
@@ -304,9 +330,12 @@ export default function BinderScreen() {
         openId={look?.openId ?? null}
         title={binder?.name ?? 'Binder'}
         binders={binders}
-        weekAgo={weekAgo}
+        oldPrices={oldPrices}
         blurTarget={page}
         onClose={() => setLook(null)}
+        onDetails={(entryId) => {
+          if (look) lookToResume.current = { ...look, openId: entryId }
+        }}
         onChanged={reload}
       />
       <GroupSheet
@@ -344,6 +373,12 @@ export default function BinderScreen() {
         }}
       />
       <BinderSheet visible={binderOpen} entries={picked} onClose={() => setBinderOpen(false)} onCreated={movedToBinder} />
+      <ImportSheet
+        target={importing && binder ? { kind: 'binder', id: binder.id, name: binder.name } : null}
+        autoPick={importing?.autoPick}
+        onClose={() => setImporting(null)}
+        onImported={reload}
+      />
       <EditCopiesSheet
         visible={editOpen}
         entries={picked}
@@ -410,6 +445,19 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 20,
     paddingBottom: 14,
+  },
+  topActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  // The gold +, as on the Binders screen.
+  add: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: Colors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topBar: {
     flexDirection: 'row',

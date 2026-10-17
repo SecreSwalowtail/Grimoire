@@ -17,6 +17,8 @@ type DeckCardRow = {
   cmc: number | null
   price_eur: number | null
   price_eur_foil: number | null
+  price_usd: number | null
+  price_usd_foil: number | null
   image_uri: string | null
 }
 
@@ -29,11 +31,29 @@ export async function getDecksAndFolders(db: SQLiteDatabase) {
   const decks = await db.getAllAsync<DeckRow>('SELECT id, name, format, folder_id FROM decks ORDER BY position')
   const cards = await db.getAllAsync<DeckCardRow>(
     `SELECT dc.deck_id, dc.card_id, dc.board, dc.quantity, dc.commander,
-            c.name, c.type_line, c.cmc, c.price_eur, c.price_eur_foil, c.image_uri
+            c.name, c.type_line, c.cmc, c.price_eur, c.price_eur_foil, c.price_usd, c.price_usd_foil, c.image_uri
      FROM deck_cards dc JOIN cards c ON c.id = dc.card_id
      ORDER BY dc.position`,
   )
   return { folders, decks, cards }
+}
+
+// The newest saved price at least `days` days old, per card in any deck (as getOwnedPricesDaysAgo).
+export async function getDeckPricesDaysAgo(db: SQLiteDatabase, days: number) {
+  return db.getAllAsync<{
+    card_id: string
+    price_eur: number | null
+    price_eur_foil: number | null
+    price_usd: number | null
+    price_usd_foil: number | null
+  }>(
+    `SELECT h.card_id, h.price_eur, h.price_eur_foil, h.price_usd, h.price_usd_foil
+     FROM (SELECT p.card_id, MAX(p.date) AS date FROM price_history p
+           WHERE p.card_id IN (SELECT card_id FROM deck_cards) AND p.date <= date('now', ?)
+           GROUP BY p.card_id) latest
+     JOIN price_history h ON h.card_id = latest.card_id AND h.date = latest.date`,
+    `-${days} days`,
+  )
 }
 
 // Rows of `after` that are new, changed or (with `moves`) moved, with their new position, and rows

@@ -18,7 +18,15 @@ type Settings = {
   haptics: boolean
   // The condition scanned cards are added in.
   scanCondition: Condition
+  // The scan photo: 12 MP reads the small collector text best; 5 MP is faster but less accurate.
+  scanPhoto: '12mp' | '5mp'
+  // How far back the ▲ / ▼ on binders, decks and cards compares prices to.
+  priceChangePeriod: PriceChangePeriod
 }
+
+export type PriceChangePeriod = 'week' | 'month' | 'year'
+
+export const PERIOD_DAYS: Record<PriceChangePeriod, number> = { week: 7, month: 30, year: 365 }
 
 const DEFAULTS: Settings = {
   currency: null,
@@ -26,6 +34,8 @@ const DEFAULTS: Settings = {
   animations: true,
   haptics: true,
   scanCondition: 'NM',
+  scanPhoto: '12mp',
+  priceChangePeriod: 'week',
 }
 
 const KEY = 'settings'

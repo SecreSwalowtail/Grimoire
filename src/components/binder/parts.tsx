@@ -8,7 +8,7 @@ import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 import { useSearchBack } from '@/utils/use-search-back'
 
-// "All binders  €1,284.60          ▲ €42.10 / this week · 312 cards"
+// "All binders  €1,284.60          ▲ €42.10 / 312 cards"
 export function ValueSummary({ label, value, cards, change }: { label: string; value: number; cards: number; change: number | null }) {
   const money = useMoney()
   const cardsText = plural(cards, 'card')
@@ -25,7 +25,7 @@ export function ValueSummary({ label, value, cards, change }: { label: string; v
           </Text>
         )}
         <Text style={styles.changeLabel}>
-          {change != null ? 'this week · ' : ''}{cardsText}
+          {cardsText}
         </Text>
       </View>
     </View>
@@ -84,7 +84,29 @@ export function SortButton({ label, onPress }: { label: string; onPress: () => v
   )
 }
 
+// A quiet line at the top of a list saying what holding something in it does.
+export function HoldHint({ label }: { label: string }) {
+  return (
+    <View style={styles.holdHint}>
+      <Icon name={{ ios: 'hand.draw', android: 'drag_pan' }} size={14} tintColor={Colors.textMuted} />
+      <Text style={styles.holdHintText}>{label}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  holdHint: {
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  holdHintText: {
+    fontSize: 12,
+    fontFamily: Fonts.semiBold,
+    color: Colors.textMuted,
+  },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

@@ -12,8 +12,8 @@ export type ScanToastData =
       name: string
       set: string
       rarity: string
-      // Cardmarket's price in euros, as Scryfall gives it.
-      price: string | null
+      // In euros: Cardmarket's, else TCGplayer's (see cardEuros).
+      price: number | null
       image: string | null
     }
   | { ok: false; title: string; message: string }
@@ -49,7 +49,7 @@ export function ScanToast({ data, where = 'Binder', onUndo }: { data: ScanToastD
         <Text style={styles.name} numberOfLines={1}>{data.name}</Text>
         <Text style={styles.detail} numberOfLines={1}>
           {data.set} · {rarity}
-          {data.price != null && <Text style={styles.price}> · {money.eur(Number(data.price))}</Text>}
+          {data.price != null && <Text style={styles.price}> · {money.eur(data.price)}</Text>}
         </Text>
       </View>
       {onUndo && (

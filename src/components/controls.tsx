@@ -518,7 +518,9 @@ const styles = StyleSheet.create({
   chipLabelSelected: {
     color: '#F0D8A0',
   },
+  // Room above it, so it doesn't crowd what comes before.
   primary: {
+    marginTop: 12,
     height: 56,
     borderRadius: 16,
     backgroundColor: Colors.gold,

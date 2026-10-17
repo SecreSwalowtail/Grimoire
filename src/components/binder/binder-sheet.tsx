@@ -18,7 +18,7 @@ const PRESETS = Object.values(BINDER_PRESETS)
 const FIRST_COLOR = BINDER_PRESETS.gold.hex
 
 // "New binder" sheet: name, any cover color (the binder at the top shows it) and how to start.
-// "Empty" and "Paste list" create the binder and open it (pasting a list isn't built yet);
+// "Empty" creates the binder and opens it, "Import from…" too with the file picker up;
 // "Scan cards" creates it, sends scanned cards into it and opens the Scan tab.
 // Given a `binder`, it's "Edit binder" instead: name and color, saved with Save.
 // Given `entries` (cards picked in a binder's edit mode), the new binder is made with those cards,
@@ -60,7 +60,7 @@ export function BinderSheet({
     binder ? 'Save'
     : entries ? `Create binder with ${plural(copies, 'card')}`
     : start === 'scan' ? 'Create & start scanning'
-    : start === 'paste' ? 'Create & paste list'
+    : start === 'import' ? 'Create & import'
     : 'Create binder'
 
   const create = async () => {
@@ -83,7 +83,7 @@ export function BinderSheet({
         setScanBinder(id)
         router.navigate('/scan')
       } else {
-        router.push({ pathname: '/binder/[id]', params: { id } })
+        router.push({ pathname: '/binder/[id]', params: start === 'import' ? { id, import: '1' } : { id } })
       }
     } catch (e) {
       console.warn('Failed to create binder', e)

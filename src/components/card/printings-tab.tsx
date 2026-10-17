@@ -8,6 +8,7 @@ import { entryPrice, type CollectionEntry } from '@/db/collection'
 import { cardThumb, type ScryfallCard } from '@/db/scryfall'
 import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection'
 import { finishesText, printingLabel } from '@/rules/printings'
+import { cardEuros } from '@/utils/card-prices'
 import { useMoney } from '@/utils/money'
 
 // C3 · Card — Printings & your copies. Tapping a printing shows it on every tab; tapping one of
@@ -53,7 +54,7 @@ export function PrintingsTab({
   let list = all
   if (filter === 'owned') list = all.filter((p) => ownedCount(p.id) > 0)
   if (filter === 'cheap') {
-    const price = (p: ScryfallCard) => eur(p.prices.eur) ?? eur(p.prices.eur_foil) ?? Infinity
+    const price = (p: ScryfallCard) => cardEuros(p) ?? Infinity
     list = [...all].sort((a, b) => price(a) - price(b))
   }
   const shown = expanded || filter === 'owned' ? list : list.slice(0, FIRST)
@@ -132,7 +133,8 @@ export function PrintingsTab({
             const price = eur(p.prices.eur)
             const foil = eur(p.prices.eur_foil)
             const foilOnly = !(p.finishes ?? []).includes('nonfoil')
-            const main = price ?? foil
+            // Cardmarket's, else TCGplayer's (see cardEuros).
+            const main = price ?? foil ?? cardEuros(p)
             return (
               <Pressable
                 key={p.id}

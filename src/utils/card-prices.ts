@@ -1,7 +1,7 @@
 import { PRICES_URL } from '@/constants/prices'
 import type { Finish, PricePoint } from '@/db/collection'
 import type { ScryfallCard } from '@/db/scryfall'
-import type { Money } from '@/utils/money'
+import { usdToEur, type Money } from '@/utils/money'
 
 // Prices for Card detail. Scryfall passes on Cardmarket's price in EUR and TCGplayer's market price
 // in USD, once a day. History: the published daily prices (remote-prices.ts), plus the days the
@@ -17,6 +17,23 @@ export function priceOf(card: ScryfallCard, finish: Finish, source: PriceSource)
   if (finish === 'etched') return num(p.usd_etched ?? p.usd_foil)
   return num(finish === 'nonfoil' ? p.usd : p.usd_foil)
 }
+
+// A price in euros for lists and totals, from a card's four prices: Cardmarket's (for the finish
+// asked for, else the other), else TCGplayer's at the day's rate, since Cardmarket has no price for
+// some printings (some promos, Secret Lair and brand-new cards).
+export type FourPrices = { eur: number | null; eurFoil: number | null; usd: number | null; usdFoil: number | null }
+export function euros(p: FourPrices, foil = false) {
+  const eur = foil ? p.eurFoil ?? p.eur : p.eur ?? p.eurFoil
+  if (eur != null) return eur
+  return usdToEur(foil ? p.usdFoil ?? p.usd : p.usd ?? p.usdFoil)
+}
+
+// The same for a card from Scryfall (etched counts as foil).
+export const cardEuros = (card: ScryfallCard, foil = false) =>
+  euros(
+    { eur: num(card.prices.eur), eurFoil: num(card.prices.eur_foil), usd: num(card.prices.usd), usdFoil: num(card.prices.usd_foil ?? card.prices.usd_etched) },
+    foil,
+  )
 
 // The first finish the card exists in that has a price: non-foil, else foil, else etched.
 export function mainFinish(card: ScryfallCard): Finish {

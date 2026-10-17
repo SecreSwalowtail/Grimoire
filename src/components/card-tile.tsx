@@ -181,12 +181,18 @@ export function CardFace({
           <HoloFoil uri={entry.image_uri} tilt={tilt} />
         ) : (
           <Image
-            source={{ uri: image ?? entry.image_uri ?? undefined }}
-            placeholder={image ? { uri: entry.image_uri ?? undefined } : undefined}
+            source={{ uri: entry.image_uri ?? undefined }}
+            // A view Android hands over from another card starts blank, never showing that card.
+            recyclingKey={entry.card_id}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             transition={150}
           />
+        )}
+        {/* The sharper picture fades in over the grid's, which stays put underneath: swapping one
+            image's source blanked it for a moment as the sharp one arrived (a flicker). */}
+        {!foil && image && (
+          <Image source={{ uri: image }} recyclingKey={image} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
         )}
         <Animated.View pointerEvents="none" style={[styles.glare, glareStyle]} />
         {tier > 0 && !reducedMotion && (

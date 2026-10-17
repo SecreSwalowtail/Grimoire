@@ -104,6 +104,20 @@ export async function refreshRates() {
   }
 }
 
+// Euros for a price only known in dollars (TCGplayer), at the day's rate. Null without rates.
+export function usdToEur(usd: number | null | undefined) {
+  const perEur = rates?.rates.USD
+  return usd != null && perEur ? usd / perEur : null
+}
+
+// Euros for a price in another currency ("RON", "USD"…), at the day's rate. Null without a rate.
+export function toEurFrom(value: number, currency: string) {
+  const code = currency.trim().toUpperCase()
+  if (!code || code === 'EUR') return value
+  const perEur = rates?.rates[code]
+  return perEur ? value / perEur : null
+}
+
 // ---- Formatting ----
 
 export type Money = {

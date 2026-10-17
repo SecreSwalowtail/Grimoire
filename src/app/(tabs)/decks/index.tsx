@@ -21,8 +21,10 @@ import { DeckRow, FolderCard } from '@/components/decks/deck-row'
 import { DEFAULT_DECK_SORT, DeckSortSheet, sortDecks, sortFolders, type DeckSort } from '@/components/decks/sort-sheet'
 import { useDeckSheets } from '@/components/decks/use-deck-sheets'
 import { Icon, type IconName } from '@/components/icon'
+import { PriceChange } from '@/components/price-change'
 import { Colors, Fonts } from '@/constants/theme'
 import {
+  deckCover,
   deckValue,
   deleteDecks,
   duplicateDecks,
@@ -30,9 +32,9 @@ import {
   reorderDecks,
   reorderFolders,
   useDeckStore,
-  type DeckData,
   type Undo,
 } from '@/utils/deck-store'
+import { deckChange, useDeckOldPrices } from '@/utils/deck-prices'
 import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 import { useSearchBack } from '@/utils/use-search-back'
@@ -42,15 +44,6 @@ function pairs<T>(items: T[]) {
   const rows: T[][] = []
   for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2))
   return rows
-}
-
-// What a dragged deck shows: its most valuable card (the maybeboard left out).
-function coverImage(deckId: string, { cards, info }: DeckData) {
-  const price = (id: string) => info[id]?.priceEur ?? info[id]?.priceEurFoil ?? 0
-  const best = cards
-    .filter((c) => c.deckId === deckId && c.board !== 'maybe')
-    .sort((a, b) => price(b.cardId) - price(a.cardId))[0]
-  return best ? info[best.cardId]?.image ?? null : null
 }
 
 // `order` with the `moving` ids taken out and put in `target`'s place: after it when they came from
@@ -102,6 +95,11 @@ export default function DecksScreen() {
   // While searching, decks inside folders match too.
   const shownDecks = sortDecks(q ? decks.filter((d) => d.name.toLowerCase().includes(q)) : loose, sort, store)
   const totalValue = money.eur(decks.reduce((sum, d) => sum + deckValue(d, store), 0))
+  const oldPrices = useDeckOldPrices()
+  const totalChange = decks.reduce<number | null>((sum, d) => {
+    const c = deckChange(d, store, oldPrices)
+    return c == null ? sum : (sum ?? 0) + c
+  }, null)
   const count = (folderId: string) => decks.filter((d) => d.folderId === folderId).length
 
   // Things deleted meanwhile drop out of the selection.
@@ -222,7 +220,7 @@ export default function DecksScreen() {
 
   const ghost = [
     ...pickedFolders.map((f) => ({ key: `folder:${f.id}`, name: f.name, image: null, quantity: 1 })),
-    ...pickedDecks.map((d) => ({ key: `deck:${d.id}`, name: d.name, image: coverImage(d.id, store), quantity: 1 })),
+    ...pickedDecks.map((d) => ({ key: `deck:${d.id}`, name: d.name, image: deckCover(d.id, store), quantity: 1 })),
   ]
   const ghostLabel = [
     pickedDecks.length ? plural(pickedDecks.length, 'deck') : null,
@@ -265,6 +263,7 @@ export default function DecksScreen() {
           <View>
             <Text style={styles.sectionLabel}>Value of all decks</Text>
             <Text style={styles.value}>{totalValue}</Text>
+            <PriceChange change={totalChange} style={styles.change} />
           </View>
           <View style={styles.counts}>
             <Text style={styles.deckCount}>{plural(decks.length, 'deck')}</Text>
@@ -353,7 +352,6 @@ export default function DecksScreen() {
 
         <View style={styles.decksHeader}>
           <Text style={styles.sectionLabel}>Decks</Text>
-          {!q && <Text style={styles.decksNote}>Not in a folder</Text>}
         </View>
         {shownDecks.map((d, i) => (
           <DropZone key={d.id} drag={drag} id={`deck:${d.id}`}>
@@ -489,6 +487,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  change: {
+    marginTop: 4,
+    fontSize: 13,
+  },
   summary: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -593,11 +595,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  decksNote: {
-    fontSize: 13,
-    fontFamily: Fonts.regular,
-    color: Colors.textMuted,
   },
   empty: {
     alignItems: 'center',

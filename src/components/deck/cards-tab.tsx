@@ -8,6 +8,7 @@ import { DropZone, type CardDrag } from '@/components/deck/card-drag'
 import { CROWN, GroupIcon, ICON, PathIcon } from '@/components/deck/parts'
 import { Icon } from '@/components/icon'
 import { CostRow } from '@/components/mana-symbol'
+import { PriceChangeFit } from '@/components/price-change'
 import { Colors, Fonts } from '@/constants/theme'
 import { upsertCard } from '@/db/cards'
 import { cardManaCost, searchCards, type ScryfallCard } from '@/db/scryfall'
@@ -21,7 +22,9 @@ import {
   type DeckLine,
   type GroupBy,
 } from '@/rules/deck-stats'
+import { cardEuros } from '@/utils/card-prices'
 import { cardInfoOf, removeDeckCards, setDeckCardCount, useDeckStore, type Board, type CardInfo, type Undo } from '@/utils/deck-store'
+import { priceChange, useDeckOldPrices } from '@/utils/deck-prices'
 import { useMoney } from '@/utils/money'
 import { useSearchBack } from '@/utils/use-search-back'
 
@@ -34,10 +37,7 @@ const MARKET_MAX = 20
 // The Market's cards for a search: the search, and its cards (null: it failed).
 type MarketResult = { q: string; cards: ScryfallCard[] | null }
 
-const marketPrice = (card: ScryfallCard) => {
-  const p = card.prices.eur ?? card.prices.eur_foil
-  return p != null ? Number(p) : null
-}
+const marketPrice = (card: ScryfallCard) => cardEuros(card)
 
 const BOARDS: { value: Board; label: string }[] = [
   { value: 'main', label: 'Main deck' },
@@ -102,6 +102,7 @@ export function CardsTab({
   const money = useMoney()
   const db = useSQLiteContext()
   const store = useDeckStore()
+  const oldPrices = useDeckOldPrices()
   const [query, setQuery] = useState('')
   const searchInput = useRef<TextInput>(null)
   useSearchBack(searchInput)
@@ -343,7 +344,16 @@ export function CardsTab({
                     if (budget <= 0) return null
                     budget -= 1
                     const key = `${l.cardId}|${l.board}`
-                    return <CardRow key={key} line={l} editing={editing} on={selected.includes(key)} actions={rowActions} />
+                    return (
+                      <CardRow
+                        key={key}
+                        line={l}
+                        editing={editing}
+                        on={selected.includes(key)}
+                        change={priceChange(l.price, l.cardId, l.quantity, oldPrices)}
+                        actions={rowActions}
+                      />
+                    )
                   })}
               </View>
             )
@@ -416,7 +426,19 @@ type RowActions = {
 // One card of the deck: tap for Card detail (selects it in edit mode), hold to start editing, −/+
 // for its copies. `on`: selected. Only a selected card in edit mode can be picked up, so only it
 // carries a drag gesture (one per row made every row costly to draw).
-function CardRow({ line: l, editing, on, actions }: { line: DeckLine; editing: boolean; on: boolean; actions: RowActions }) {
+function CardRow({
+  line: l,
+  editing,
+  on,
+  change,
+  actions,
+}: {
+  line: DeckLine
+  editing: boolean
+  on: boolean
+  change: number | null
+  actions: RowActions
+}) {
   const money = useMoney()
   const missing = missingCopies(l)
   const row = (
@@ -437,6 +459,7 @@ function CardRow({ line: l, editing, on, actions }: { line: DeckLine; editing: b
         cost={l.manaCost}
         price={l.price != null ? money.eur(l.price * l.quantity) : '—'}
         tag={missing > 0 ? (missing === l.quantity ? 'Not owned' : `${missing} not owned`) : null}
+        change={change}
       />
       {editing ? (
         <Text style={styles.qty}>{l.quantity}×</Text>
@@ -449,7 +472,22 @@ function CardRow({ line: l, editing, on, actions }: { line: DeckLine; editing: b
 }
 
 // A card row's text: the name, then its cost, price and tag (Not owned / Not in deck) under it.
-function CardText({ name, cost, price, tag, tagMuted }: { name: string; cost: string; price: string; tag: string | null; tagMuted?: boolean }) {
+// `change`: the change of its price (▲ / ▼ at the line's end; the amount when there's room).
+function CardText({
+  name,
+  cost,
+  price,
+  tag,
+  tagMuted,
+  change = null,
+}: {
+  name: string
+  cost: string
+  price: string
+  tag: string | null
+  tagMuted?: boolean
+  change?: number | null
+}) {
   return (
     <View style={styles.rowText}>
       <Text style={styles.cardName} numberOfLines={1}>{name}</Text>
@@ -457,6 +495,7 @@ function CardText({ name, cost, price, tag, tagMuted }: { name: string; cost: st
         <CostRow cost={cost} size={14} />
         <Text style={styles.price} numberOfLines={1}>{price}</Text>
         {tag && <Text style={[styles.tag, tagMuted && styles.tagMuted]} numberOfLines={1}>{tag}</Text>}
+        <PriceChangeFit change={change} />
       </View>
     </View>
   )
@@ -717,7 +756,7 @@ const styles = StyleSheet.create({
     color: '#CFC7B4',
   },
   stepper: {
-    height: 36,
+    height: 42,
     padding: 3,
     borderRadius: 12,
     borderWidth: 1,
@@ -727,9 +766,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   step: {
-    width: 30,
-    height: 28,
-    borderRadius: 9,
+    width: 36,
+    height: 34,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -740,20 +779,25 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   // The − and the two strokes of +, drawn as views (an SVG per button made every row costly):
-  // a 14 px icon's 14-of-24 stroke, 2.2 of 24 thick with round ends.
+  // a 16 px icon's 14-of-24 stroke, 2.2 of 24 thick with round ends.
   bar: {
     position: 'absolute',
-    width: (14 * 14) / 24 + (14 * 2.2) / 24,
-    height: (14 * 2.2) / 24,
-    borderRadius: (14 * 1.1) / 24,
+    width: (16 * 14) / 24 + (16 * 2.2) / 24,
+    height: (16 * 2.2) / 24,
+    borderRadius: (16 * 1.1) / 24,
   },
   barUp: {
     transform: [{ rotate: '90deg' }],
   },
+  // One width for any count, so the steppers line up row to row; no font padding, so the number sits
+  // in the middle (Android adds room above the text otherwise).
   stepCount: {
-    minWidth: 26,
+    width: 32,
     textAlign: 'center',
-    fontSize: 14,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+    fontSize: 15,
+    lineHeight: 20,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
     fontVariant: ['tabular-nums'],

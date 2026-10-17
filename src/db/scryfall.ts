@@ -78,7 +78,7 @@ export type ScryfallCard = {
 
 export type Ruling = { source: string; published_at: string; comment: string }
 
-export type CardIdentifier = { set: string; collector_number: string } | { name: string }
+export type CardIdentifier = { id: string } | { set: string; collector_number: string } | { name: string }
 
 // Space out request starts per rate-limit group (10/s, or 2/s for /cards/collection and
 // /cards/search). Requests may overlap: waiting for each to finish first made e.g. Card detail's

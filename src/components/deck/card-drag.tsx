@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Gesture, ScrollView } from 'react-native-gesture-handler'
 import Animated, {
   scrollTo,
@@ -28,8 +28,11 @@ import type { Board } from '@/utils/deck-store'
 // 'commander-group': the Commander group's header, another way to the commander slot.
 // 'to-deck' / 'new-binder' / 'edit-cards': a binder's Add to deck, New binder and Edit buttons.
 // 'duplicate' and `folder:<id>` / `deck:<id>`: the Decks screen's button and rows.
+// 'out': the screen's edges, where a screen that turns them on (useCardDrag's `edges`) takes things
+// out (a folder's decks out of the folder).
 export type DropTarget =
   | 'trash'
+  | 'out'
   | 'commander'
   | 'commander-group'
   | 'to-deck'
@@ -49,6 +52,9 @@ const TRASH_PULL = 80
 const TRASH_SIZE = 64
 const DANGER = '#E5533D'
 const TRASH_ICON = 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'
+// The screen's size and how far its edges reach in (left and right, top, bottom), for the 'out'
+// target.
+type Edges = { w: number; h: number; side: number; top: number; bottom: number }
 
 export type CardDrag = {
   x: SharedValue<number>
@@ -73,6 +79,8 @@ export type CardDrag = {
   scrollY: SharedValue<number>
   // Whether this drag already scrolled to the top.
   jumped: SharedValue<boolean>
+  // The screen's edges as the 'out' target (null: none).
+  edges: SharedValue<Edges | null>
 }
 
 // The binder passes nothing: it has no commander or parts of a deck, and its targets don't scroll.
@@ -83,6 +91,7 @@ export function useCardDrag({
   scrollY,
   skip = NONE,
   refuse = NONE,
+  edges,
 }: {
   commanderOk?: boolean
   board?: Board | null
@@ -90,7 +99,11 @@ export function useCardDrag({
   scrollY?: SharedValue<number>
   skip?: string[]
   refuse?: string[]
+  // Turns the screen's edges into the 'out' target: `side` points in from the left and right, the
+  // top `top` points and the bottom `bottom` points (the trash, checked first, still wins there).
+  edges?: { side: number; top: number; bottom: number }
 } = {}): CardDrag {
+  const { width: screenW, height: screenH } = useWindowDimensions()
   // One of each for the screen's life: written to by the targets, never rendered from.
   const [rectMap] = useState(() => new Map<DropTarget, Rect>())
   const [measurers] = useState(() => new Set<() => void>())
@@ -110,6 +123,7 @@ export function useCardDrag({
     scrollRef,
     scrollY: scrollY ?? noScroll,
     jumped: useSharedValue(false),
+    edges: useSharedValue<Edges | null>(null),
   }
   const { commanderOk: ok, board: on } = drag
   useEffect(() => ok.set(commanderOk), [ok, commanderOk])
@@ -120,6 +134,19 @@ export function useCardDrag({
   const refuseKey = refuse.join('\n')
   useEffect(() => skipped.set(skipKey ? skipKey.split('\n') : []), [skipped, skipKey])
   useEffect(() => refused.set(refuseKey ? refuseKey.split('\n') : []), [refused, refuseKey])
+  const { edges: edgeBox } = drag
+  const edgeSide = edges?.side
+  const edgeTop = edges?.top
+  const edgeBottom = edges?.bottom
+  useEffect(
+    () =>
+      edgeBox.set(
+        edgeSide == null || edgeTop == null || edgeBottom == null
+          ? null
+          : { w: screenW, h: screenH, side: edgeSide, top: edgeTop, bottom: edgeBottom },
+      ),
+    [edgeBox, edgeSide, edgeTop, edgeBottom, screenW, screenH],
+  )
   return drag
 }
 
@@ -161,13 +188,16 @@ export function dragGesture<T>(
   onDrop: (target: DropTarget | null) => void,
   topZone = 0,
 ) {
-  const { x, y, active, hover, rects, measurers, scrollRef, scrollY, jumped, skip } = drag
+  const { x, y, active, hover, rects, measurers, scrollRef, scrollY, jumped, skip, edges } = drag
   const remeasure = () => measurers.forEach((m) => m())
   const hit = (px: number, py: number): DropTarget | null => {
     'worklet'
     const all = rects.get()
     // The trash pulls from a distance.
     if (nearTrash(rects, px, py)) return 'trash'
+    // The screen's edges (where a screen turns them on).
+    const e = edges.get()
+    if (e && (px < e.side || px > e.w - e.side || py < e.top || py > e.h - e.bottom)) return 'out'
     for (const key in all) {
       if (key === 'trash' || skip.get().includes(key)) continue
       const r = all[key as DropTarget]!
@@ -363,6 +393,26 @@ export function TrashBubble({ drag, bottom }: { drag: CardDrag; bottom: number }
   )
 }
 
+// The screen's edges while dragging, when they take things out (useCardDrag's `edges`): a faint gold
+// frame while anything is dragged, lit with `label` when the finger is on an edge.
+export function EdgeZone({ drag, label }: { drag: CardDrag; label: string }) {
+  const frame = useAnimatedStyle(() => {
+    const on = drag.hover.get() === 'out'
+    return { opacity: withTiming(on ? 1 : drag.active.get() ? 0.3 : 0, { duration: 140 }) }
+  })
+  const pill = useAnimatedStyle(() => ({
+    opacity: withTiming(drag.hover.get() === 'out' ? 1 : 0, { duration: 140 }),
+  }))
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Animated.View style={[styles.edgeFrame, frame]} />
+      <Animated.View style={[styles.edgePill, pill]}>
+        <Text style={styles.edgeLabel} numberOfLines={1}>{label}</Text>
+      </Animated.View>
+    </View>
+  )
+}
+
 // Height of the edit bar (title, buttons, room for the Scan button).
 export const EDIT_BAR = 124
 
@@ -481,6 +531,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Fonts.bold,
     color: '#CFC7B4',
+  },
+  edgeFrame: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 3,
+    borderColor: Colors.gold,
+    borderRadius: 28,
+  },
+  edgePill: {
+    position: 'absolute',
+    top: 64,
+    alignSelf: 'center',
+    maxWidth: '80%',
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.gold,
+    justifyContent: 'center',
+    boxShadow: '0 8px 20px rgba(0,0,0,0.5)',
+  },
+  edgeLabel: {
+    fontSize: 14,
+    fontFamily: Fonts.extraBold,
+    color: Colors.onGold,
   },
   trashWrap: {
     position: 'absolute',

@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ManaSymbol, parseManaCost } from '@/components/mana-symbol'
 import { Colors, Fonts, RarityColors } from '@/constants/theme'
 import { cardImage, cardManaCost, cardThumb, rememberCard, type ScryfallCard } from '@/db/scryfall'
-import type { PriceSource } from '@/utils/card-prices'
+import { cardEuros, type PriceSource } from '@/utils/card-prices'
 import { capitalize } from '@/utils/format'
 import { useMoney, type Money } from '@/utils/money'
 
@@ -16,8 +16,9 @@ import { useMoney, type Money } from '@/utils/money'
 function price(card: ScryfallCard, source: PriceSource, money: Money) {
   const p = card.prices
   if (source === 'cardmarket') {
-    const eur = p.eur ?? p.eur_foil
-    return eur != null ? money.eur(Number(eur)) : '—'
+    // Cardmarket's, else TCGplayer's (see cardEuros).
+    const eur = cardEuros(card)
+    return eur != null ? money.eur(eur) : '—'
   }
   const usd = p.usd ?? p.usd_foil ?? p.usd_etched
   return usd != null ? money.usd(Number(usd)) : '—'

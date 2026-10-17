@@ -11,6 +11,7 @@ import { getBinders, type Binder } from '@/db/binders'
 import { upsertCard } from '@/db/cards'
 import {
   addToCollection,
+  entryPrice,
   removeEntry,
   updateEntry,
   type CollectionEntry,
@@ -20,7 +21,7 @@ import {
 import { cardThumb, type ScryfallCard } from '@/db/scryfall'
 import { CONDITIONS, COPY_LANGUAGES, LANGUAGE_NAMES } from '@/rules/collection'
 import { FINISH_LABEL, printingLabel } from '@/rules/printings'
-import { mainFinish } from '@/utils/card-prices'
+import { cardEuros, mainFinish } from '@/utils/card-prices'
 import { currencyName, parsePaid, useMoney, type Money } from '@/utils/money'
 
 // C5 · Add / edit a copy. Adding uses the printing on show ("Change" goes to Printings to pick
@@ -132,9 +133,7 @@ export function CopySheet({
   // on show; null when it's another one only known from the copy's row.
   const printing = draft.printing ?? (!entry || entry.card_id === card.id ? card : null)
   const finishes = (printing ? printing.finishes ?? ['nonfoil'] : ['nonfoil', 'foil']) as Finish[]
-  const unit = printing
-    ? Number((draft.finish === 'nonfoil' ? printing.prices.eur ?? printing.prices.eur_foil : printing.prices.eur_foil ?? printing.prices.eur) ?? NaN)
-    : draft.finish === 'nonfoil' ? entry!.price_eur ?? entry!.price_eur_foil : entry!.price_eur_foil ?? entry!.price_eur
+  const unit = printing ? cardEuros(printing, draft.finish !== 'nonfoil') : entryPrice({ ...entry!, finish: draft.finish })
   const value = unit != null && Number.isFinite(unit) ? money.eur(unit * draft.qty) : '—'
   const printingTitle = printing
     ? `${printingLabel(printing)} · ${printing.set_name} #${printing.collector_number}`

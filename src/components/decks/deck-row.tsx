@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-nativ
 
 import { DeckThumb, FolderFan, FolderIcon } from '@/components/decks/parts'
 import { Icon } from '@/components/icon'
+import { PriceChange } from '@/components/price-change'
 import { Colors, Fonts } from '@/constants/theme'
 import { withAlpha } from '@/utils/color'
 import {
@@ -15,6 +16,7 @@ import {
   type Folder,
 } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
+import { deckChange, useDeckOldPrices } from '@/utils/deck-prices'
 import { useMoney } from '@/utils/money'
 
 // "Pioneer · 60 cards", or "Pioneer · No cards yet".
@@ -44,6 +46,7 @@ export function DeckRow({
 }) {
   const money = useMoney()
   const data = useDeckStore()
+  const oldPrices = useDeckOldPrices()
   const meta = deckMeta(deck, data)
   const value = money.eur(deckValue(deck, data))
   return (
@@ -66,7 +69,10 @@ export function DeckRow({
           <Text style={styles.name} numberOfLines={1}>{deck.name}</Text>
           <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
         </View>
-        <Text style={styles.value}>{value}</Text>
+        <View style={styles.values}>
+          <Text style={styles.value}>{value}</Text>
+          <PriceChange change={deckChange(deck, data, oldPrices)} />
+        </View>
       </Pressable>
       {onOptions && !edit && (
         <TouchableOpacity
@@ -141,6 +147,11 @@ export function FolderCard({
 }
 
 const styles = StyleSheet.create({
+  // The value, and its change under it.
+  values: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
   row: {
     height: 72,
     flexDirection: 'row',

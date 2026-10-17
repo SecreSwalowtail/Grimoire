@@ -19,7 +19,7 @@ import { identityName, sortColors } from '@/rules/colors'
 import { commanderStatus } from '@/rules/commander'
 import { isPlayable, PAPER_FORMATS } from '@/rules/formats'
 import { FLIPPABLE } from '@/rules/printings'
-import { mainFinish, priceChange, priceOf, SHOW_HISTORY } from '@/utils/card-prices'
+import { cardEuros, mainFinish, priceChange, priceOf, SHOW_HISTORY } from '@/utils/card-prices'
 import { withAlpha } from '@/utils/color'
 import { capitalize, plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
@@ -198,7 +198,8 @@ export function OverviewTab({
 }) {
   const money = useMoney()
   const finish = mainFinish(card)
-  const price = priceOf(card, finish, 'cardmarket')
+  // Cardmarket's, else TCGplayer's in euros (see cardEuros).
+  const price = priceOf(card, finish, 'cardmarket') ?? cardEuros(card, finish !== 'nonfoil')
   // A change over time needs the published price history.
   const change = SHOW_HISTORY ? priceChange(history, 30, finish, 'cardmarket') : null
   const owned = copies.reduce((n, c) => n + c.quantity, 0)

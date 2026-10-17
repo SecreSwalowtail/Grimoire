@@ -10,6 +10,7 @@ import { getCardRows } from '@/db/cards'
 import type { CollectionEntry } from '@/db/collection'
 import type { ScryfallCard } from '@/db/scryfall'
 import { copyRule, deckFit } from '@/rules/formats'
+import { euros } from '@/utils/card-prices'
 import { addCardsToDecks, useDeckStore, type Board, type CardInfo, type DeckFormat, type Undo } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
 
@@ -49,7 +50,14 @@ async function loadSaved(db: SQLiteDatabase, cardIds: string[]) {
     rows.map((r): [string, Saved] => [
       r.id,
       {
-        info: { name: r.name, typeLine: r.type_line, cmc: r.cmc, priceEur: r.price_eur, priceEurFoil: r.price_eur_foil, image: r.image_uri },
+        info: {
+          name: r.name,
+          typeLine: r.type_line,
+          cmc: r.cmc,
+          priceEur: euros({ eur: r.price_eur, eurFoil: r.price_eur_foil, usd: r.price_usd, usdFoil: r.price_usd_foil }),
+          priceEurFoil: euros({ eur: r.price_eur, eurFoil: r.price_eur_foil, usd: r.price_usd, usdFoil: r.price_usd_foil }, true),
+          image: r.image_uri,
+        },
         card: r.card,
       },
     ]),

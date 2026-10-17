@@ -24,10 +24,10 @@ const MORE_FORMATS = FORMATS.filter((f) => !POPULAR_FORMATS.includes(f))
 const PRESETS = Object.values(FOLDER_COLORS)
 const FIRST_COLOR = FOLDER_COLORS.gold.hex
 
-export type Start = 'empty' | 'paste' | 'scan'
+export type Start = 'empty' | 'import' | 'scan'
 const STARTS: { value: Start; label: string; icon: IconName }[] = [
   { value: 'empty', label: 'Empty', icon: { ios: 'plus', android: 'add' } },
-  { value: 'paste', label: 'Paste list', icon: { ios: 'doc.on.clipboard', android: 'content_paste' } },
+  { value: 'import', label: 'Import from…', icon: { ios: 'square.and.arrow.down', android: 'download' } },
   { value: 'scan', label: 'Scan cards', icon: { ios: 'viewfinder', android: 'document_scanner' } },
 ]
 
@@ -35,7 +35,8 @@ export type NewKind = 'deck' | 'folder'
 
 // "New deck / New folder" sheet. `folderId` preselects "Put in folder"; `deckIds` pre-checks
 // decks to file into a new folder (from the Decks screen and Move).
-// "Paste list" only creates the deck for now; "Scan cards" creates it and opens the Scan tab.
+// "Import from…" creates the deck and opens it with the file picker up (see ImportSheet); "Scan
+// cards" creates it and opens the Scan tab.
 // `onDeckCreated` gets the new deck's id (Card detail uses it to put the card in). "Scan cards"
 // sends what you scan to the new deck's main deck too.
 export function NewSheet({
@@ -87,7 +88,7 @@ export function NewSheet({
   const cta = !isDeck
     ? 'Create folder'
     : start === 'scan' ? 'Create & start scanning'
-    : start === 'paste' ? 'Create & paste list'
+    : start === 'import' ? 'Create & import'
     : 'Create deck'
 
   const create = () => {
@@ -97,6 +98,8 @@ export function NewSheet({
       if (start === 'scan') {
         setScanDeck({ deckId: id, board: 'main' })
         router.navigate('/scan')
+      } else if (start === 'import') {
+        router.push({ pathname: '/decks/deck/[deckId]', params: { deckId: id, import: '1' } })
       }
     } else {
       createFolder({ name: name.trim() || 'New folder', color }, picked)
@@ -222,7 +225,7 @@ export function NewSheet({
   )
 }
 
-// "Start from": Empty / Paste list / Scan cards, as three tiles (New deck and New binder).
+// "Start from": Empty / Import from… / Scan cards, as three tiles (New deck and New binder).
 export function StartOptions({ value, onChange }: { value: Start; onChange: (value: Start) => void }) {
   return (
     <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Start from">

@@ -46,6 +46,32 @@ export async function upsertCard(db: SQLiteDatabase, card: ScryfallCard) {
   if (before?.owned && (before.price_eur !== prices[0] || before.price_eur_foil !== prices[1])) collectionChanged()
 }
 
+// The cards whose price changes show: owned and in decks.
+export async function getTrackedCardIds(db: SQLiteDatabase) {
+  const rows = await db.getAllAsync<{ id: string }>(
+    'SELECT id FROM cards WHERE id IN (SELECT card_id FROM collection) OR id IN (SELECT card_id FROM deck_cards)',
+  )
+  return rows.map((r) => r.id)
+}
+
+// Past prices published for cards (remote-prices.ts). A day the phone saved itself keeps its own.
+export async function addOldPrices(
+  db: SQLiteDatabase,
+  rows: { card_id: string; date: string; price_eur: number | null; price_eur_foil: number | null; price_usd: number | null; price_usd_foil: number | null }[],
+) {
+  await db.withTransactionAsync(async () => {
+    const insert = await db.prepareAsync(
+      `INSERT OR IGNORE INTO price_history (card_id, date, price_eur, price_eur_foil, price_usd, price_usd_foil)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    try {
+      for (const r of rows) await insert.executeAsync(r.card_id, r.date, r.price_eur, r.price_eur_foil, r.price_usd, r.price_usd_foil)
+    } finally {
+      await insert.finalizeAsync()
+    }
+  })
+}
+
 // What decks need to know about saved cards, with their full data (null when never saved with it).
 export async function getCardRows(db: SQLiteDatabase, ids: string[]) {
   if (ids.length === 0) return []
@@ -56,10 +82,12 @@ export async function getCardRows(db: SQLiteDatabase, ids: string[]) {
     cmc: number | null
     price_eur: number | null
     price_eur_foil: number | null
+    price_usd: number | null
+    price_usd_foil: number | null
     image_uri: string | null
     data: string | null
   }>(
-    `SELECT id, name, type_line, cmc, price_eur, price_eur_foil, image_uri, data FROM cards
+    `SELECT id, name, type_line, cmc, price_eur, price_eur_foil, price_usd, price_usd_foil, image_uri, data FROM cards
      WHERE id IN (${ids.map(() => '?').join(', ')})`,
     ...ids,
   )

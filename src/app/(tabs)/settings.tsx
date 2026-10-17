@@ -18,7 +18,7 @@ type Tab = 'settings' | 'tools'
 
 const VERSION = Constants.expoConfig?.version ?? '1.0.0'
 
-// Settings: prices (currency, which market), scanning (condition), the app (animations,
+// Settings: prices (currency, which market, the period of price changes), scanning (condition), the app (animations,
 // vibration), the collection (export / import CSV) and about (version, sources). Tools: to come.
 export default function SettingsScreen() {
   const db = useSQLiteContext()
@@ -106,6 +106,26 @@ export default function SettingsScreen() {
                   />
                 </View>
               </View>
+              <View style={[styles.item, styles.rule]}>
+                <Text style={styles.itemTitle}>Price change</Text>
+                <Text style={styles.itemSubtitle}>
+                  The ▲ / ▼ on binders, decks and cards: the change over the past {settings.priceChangePeriod}. Shows once there are prices
+                  from that long ago.
+                </Text>
+                <View style={styles.control}>
+                  <Segmented
+                    label="Price change"
+                    small
+                    options={[
+                      { value: 'week', label: 'Week' },
+                      { value: 'month', label: 'Month' },
+                      { value: 'year', label: 'Year' },
+                    ]}
+                    value={settings.priceChangePeriod}
+                    onChange={(priceChangePeriod) => setSettings({ priceChangePeriod })}
+                  />
+                </View>
+              </View>
             </View>
             <Text style={styles.note}>
               Prices are converted from euros and dollars with the European Central Bank&apos;s daily rates.
@@ -120,6 +140,18 @@ export default function SettingsScreen() {
                   {CONDITIONS.map((c) => (
                     <Chip key={c.code} label={c.code} selected={settings.scanCondition === c.code} onPress={() => setSettings({ scanCondition: c.code })} />
                   ))}
+                </View>
+              </View>
+              <View style={[styles.item, styles.rule]}>
+                <Text style={styles.itemTitle}>Photo size</Text>
+                <Text style={styles.itemSubtitle}>
+                  {settings.scanPhoto === '5mp'
+                    ? '5 MP: faster, but less accurate at reading the set and number.'
+                    : '12 MP: most accurate. Try 5 MP if scanning feels slow.'}
+                </Text>
+                <View style={[styles.control, styles.chips]}>
+                  <Chip label="12 MP" selected={settings.scanPhoto === '12mp'} onPress={() => setSettings({ scanPhoto: '12mp' })} />
+                  <Chip label="5 MP" selected={settings.scanPhoto === '5mp'} onPress={() => setSettings({ scanPhoto: '5mp' })} />
                 </View>
               </View>
             </View>
@@ -141,8 +173,8 @@ export default function SettingsScreen() {
 
             <SectionLabel style={styles.label}>Collection</SectionLabel>
             <View style={styles.group}>
-              <Row title="Export collection" subtitle="Every card in your binders, as a CSV file (Moxfield's format)." onPress={exportCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} />} />
-              <Row rule title="Import collection" subtitle="Add cards from a CSV file, e.g. exported from Moxfield." onPress={importCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.down', android: 'download' }} />} />
+              <Row title="Export collection" subtitle="Every card in your binders, as a CSV file." onPress={exportCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} />} />
+              <Row rule title="Import collection" subtitle="Add cards from a text or CSV file." onPress={importCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.down', android: 'download' }} />} />
             </View>
             {(busy || status) && <Text style={styles.status}>{busy ? 'Working…' : status}</Text>}
 

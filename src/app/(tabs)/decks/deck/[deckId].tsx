@@ -27,6 +27,7 @@ import { useDeckLines } from '@/components/deck/use-deck-lines'
 import { useDeckSheets } from '@/components/decks/use-deck-sheets'
 import { Icon } from '@/components/icon'
 import { ManaSymbol } from '@/components/mana-symbol'
+import { PriceChange } from '@/components/price-change'
 import { Colors, Fonts } from '@/constants/theme'
 import { canShareCommand } from '@/rules/commander'
 import {
@@ -52,6 +53,7 @@ import {
 } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
 import { setGroupBy, useGroupBy } from '@/utils/group-prefs'
+import { deckChange, useDeckOldPrices } from '@/utils/deck-prices'
 import { useMoney } from '@/utils/money'
 
 type Tab = 'cards' | 'stats' | 'legal'
@@ -81,8 +83,10 @@ function coverLine(deck: Deck, main: DeckLine[]) {
 export default function DeckScreen() {
   const money = useMoney()
   const insets = useSafeAreaInsets()
-  const { deckId } = useLocalSearchParams<{ deckId: string }>()
+  // `import`: just made with "Import from…" (the Import sheet opens straight away).
+  const { deckId, import: importNow } = useLocalSearchParams<{ deckId: string; import?: string }>()
   const store = useDeckStore()
+  const oldPrices = useDeckOldPrices()
   const deck = store.decks.find((d) => d.id === deckId)
   const folder = store.folders.find((f) => f.id === deck?.folderId)
   const { lines } = useDeckLines(deckId)
@@ -93,7 +97,7 @@ export default function DeckScreen() {
   const [groupOpen, setGroupOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   // Deleting the deck from its own options goes back; the list shows the Undo toast.
-  const deckSheets = useDeckSheets({ onDeckDeleted: () => router.back() })
+  const deckSheets = useDeckSheets({ onDeckDeleted: () => router.back(), importInto: importNow === '1' ? deckId : undefined })
   const [editing, setEditing] = useState(false)
   // This edit session's changes, latest last, for Undo.
   const [undos, setUndos] = useState<Undo[]>([])
@@ -290,6 +294,7 @@ export default function DeckScreen() {
               <Text style={styles.value}>{money.eur(value)}</Text>
               {missing > 0 ? ` · ${missing} missing` : mainCount > 0 ? ' · all owned' : ''}
             </Text>
+            <PriceChange change={deckChange(deck, store, oldPrices)} style={styles.change} />
           </View>
         </View>
 
@@ -485,6 +490,10 @@ const styles = StyleSheet.create({
   metaStrong: {
     fontFamily: Fonts.extraBold,
     color: Colors.text,
+  },
+  change: {
+    marginTop: 4,
+    fontSize: 13,
   },
   valueLine: {
     marginTop: 6,

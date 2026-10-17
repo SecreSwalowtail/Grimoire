@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg'
 
 import { SectionLabel } from '@/components/controls'
 import { Icon } from '@/components/icon'
+import { SwipeAway } from '@/components/swipe-away'
 import { Colors, Fonts } from '@/constants/theme'
 import { withAlpha } from '@/utils/color'
 import { isCommander, useDeckStore } from '@/utils/deck-store'
@@ -102,7 +103,8 @@ export function UndoToast({
   }, [message])
 
   return (
-    <View style={[styles.toast, { bottom }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+    // Drag it left or right to dismiss it (see SwipeAway).
+    <SwipeAway onDismiss={onHide} style={[styles.toast, { bottom }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
       <Icon name={{ ios: 'trash', android: 'delete' }} size={18} tintColor={Colors.textSecondary} />
       <Text style={styles.toastText} numberOfLines={1}>{message}</Text>
       <TouchableOpacity
@@ -115,7 +117,7 @@ export function UndoToast({
       >
         <Text style={styles.undoLabel}>Undo</Text>
       </TouchableOpacity>
-    </View>
+    </SwipeAway>
   )
 }
 

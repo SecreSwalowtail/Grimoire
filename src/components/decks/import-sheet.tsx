@@ -1,59 +1,104 @@
 import { useSQLiteContext } from 'expo-sqlite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls'
 import { RadioDot } from '@/components/decks/parts'
 import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
-import { importDeckList, type DeckImportResult } from '@/db/deck-import'
+import { importDeckList } from '@/db/deck-import'
+import { importCollection } from '@/db/import-export'
 import { useDeckStore } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
 
-type Source = 'manabox'
-const SOURCES: { value: Source; label: string; hint: string }[] = [
-  { value: 'manabox', label: 'From Manabox', hint: 'A deck exported from Manabox as text (.txt)' },
-]
+// Where the cards go: a deck, or a binder (named, for what the sheet says).
+export type ImportTarget = { kind: 'deck'; id: string } | { kind: 'binder'; id: string; name: string }
 
-// "Import decklist" from Deck options: pick where the list comes from, then the file. Its cards
-// are added to the deck (sideboard and maybe sections to those parts), and the sheet says what
-// was added and which lines it couldn't use.
-export function ImportSheet({ deckId, onClose }: { deckId: string | null; onClose: () => void }) {
+type Result = {
+  fileName: string | null
+  cards: number // different cards (or rows) added
+  copies: number
+  failed: { line: number; name: string; reason: string }[]
+}
+
+type Source = 'manabox'
+const SOURCES: Record<ImportTarget['kind'], { value: Source; label: string; hint: string }[]> = {
+  deck: [{ value: 'manabox', label: 'From text', hint: 'A deck list as text (.txt), e.g. exported from Manabox' }],
+  binder: [{ value: 'manabox', label: 'From text', hint: 'A card list as text (.txt) or CSV, e.g. exported from Manabox' }],
+}
+
+// "Import from…": pick a file on the phone and its cards are added to a deck (Deck options, New
+// deck) or a binder (its + button, New binder); the sheet then says what was added and which lines
+// it couldn't use. `autoPick`: the file picker opens with the sheet (right after making a new deck
+// or binder). `onImported`: after cards went into a binder (the screen reloads).
+export function ImportSheet({
+  target,
+  autoPick = false,
+  onClose,
+  onImported,
+}: {
+  target: ImportTarget | null
+  autoPick?: boolean
+  onClose: () => void
+  onImported?: () => void
+}) {
   const db = useSQLiteContext()
   const { decks } = useDeckStore()
-  const deck = decks.find((d) => d.id === deckId)
+  const name = target?.kind === 'deck' ? decks.find((d) => d.id === target.id)?.name : target?.name
   const [source, setSource] = useState<Source>('manabox')
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<DeckImportResult | null>(null)
+  const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Fresh each time it opens (state adjusted during render).
+  const key = target ? `${target.kind}:${target.id}` : null
   const [openFor, setOpenFor] = useState<string | null>(null)
-  if ((deckId ?? null) !== openFor) {
-    setOpenFor(deckId ?? null)
+  if (key !== openFor) {
+    setOpenFor(key)
     setResult(null)
     setError(null)
     setBusy(false)
   }
 
   const pick = async () => {
-    if (!deck || busy) return
+    if (!target || busy) return
     setBusy(true)
     setError(null)
     try {
-      const r = await importDeckList(db, deck.id)
-      if (!r.canceled) setResult(r)
+      if (target.kind === 'deck') {
+        const r = await importDeckList(db, target.id)
+        if (!r.canceled) setResult(r)
+      } else {
+        const r = await importCollection(db, target.id)
+        if (!r.canceled) {
+          setResult({ fileName: r.fileName, cards: r.imported, copies: r.copies, failed: r.failed })
+          onImported?.()
+        }
+      }
     } catch (e) {
-      console.warn('Deck import failed', e)
+      console.warn('Import failed', e)
       setError(e instanceof Error ? e.message : 'Something went wrong.')
     } finally {
       setBusy(false)
     }
   }
 
+  // Right after a new deck or binder: straight to the file picker (once the sheet is up).
+  useEffect(() => {
+    if (!autoPick || !key) return
+    const frame = requestAnimationFrame(() => {
+      pick()
+    })
+    return () => cancelAnimationFrame(frame)
+    // Once per opening, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPick, key])
+
+  const sources = SOURCES[target?.kind ?? 'deck']
+
   return (
-    <Sheet visible={deck != null} onClose={busy ? () => {} : onClose}>
-      <SheetHeader title="Import decklist" onClose={busy ? undefined : onClose} />
+    <Sheet visible={target != null} onClose={busy ? () => {} : onClose}>
+      <SheetHeader title={target?.kind === 'binder' ? 'Import cards' : 'Import decklist'} onClose={busy ? undefined : onClose} />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.body} contentContainerStyle={styles.bodyContent} bounces={false}>
         {result ? (
           <View>
@@ -63,7 +108,7 @@ export function ImportSheet({ deckId, onClose }: { deckId: string | null; onClos
               </View>
               <View style={styles.doneText}>
                 <Text style={styles.doneTitle}>
-                  {plural(result.copies, 'card')} added to {deck?.name}
+                  {plural(result.copies, 'card')} added to {name}
                 </Text>
                 <Text style={styles.hint}>
                   {result.cards} different {result.cards === 1 ? 'card' : 'cards'}
@@ -87,13 +132,20 @@ export function ImportSheet({ deckId, onClose }: { deckId: string | null; onClos
           </View>
         ) : (
           <View>
-            <Text style={styles.intro}>
-              Cards are added to <Text style={styles.strong}>{deck?.name}</Text>, on top of what it holds. Sideboard and maybe
-              sections go to those parts of the deck, and the commander section sets the deck&apos;s commander.
-            </Text>
+            {target?.kind === 'binder' ? (
+              <Text style={styles.intro}>
+                Cards are added to <Text style={styles.strong}>{name}</Text>. Copies of a printing it already holds (same finish,
+                condition and language) add up.
+              </Text>
+            ) : (
+              <Text style={styles.intro}>
+                Cards are added to <Text style={styles.strong}>{name}</Text>, on top of what it holds. Sideboard and maybe
+                sections go to those parts of the deck, and the commander section sets the deck&apos;s commander.
+              </Text>
+            )}
             <SectionLabel style={styles.label}>Import from</SectionLabel>
             <View style={styles.sources} accessibilityRole="radiogroup" accessibilityLabel="Import from">
-              {SOURCES.map((s) => {
+              {sources.map((s) => {
                 const on = s.value === source
                 return (
                   <Pressable

@@ -3,6 +3,7 @@ import { File } from 'expo-file-system'
 import type { SQLiteDatabase } from 'expo-sqlite'
 
 import { upsertCard } from '@/db/cards'
+import type { Finish } from '@/db/collection'
 import { getCardsByIdentifiers, type CardIdentifier, type ScryfallCard } from '@/db/scryfall'
 import { commanderStatus } from '@/rules/commander'
 import { addDeckCards, cardInfoOf, type Board } from '@/utils/deck-store'
@@ -10,12 +11,14 @@ import { addDeckCards, cardInfoOf, type Board } from '@/utils/deck-store'
 // Decklists exported as text. Manabox writes "// SECTION" headers, then one "N Card Name" line per
 // card, sometimes with "(SET) 123" after the name and "*F*" for foils.
 
-type DeckListRow = {
+export type DeckListRow = {
   line: number
   quantity: number
   name: string
   set: string | null
   number: string | null
+  // "*F*" after the card: foil; "*E*": etched.
+  finish: Finish
   board: Board
   commander: boolean
 }
@@ -29,11 +32,14 @@ const SECTION_BOARD: Record<string, Board> = {
   considering: 'maybe',
 }
 
-function parseDeckList(text: string) {
+// Also reads a collection exported as text ("N Card Name (SET) 123", no sections). The tokens
+// section (Manabox lists the tokens a deck makes) is left out.
+export function parseDeckList(text: string) {
   const rows: DeckListRow[] = []
   const skipped: { line: number; text: string }[] = []
   let board: Board = 'main'
   let commander = false
+  let tokens = false
   text.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.trim()
     // A blank line ends the commander section (Manabox lists the commander, a blank line, then the deck).
@@ -46,14 +52,18 @@ function parseDeckList(text: string) {
       const name = (section?.[1] ?? line.replace(/^\/\/\s*/, '')).trim().toLowerCase()
       board = SECTION_BOARD[name] ?? 'main'
       commander = name === 'commander' || name === 'commanders'
+      tokens = name === 'tokens' || name === 'token'
       return
     }
-    const m = /^(\d+)x?\s+(.+?)(?:\s+\(([A-Za-z0-9]{2,6})\)\s+(\S+))?(?:\s+\*[A-Z]+\*)*$/.exec(line)
+    if (tokens) return
+    const m = /^(\d+)x?\s+(.+?)(?:\s+\(([A-Za-z0-9]{2,6})\)\s+(\S+))?((?:\s+\*[A-Z]+\*)*)$/.exec(line)
     if (!m) {
       skipped.push({ line: i + 1, text: line })
       return
     }
-    rows.push({ line: i + 1, quantity: Number(m[1]), name: m[2].trim(), set: m[3]?.toLowerCase() ?? null, number: m[4] ?? null, board, commander })
+    const marks = m[5] ?? ''
+    const finish: Finish = marks.includes('*E*') ? 'etched' : marks.includes('*F*') ? 'foil' : 'nonfoil'
+    rows.push({ line: i + 1, quantity: Number(m[1]), name: m[2].trim(), set: m[3]?.toLowerCase() ?? null, number: m[4] ?? null, finish, board, commander })
   })
   return { rows, skipped }
 }

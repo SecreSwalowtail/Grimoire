@@ -1,19 +1,48 @@
-import { router, useLocalSearchParams } from 'expo-router'
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useCallback, useState } from 'react'
+import { BackHandler, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { GestureDetector } from 'react-native-gesture-handler'
+import Animated, { useAnimatedRef, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { HoldHint } from '@/components/binder/parts'
+import {
+  dragGesture,
+  DragGhost,
+  DragScrollView,
+  DropZone,
+  EDIT_BAR,
+  EditBar,
+  EdgeZone,
+  TrashBubble,
+  useCardDrag,
+  type DropTarget,
+} from '@/components/deck/card-drag'
 import { DeckRow } from '@/components/decks/deck-row'
 import { FolderIcon } from '@/components/decks/parts'
 import { useDeckSheets } from '@/components/decks/use-deck-sheets'
-import { Icon, type IconName } from '@/components/icon'
+import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
 import { withAlpha } from '@/utils/color'
-import { deckValue, deleteDecks, folderDecks, folderHex, useDeckStore } from '@/utils/deck-store'
+import {
+  deckCover,
+  deckValue,
+  deleteDecks,
+  folderDecks,
+  folderHex,
+  mergeDecks,
+  moveDecks,
+  useDeckStore,
+  type Undo,
+} from '@/utils/deck-store'
 import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 
-// One folder's decks. Swipe a deck left for Move / Delete (with Undo).
+// One folder's decks. Hold a deck to edit: it's selected; tap others to select them too, and hold
+// any selected one to pick up the whole selection (more than five travel as a bundle). Drop them in
+// the trash bubble to delete them, at the screen's edges (sides, top, or the very bottom past the
+// trash) to take them out of the folder, or on another deck to merge them into it. The bar at the
+// bottom has Undo and Done.
 export default function FolderScreen() {
   const money = useMoney()
   const insets = useSafeAreaInsets()
@@ -21,14 +50,99 @@ export default function FolderScreen() {
   const store = useDeckStore()
   const { folders, decks } = store
   const folder = folders.find((f) => f.id === folderId)
-  // Deleting this folder from its own menu goes back to Decks, which shows the Undo toast.
-  const deckSheets = useDeckSheets({ onFolderDeleted: () => router.back() })
+  const [editing, setEditing] = useState(false)
+  // `deck:<id>`, the same keys as the decks' drop targets.
+  const [selected, setSelected] = useState<string[]>([])
+  // This edit session's changes, latest last, for Undo, and what the last one did.
+  const [undos, setUndos] = useState<Undo[]>([])
+  const [note, setNote] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  // While editing, changes land in the edit bar's Undo; deleting this folder from its own menu goes
+  // back to Decks, which shows the Undo toast.
+  const changed = (what: string, undo: Undo) => {
+    setUndos((list) => [...list, undo])
+    setNote(what)
+    setSelected([])
+  }
+  const deckSheets = useDeckSheets({ onFolderDeleted: () => router.back(), onUndoable: editing ? changed : undefined })
+
+  const scrollRef = useAnimatedRef<Animated.ScrollView>()
+  const scrollY = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y)
+  })
+  // The dragged decks aren't targets. Wide bands at the screen's edges take decks out of the folder:
+  // the sides (clear of the middle of the rows, where a drop merges), the top bar and a little more,
+  // and the edit bar at the bottom (the trash still wins near it).
+  const drag = useCardDrag({ scrollRef, scrollY, skip: selected, edges: { side: 64, top: insets.top + 100, bottom: EDIT_BAR } })
+  // Taking decks into the top third of the screen scrolls back up.
+  const topZone = useWindowDimensions().height / 3
+
+  const stopEditing = () => {
+    setEditing(false)
+    setSelected([])
+    setUndos([])
+    setNote(null)
+  }
+  // Android's back button leaves edit mode first.
+  useFocusEffect(
+    useCallback(() => {
+      if (!editing) return
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setEditing(false)
+        setSelected([])
+        setUndos([])
+        setNote(null)
+        return true
+      })
+      return () => sub.remove()
+    }, [editing]),
+  )
 
   if (!folder) return <View style={styles.root}>{deckSheets.sheets}</View>
 
   const hex = folderHex(folder.color)
   const inside = folderDecks(decks, folder, store)
   const value = money.eur(inside.reduce((sum, d) => sum + deckValue(d, store), 0))
+  // Decks deleted or moved meanwhile drop out of the selection.
+  const picked = inside.filter((d) => selected.includes(`deck:${d.id}`))
+  const ids = picked.map((d) => d.id)
+  const what = (n: number) => (n === 1 ? picked[0]?.name ?? 'deck' : plural(n, 'deck'))
+
+  const undo = () => {
+    const last = undos[undos.length - 1]
+    if (!last) return
+    last()
+    setUndos(undos.slice(0, -1))
+    setSelected([])
+    setNote(null)
+  }
+  const startEditing = (key: string) => {
+    setEditing(true)
+    setSelected([key])
+    setNote(null)
+  }
+  const toggle = (key: string) => {
+    setNote(null)
+    setSelected(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key])
+  }
+  const onDrop = (target: DropTarget | null) => {
+    setDragging(false)
+    if (target == null || ids.length === 0) return
+    if (target === 'trash') {
+      changed(`Deleted ${what(ids.length)}`, deleteDecks(ids))
+    } else if (target === 'out') {
+      changed(`Took ${what(ids.length)} out of ${folder.name}`, moveDecks(ids, null))
+    } else if (target.startsWith('deck:')) {
+      const into = inside.find((d) => d.id === target.slice('deck:'.length))
+      if (into) changed(`Merged ${what(ids.length)} into ${into.name}`, mergeDecks(ids, into.id))
+    }
+  }
+  // Only selected decks drag, and only in edit mode (holding outside it is the row's long press).
+  const gestureFor = (key: string) =>
+    dragGesture(drag, key, () => setDragging(true), onDrop, topZone).enabled(editing && selected.includes(key))
+
+  const ghost = picked.map((d) => ({ key: `deck:${d.id}`, name: d.name, image: deckCover(d.id, store), quantity: 1 }))
 
   return (
     <View style={styles.root}>
@@ -36,30 +150,39 @@ export default function FolderScreen() {
         pointerEvents="none"
         style={[styles.glow, { experimental_backgroundImage: `radial-gradient(closest-side, ${withAlpha(hex, 0.2)}, rgba(0,0,0,0))` }]}
       />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
+      <DragScrollView
+        showsVerticalScrollIndicator={false}
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }, editing && styles.contentEditing]}
+        scrollEnabled={!dragging}
+      >
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.back} onPress={() => router.back()} accessibilityRole="button">
+          <TouchableOpacity style={styles.back} onPress={() => (editing ? stopEditing() : router.back())} accessibilityRole="button">
             <Icon name={{ ios: 'chevron.left', android: 'chevron_left' }} size={22} tintColor={Colors.text} />
             <Text style={styles.backLabel}>Decks</Text>
           </TouchableOpacity>
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => deckSheets.openFolderEdit(folder.id)}
-              accessibilityRole="button"
-              accessibilityLabel="Folder options"
-            >
-              <Icon name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.text} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.add}
-              onPress={() => deckSheets.openNew({ kind: 'deck', folderId: folder.id })}
-              accessibilityRole="button"
-              accessibilityLabel={`New deck in ${folder.name}`}
-            >
-              <Icon name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
-            </TouchableOpacity>
-          </View>
+          {!editing && (
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => deckSheets.openFolderEdit(folder.id)}
+                accessibilityRole="button"
+                accessibilityLabel="Folder options"
+              >
+                <Icon name={{ ios: 'ellipsis', android: 'more_horiz' }} size={20} tintColor={Colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.add}
+                onPress={() => deckSheets.openNew({ kind: 'deck', folderId: folder.id })}
+                accessibilityRole="button"
+                accessibilityLabel={`New deck in ${folder.name}`}
+              >
+                <Icon name={{ ios: 'plus', android: 'add' }} size={22} tintColor={Colors.onGold} />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         <View style={styles.header}>
@@ -75,81 +198,62 @@ export default function FolderScreen() {
         </View>
 
         <View style={styles.list}>
-          {inside.map((d) => (
-            <ReanimatedSwipeable
-              key={d.id}
-              friction={1.5}
-              rightThreshold={40}
-              overshootRight={false}
-              containerStyle={styles.swipe}
-              renderRightActions={(_progress, _translation, swipeable) => (
-                <View style={styles.swipeActions}>
-                  <SwipeAction
-                    label="Move"
-                    icon={{ ios: 'folder', android: 'drive_file_move' }}
-                    color={Colors.goldLight}
-                    background={Colors.selected}
-                    onPress={() => {
-                      swipeable.close()
-                      deckSheets.openMove([d.id])
-                    }}
-                  />
-                  <SwipeAction
-                    label="Delete"
-                    icon={{ ios: 'trash', android: 'delete' }}
-                    color="#FFF4EC"
-                    background="#B5412A"
-                    onPress={() => deckSheets.showUndo(`${d.name} deleted`, deleteDecks([d.id]))}
-                  />
-                </View>
-              )}
-            >
-              <View style={styles.rowFront}>
-                <DeckRow deck={d} last />
-              </View>
-            </ReanimatedSwipeable>
-          ))}
+          {!editing && inside.length > 0 && <HoldHint label="Hold a deck to select, delete, merge or take it out" />}
+          {inside.map((d, i) => {
+            const key: DropTarget = `deck:${d.id}`
+            return (
+              <DropZone key={d.id} drag={drag} id={key}>
+                <GestureDetector gesture={gestureFor(key)}>
+                  {/* A plain view for the gesture to attach to (DeckRow takes no ref). */}
+                  <View collapsable={false}>
+                    <DeckRow
+                      deck={d}
+                      last={i === inside.length - 1}
+                      onOptions={editing ? undefined : () => deckSheets.openDeckOptions(d.id)}
+                      edit={editing ? { selected: selected.includes(key), onToggle: () => toggle(key) } : undefined}
+                      onHold={() => startEditing(key)}
+                    />
+                  </View>
+                </GestureDetector>
+              </DropZone>
+            )
+          })}
         </View>
 
-        <TouchableOpacity
-          style={styles.addDeck}
-          onPress={() => deckSheets.openNew({ kind: 'deck', folderId: folder.id })}
-          accessibilityRole="button"
-        >
-          <Icon name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.goldLight} />
-          <Text style={styles.addDeckLabel} numberOfLines={1}>Add a deck to {folder.name}</Text>
-        </TouchableOpacity>
-        {inside.length > 0 && (
-          <View style={styles.hint}>
-            <Icon name={{ ios: 'arrow.left', android: 'arrow_back' }} size={16} tintColor={Colors.textMuted} />
-            <Text style={styles.hintText}>Swipe a deck left to move or delete it</Text>
-          </View>
+        {!editing && (
+          <TouchableOpacity
+            style={styles.addDeck}
+            onPress={() => deckSheets.openNew({ kind: 'deck', folderId: folder.id })}
+            accessibilityRole="button"
+          >
+            <Icon name={{ ios: 'plus', android: 'add' }} size={18} tintColor={Colors.goldLight} />
+            <Text style={styles.addDeckLabel} numberOfLines={1}>Add a deck to {folder.name}</Text>
+          </TouchableOpacity>
         )}
-      </ScrollView>
+      </DragScrollView>
+
+      {editing && (
+        <>
+          <EditBar
+            canUndo={undos.length > 0}
+            onUndo={undo}
+            onDone={stopEditing}
+            selected={picked.length}
+            note={
+              note ??
+              (picked.length
+                ? `${picked.length} selected · hold one to drag them all`
+                : 'Tap decks to select, then hold one to drag')
+            }
+          />
+          <TrashBubble drag={drag} bottom={EDIT_BAR + 20} />
+          <EdgeZone drag={drag} label={`Take out of ${folder.name}`} />
+        </>
+      )}
+      <DragGhost drag={drag} lines={ghost} label={plural(ghost.length, 'deck')} />
 
       {deckSheets.sheets}
     </View>
-  )
-}
-
-function SwipeAction({
-  label,
-  icon,
-  color,
-  background,
-  onPress,
-}: {
-  label: string
-  icon: IconName
-  color: string
-  background: string
-  onPress: () => void
-}) {
-  return (
-    <TouchableOpacity style={[styles.swipeAction, { backgroundColor: background }]} onPress={onPress} accessibilityRole="button">
-      <Icon name={icon} size={20} tintColor={color} />
-      <Text style={[styles.swipeLabel, { color }]}>{label}</Text>
-    </TouchableOpacity>
   )
 }
 
@@ -169,10 +273,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 96,
   },
+  // Room for the edit bar and the trash above it.
+  contentEditing: {
+    paddingBottom: EDIT_BAR + 120,
+  },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // The buttons' height, so the header doesn't jump when they hide in edit mode.
+    minHeight: 44,
   },
   back: {
     height: 44,
@@ -239,31 +349,8 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     color: Colors.textSecondary,
   },
-  // Rows run edge to edge so the swipe actions reach the screen's side.
   list: {
     marginTop: 22,
-    marginHorizontal: -20,
-  },
-  swipe: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(237,230,214,0.07)',
-  },
-  rowFront: {
-    paddingHorizontal: 20,
-    backgroundColor: Colors.background,
-  },
-  swipeActions: {
-    flexDirection: 'row',
-  },
-  swipeAction: {
-    width: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  swipeLabel: {
-    fontSize: 12,
-    fontFamily: Fonts.extraBold,
   },
   addDeck: {
     marginTop: 16,
@@ -284,17 +371,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: Fonts.extraBold,
     color: Colors.goldLight,
-  },
-  hint: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  hintText: {
-    fontSize: 13,
-    fontFamily: Fonts.regular,
-    color: Colors.textMuted,
   },
 })

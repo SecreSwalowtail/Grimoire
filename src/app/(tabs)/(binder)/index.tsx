@@ -10,7 +10,7 @@ import { BinderCover, COVER_BOX } from '@/components/binder/binder-cover'
 import { MergeBindersDialog, RemoveBinderDialog } from '@/components/binder/binder-dialogs'
 import { BinderSheet } from '@/components/binder/binder-sheet'
 import { CardGrid, searchAndSort } from '@/components/binder/card-grid'
-import { SearchField, SortButton, ValueSummary } from '@/components/binder/parts'
+import { HoldHint, SearchField, SortButton, ValueSummary } from '@/components/binder/parts'
 import { QuickLook } from '@/components/binder/quick-look'
 import { ReorderGrid } from '@/components/binder/reorder-grid'
 import { summarize, useCollection } from '@/components/binder/use-collection'
@@ -52,7 +52,7 @@ export default function BindersScreen() {
   // Two columns between 20 px margins; the binder drawing scales to fit.
   const cellWidth = (useWindowDimensions().width - 40 - COLUMN_GAP) / 2
   const coverScale = cellWidth / COVER_BOX.width
-  const { binders, entries, weekAgo, loaded, reload } = useCollection()
+  const { binders, entries, oldPrices, loaded, reload } = useCollection()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<BinderSort>('custom')
   const [sortOpen, setSortOpen] = useState(false)
@@ -72,6 +72,16 @@ export default function BindersScreen() {
   const [note, setNote] = useState<string | null>(null)
   // The quick look over search results (tap a card): the cards it goes through and the one tapped.
   const [look, setLook] = useState<{ ids: number[]; openId: number } | null>(null)
+  // The quick look Card detail was opened from: it comes back, on that card, when the screen does.
+  const lookToResume = useRef<{ ids: number[]; openId: number } | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      const back = lookToResume.current
+      if (!back) return
+      lookToResume.current = null
+      setLook(back)
+    }, [setLook]),
+  )
   // The screen, for the quick look to blur behind it.
   const page = useRef<View>(null)
   // Height of a binder with its text, which depends on the font size: the tallest one measured.
@@ -117,8 +127,8 @@ export default function BindersScreen() {
     if (list) list.push(e)
     else byBinder.set(e.binder_id, [e])
   }
-  const total = summarize(entries, weekAgo)
-  const rows: Row[] = binders.map((binder) => ({ id: binder.id, binder, ...summarize(byBinder.get(binder.id) ?? [], weekAgo) }))
+  const total = summarize(entries, oldPrices)
+  const rows: Row[] = binders.map((binder) => ({ id: binder.id, binder, ...summarize(byBinder.get(binder.id) ?? [], oldPrices) }))
   // While editing, binders show in your order: that's the order dragging changes.
   const sorted =
     editing ? rows
@@ -199,14 +209,16 @@ export default function BindersScreen() {
         )}
         <View style={styles.itemText}>
           <Text style={[styles.name, isSelected && styles.nameSelected]} numberOfLines={1}>{binder.name}</Text>
-          <View style={styles.itemValueRow}>
-            <Text style={styles.itemValue}>{money.eur(value)}</Text>
-            {change != null && (
-              <Text style={[styles.itemChange, { color: change >= 0 ? Colors.positive : Colors.negative }]}>
-                {change >= 0 ? '▲' : '▼'} {money.eur(Math.abs(change))}
-              </Text>
-            )}
-          </View>
+          {/* Value, then its change under it: side by side they ran into the next binder in
+              longer currencies. */}
+          <Text style={styles.itemValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {money.eur(value)}
+          </Text>
+          {change != null && (
+            <Text style={[styles.itemChange, { color: change >= 0 ? Colors.positive : Colors.negative }]} numberOfLines={1}>
+              {change >= 0 ? '▲' : '▼'} {money.eur(Math.abs(change))}
+            </Text>
+          )}
           <Text style={styles.count}>{plural(cards, 'card')}</Text>
         </View>
       </Pressable>
@@ -293,6 +305,7 @@ export default function BindersScreen() {
           contentContainerStyle={[styles.content, editing && { paddingBottom: EDIT_BAR + 24 }]}
           scrollEnabled={!dragging}
         >
+          {!editing && binders.length > 0 && <HoldHint label="Hold a binder to edit, reorder or merge" />}
           <ReorderGrid
             items={sorted}
             columns={2}
@@ -367,9 +380,12 @@ export default function BindersScreen() {
         openId={look?.openId ?? null}
         title="Search"
         binders={binders}
-        weekAgo={weekAgo}
+        oldPrices={oldPrices}
         blurTarget={page}
         onClose={() => setLook(null)}
+        onDetails={(entryId) => {
+          if (look) lookToResume.current = { ...look, openId: entryId }
+        }}
         onChanged={reload}
       />
       <BinderSheet visible={newOpen} onClose={() => setNewOpen(false)} />
@@ -491,11 +507,6 @@ const styles = StyleSheet.create({
   },
   nameSelected: {
     color: Colors.goldLight,
-  },
-  itemValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   itemValue: {
     fontSize: 15,

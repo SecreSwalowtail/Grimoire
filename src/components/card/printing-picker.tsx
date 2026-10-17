@@ -8,6 +8,7 @@ import { Colors, Fonts } from '@/constants/theme'
 import { getSavedCard } from '@/db/cards'
 import { cachedCard, cardThumb, getCard, type ScryfallCard } from '@/db/scryfall'
 import { finishesText, printingLabel } from '@/rules/printings'
+import { cardEuros } from '@/utils/card-prices'
 import { useMoney } from '@/utils/money'
 import { usePrintings } from '@/utils/use-card-detail'
 
@@ -96,7 +97,8 @@ export function PrintingPicker({
               const on = p.id === selectedId
               const price = eur(p.prices.eur)
               const foil = eur(p.prices.eur_foil)
-              const main = price ?? foil
+              // Cardmarket's, else TCGplayer's (see cardEuros).
+              const main = price ?? foil ?? cardEuros(p)
               const year = p.released_at?.slice(0, 4)
               return (
                 <Pressable

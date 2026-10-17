@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from 'react'
 
 import { getDecksAndFolders, saveDeckChanges, type DeckSnapshot } from '@/db/decks'
 import { cardImage, type ScryfallCard } from '@/db/scryfall'
+import { cardEuros, euros } from '@/utils/card-prices'
 import { createListeners } from '@/utils/listeners'
 
 // Decks, folders and the cards in each deck, saved in the app's database (tables `deck_folders`,
@@ -110,8 +111,9 @@ export function cardInfoOf(card: ScryfallCard): CardInfo {
     name: card.name,
     typeLine: card.type_line ?? null,
     cmc: card.cmc ?? null,
-    priceEur: card.prices.eur == null ? null : Number(card.prices.eur),
-    priceEurFoil: card.prices.eur_foil == null ? null : Number(card.prices.eur_foil),
+    // Cardmarket's, else TCGplayer's in euros (see euros).
+    priceEur: cardEuros(card),
+    priceEurFoil: cardEuros(card, true),
     image: cardImage(card),
   }
 }
@@ -166,8 +168,8 @@ export async function loadDeckStore(database: SQLiteDatabase) {
       name: c.name,
       typeLine: c.type_line,
       cmc: c.cmc,
-      priceEur: c.price_eur,
-      priceEurFoil: c.price_eur_foil,
+      priceEur: euros({ eur: c.price_eur, eurFoil: c.price_eur_foil, usd: c.price_usd, usdFoil: c.price_usd_foil }),
+      priceEurFoil: euros({ eur: c.price_eur, eurFoil: c.price_eur_foil, usd: c.price_usd, usdFoil: c.price_usd_foil }, true),
       image: c.image_uri,
     }
   }
@@ -427,6 +429,34 @@ export function deleteDecks(ids: string[]): Undo {
   }
 }
 
+// Puts the cards of `fromIds` into `intoId` (copies of a card in the same part of the deck add up;
+// their commander marks stay behind) and deletes those decks. The undo brings them back and puts the
+// deck merged into back as it was.
+export function mergeDecks(fromIds: string[], intoId: string): Undo {
+  const ids = fromIds.filter((id) => id !== intoId && state.decks.some((d) => d.id === id))
+  if (!ids.length || !state.decks.some((d) => d.id === intoId)) return () => {}
+  const restoreTarget = restoreDeck(intoId)
+  const cards = [...state.cards]
+  const index = new Map(cards.map((c, i) => [c.id, i]))
+  for (const c of state.cards) {
+    if (!ids.includes(c.deckId)) continue
+    const id = cardKey(intoId, c.cardId, c.board)
+    const i = index.get(id)
+    if (i != null) {
+      cards[i] = { ...cards[i], quantity: cards[i].quantity + c.quantity }
+    } else {
+      index.set(id, cards.length)
+      cards.push({ id, deckId: intoId, cardId: c.cardId, board: c.board, quantity: c.quantity })
+    }
+  }
+  set({ ...state, cards })
+  const undoDelete = deleteDecks(ids)
+  return () => {
+    undoDelete()
+    restoreTarget()
+  }
+}
+
 // `withDecks`: delete the folders' decks too, else move them out of folders.
 export function deleteFolders(ids: string[], withDecks: boolean): Undo {
   const removedFolders = state.folders.map((f, i) => ({ f, i })).filter(({ f }) => ids.includes(f.id))
@@ -451,6 +481,15 @@ export function deleteFolders(ids: string[], withDecks: boolean): Undo {
     }
     set({ ...state, folders, decks, cards: [...state.cards, ...removedCards] })
   }
+}
+
+// What a deck shows when dragged: its most valuable card (the maybeboard left out).
+export function deckCover(deckId: string, { cards, info }: DeckData) {
+  const price = (id: string) => info[id]?.priceEur ?? info[id]?.priceEurFoil ?? 0
+  const best = cards
+    .filter((c) => c.deckId === deckId && c.board !== 'maybe')
+    .sort((a, b) => price(b.cardId) - price(a.cardId))[0]
+  return best ? info[best.cardId]?.image ?? null : null
 }
 
 // Everything the deck numbers below read. Pass the snapshot from useDeckStore(), so a screen

@@ -23,11 +23,12 @@ import { getBinders, type Binder } from '@/db/binders'
 import { addToCollection, removeOneCopy, type Condition } from '@/db/collection'
 import { cardImage, getCardBySetNumber, getSets, type ScryfallCard } from '@/db/scryfall'
 import { onCapturePress, setScanMode, useScanMode } from '@/utils/capture-button'
+import { cardEuros } from '@/utils/card-prices'
 import { NormalizedRect, processCardFrame, ScanState, ScanStatus } from '@/utils/card-scan'
 import { ocrRows, parseCollectorLine } from '@/utils/collector-line'
 import { addCardsToDecks, cardInfoOf, getDeckStore, useDeckStore, type Undo } from '@/utils/deck-store'
 import { getScanTarget, useScanTarget, type ScanTarget } from '@/utils/scan-target'
-import { getSettings } from '@/utils/settings'
+import { getSettings, useSettings } from '@/utils/settings'
 
 // Where the set code + collector number sit on a card, as fractions of the card: the bottom-left
 // corner, with room around it (it reaches past the card's edges) because the card found in the
@@ -104,9 +105,10 @@ export default function ScanScreen() {
       .catch((e) => console.warn('Failed to load the set list', e))
   }, [isFocused])
 
-  // Both 4:3 so the analysed frames and the photo show the same area of the sensor. 12 MP: smaller
-  // photos load faster but read the small collector text worse.
-  const photoOutput = usePhotoOutput({ targetResolution: CommonResolutions.UHD_4_3 })
+  // Both 4:3 so the analysed frames and the photo show the same area of the sensor. 12 MP by
+  // default; 5 MP (Settings) loads faster but reads the small collector text worse.
+  const scanPhoto = useSettings().scanPhoto
+  const photoOutput = usePhotoOutput({ targetResolution: scanPhoto === '5mp' ? CommonResolutions.QHD_4_3 : CommonResolutions.UHD_4_3 })
 
   // Card frame corners: view coordinates -> camera coordinates, once the preview is running.
   useEffect(() => {
@@ -205,7 +207,7 @@ export default function ScanScreen() {
         name: found.name,
         set: found.set.toUpperCase(),
         rarity: found.rarity,
-        price: found.prices.eur,
+        price: cardEuros(found),
         image: cardImage(found),
       })
     } catch (e) {

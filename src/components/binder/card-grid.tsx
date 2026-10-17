@@ -69,12 +69,15 @@ const rowsOf = (cards: CollectionEntry[], prefix: string): Item[] =>
 export function CardGrid({
   entries,
   empty,
+  header,
   edit,
   groupBy = 'none',
   onOpen,
 }: {
   entries: CollectionEntry[]
   empty: ReactElement | null
+  // Above the cards (e.g. a hint).
+  header?: ReactElement | null
   edit?: GridEdit
   groupBy?: GroupBy
   onOpen?: (entry: CollectionEntry, shown: number[]) => void
@@ -184,6 +187,7 @@ export function CardGrid({
           // Keep fewer off-screen rows mounted (default is 10 screens each way).
           windowSize={5}
           ListEmptyComponent={empty}
+          ListHeaderComponent={header}
           contentContainerStyle={[styles.content, editing && styles.contentEditing]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"

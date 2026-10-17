@@ -5,37 +5,49 @@ import { useCallback, useRef, useState } from 'react'
 import { getBinders, type Binder } from '@/db/binders'
 import { entryPrice, getCollection, getOwnedPricesDaysAgo, type CollectionEntry } from '@/db/collection'
 import { collectionVersion } from '@/db/version'
+import { oldPricesVersion, saveOldPrices } from '@/utils/remote-prices'
+import { PERIOD_DAYS, useSettings } from '@/utils/settings'
 
 type OldPrice = { price_eur: number | null; price_eur_foil: number | null }
 
-// Everything owned, the binders, and owned cards' prices a week ago. Reloads when the screen is
-// shown, but only if something changed meanwhile (cards scanned, added or edited elsewhere, or an
-// owned card's price refreshed); coming back from a card without changes costs nothing.
+// Everything owned, the binders, and owned cards' prices a week, month or year ago (Settings).
+// Reloads when the screen is shown, but only if something changed meanwhile (cards scanned, added
+// or edited elsewhere, an owned card's price refreshed, or the period); coming back from a card
+// without changes costs nothing.
 export function useCollection() {
   const db = useSQLiteContext()
+  const days = PERIOD_DAYS[useSettings().priceChangePeriod]
   const [binders, setBinders] = useState<Binder[]>([])
   const [entries, setEntries] = useState<CollectionEntry[]>([])
-  const [weekAgo, setWeekAgo] = useState<Map<string, OldPrice>>(() => new Map())
+  const [oldPrices, setOldPrices] = useState<Map<string, OldPrice>>(() => new Map())
   const [loaded, setLoaded] = useState(false)
 
   // The collection version this screen last loaded (see db/version.ts).
   const loadedVersion = useRef(-1)
+  const loadedDays = useRef(0)
 
   const load = useCallback(async () => {
     const version = collectionVersion()
-    const [b, collection, old] = await Promise.all([getBinders(db), getCollection(db), getOwnedPricesDaysAgo(db, 7)])
+    const saved = oldPricesVersion()
+    const [b, collection, old] = await Promise.all([getBinders(db), getCollection(db), getOwnedPricesDaysAgo(db, days)])
     setBinders(b)
     setEntries((previous) => keepUnchanged(previous, collection))
-    setWeekAgo(new Map(old.map((p) => [p.card_id, p])))
+    setOldPrices(new Map(old.map((p) => [p.card_id, p])))
     setLoaded(true)
     loadedVersion.current = version
-  }, [db])
+    loadedDays.current = days
+    // Then the published old prices the phone doesn't have yet; read again if that added some.
+    await saveOldPrices(db)
+    if (oldPricesVersion() === saved) return
+    const again = await getOwnedPricesDaysAgo(db, days)
+    setOldPrices(new Map(again.map((p) => [p.card_id, p])))
+  }, [db, days])
 
   useFocusEffect(
     useCallback(() => {
-      if (loadedVersion.current === collectionVersion()) return
+      if (loadedVersion.current === collectionVersion() && loadedDays.current === days) return
       load().catch((e) => console.warn('Failed to load binder', e))
-    }, [load]),
+    }, [load, days]),
   )
 
   // For changes made on this screen (it only reloads by itself when shown again).
@@ -43,12 +55,12 @@ export function useCollection() {
     load().catch((e) => console.warn('Failed to load binder', e))
   }, [load])
 
-  return { binders, entries, weekAgo, loaded, reload }
+  return { binders, entries, oldPrices, loaded, reload }
 }
 
-// Value, card count and change over the week of some entries. Change only counts cards we have a
-// week-old price for; null until a week of history exists.
-export function summarize(entries: CollectionEntry[], weekAgo: Map<string, OldPrice>) {
+// Value, card count and change over the period of some entries. Change only counts cards we have a
+// price that old for; null until that much history exists.
+export function summarize(entries: CollectionEntry[], oldPrices: Map<string, OldPrice>) {
   let value = 0
   let cards = 0
   let change: number | null = null
@@ -56,7 +68,7 @@ export function summarize(entries: CollectionEntry[], weekAgo: Map<string, OldPr
     const now = entryPrice(e)
     value += (now ?? 0) * e.quantity
     cards += e.quantity
-    const before = weekAgo.get(e.card_id)
+    const before = oldPrices.get(e.card_id)
     if (!before || now == null) continue
     const then = entryPrice({ finish: e.finish, ...before })
     if (then == null) continue

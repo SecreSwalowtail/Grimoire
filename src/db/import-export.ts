@@ -5,7 +5,9 @@ import type { SQLiteDatabase } from 'expo-sqlite'
 
 import { addToCollection, getCollection, type Condition, type Finish } from '@/db/collection'
 import { parseCsv, toCsv } from '@/db/csv'
+import { parseDeckList } from '@/db/deck-import'
 import { getCardsByIdentifiers, type CardIdentifier, type ScryfallCard } from '@/db/scryfall'
+import { toEurFrom } from '@/utils/money'
 
 // CSV columns follow Moxfield's collection export, so files move between apps.
 const HEADER = ['Count', 'Name', 'Edition', 'Collector Number', 'Foil', 'Condition', 'Language']
@@ -61,30 +63,45 @@ type ImportRow = {
   name: string
   set: string
   number: string
+  // The exact printing, when the file names it (Manabox's CSV does).
+  scryfallId: string
   finish: Finish
   condition: Condition
   language: string
+  // Per copy, in euros (null: not given).
+  paid: number | null
 }
 
-type ImportResult = {
+export type ImportResult = {
   canceled: boolean
+  fileName: string | null
   imported: number // rows added (quantities merge into existing entries)
+  copies: number
   failed: { line: number; name: string; reason: string }[]
 }
 
-// Lets the user pick a CSV, looks every row up on Scryfall, then adds all matches in one transaction.
-export async function importCollection(db: SQLiteDatabase): Promise<ImportResult> {
+// Lets the user pick a collection file (a CSV, or a text list: "N Card Name (SET) 123 *F*", as
+// Manabox exports both), looks every row up on Scryfall, then adds all matches in one transaction,
+// to `binderId` (the first binder when left out).
+export async function importCollection(db: SQLiteDatabase, binderId?: string): Promise<ImportResult> {
   const picked = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true })
-  if (picked.canceled) return { canceled: true, imported: 0, failed: [] }
+  if (picked.canceled) return { canceled: true, fileName: null, imported: 0, copies: 0, failed: [] }
+  const asset = picked.assets[0]
 
-  const text = await new File(picked.assets[0].uri).text()
-  const { rows, failed } = readRows(text)
+  const text = await new File(asset.uri).text()
+  const { rows, failed } = looksLikeCsv(text) ? readRows(text) : readTextRows(text)
 
-  // Network first, so the database transaction stays short and all-or-nothing.
-  const identifiers: CardIdentifier[] = rows.map((r) =>
-    r.set && r.number ? { set: r.set, collector_number: r.number } : { name: r.name },
-  )
-  const { found } = await getCardsByIdentifiers(identifiers)
+  // Network first, so the database transaction stays short and all-or-nothing. Each printing once.
+  const identifiers = new Map<string, CardIdentifier>()
+  for (const r of rows) {
+    const id: CardIdentifier = r.scryfallId
+      ? { id: r.scryfallId }
+      : r.set && r.number
+        ? { set: r.set, collector_number: r.number }
+        : { name: r.name }
+    identifiers.set(JSON.stringify(id), id)
+  }
+  const { found } = await getCardsByIdentifiers([...identifiers.values()])
 
   const matches: { row: ImportRow; card: ScryfallCard }[] = []
   for (const row of rows) {
@@ -96,19 +113,26 @@ export async function importCollection(db: SQLiteDatabase): Promise<ImportResult
   await db.withTransactionAsync(async () => {
     for (const { row, card } of matches) {
       await addToCollection(db, card, {
+        binderId,
         quantity: row.quantity,
         finish: row.finish,
         condition: row.condition,
         language: row.language,
+        purchasePrice: row.paid,
       })
     }
   })
 
-  return { canceled: false, imported: matches.length, failed }
+  const copies = matches.reduce((n, m) => n + m.row.quantity, 0)
+  return { canceled: false, fileName: asset.name, imported: matches.length, copies, failed }
 }
 
 // The collection endpoint doesn't promise results in request order, so match them back by value.
 function findCard(cards: ScryfallCard[], row: ImportRow) {
+  if (row.scryfallId) {
+    const exact = cards.find((c) => c.id === row.scryfallId)
+    if (exact) return exact
+  }
   if (row.set && row.number) {
     return cards.find(
       (c) => c.set.toLowerCase() === row.set.toLowerCase() && c.collector_number.toLowerCase() === row.number.toLowerCase(),
@@ -119,15 +143,48 @@ function findCard(cards: ScryfallCard[], row: ImportRow) {
   return cards.find((c) => c.name.toLowerCase() === name || c.name.toLowerCase().split(' // ')[0] === name)
 }
 
-// Column names vary between apps (Moxfield, Manabox, Deckbox, spreadsheets), so accept aliases.
+// A CSV starts with a header naming a card column; a text list starts with a count.
+function looksLikeCsv(text: string) {
+  const first = text.split(/\r?\n/).find((l) => l.trim()) ?? ''
+  const names = (parseCsv(first)[0] ?? []).map((h) => h.trim().toLowerCase())
+  return names.length > 1 && names.some((n) => COLUMN_ALIASES.name.includes(n) || COLUMN_ALIASES.scryfallId.includes(n))
+}
+
+// A text list: one "N Card Name (SET) 123" line per printing, "*F*" / "*E*" for foil / etched.
+function readTextRows(text: string) {
+  const { rows, skipped } = parseDeckList(text)
+  const failed: ImportResult['failed'] = skipped.map((s) => ({ line: s.line, name: s.text, reason: "Couldn't read this line" }))
+  return {
+    rows: rows.map(
+      (r): ImportRow => ({
+        line: r.line,
+        quantity: r.quantity,
+        name: r.name,
+        set: r.set ?? '',
+        number: r.number ?? '',
+        scryfallId: '',
+        finish: r.finish,
+        condition: 'NM',
+        language: 'en',
+        paid: null,
+      }),
+    ),
+    failed,
+  }
+}
+
+// Column names vary between apps (Manabox, Deckbox, spreadsheets…), so accept aliases.
 const COLUMN_ALIASES = {
   quantity: ['count', 'quantity', 'qty', 'amount'],
   name: ['name', 'card name', 'card'],
   set: ['edition', 'set', 'set code', 'edition code'],
   number: ['collector number', 'collector_number', 'card number', 'number', 'cn'],
+  scryfallId: ['scryfall id', 'scryfall_id', 'scryfallid'],
   finish: ['foil', 'finish', 'printing'],
   condition: ['condition'],
   language: ['language', 'lang'],
+  paid: ['purchase price', 'purchase_price', 'price paid', 'paid'],
+  currency: ['purchase price currency', 'currency'],
 }
 
 function readRows(text: string) {
@@ -143,11 +200,14 @@ function readRows(text: string) {
     name: col('name'),
     set: col('set'),
     number: col('number'),
+    scryfallId: col('scryfallId'),
     finish: col('finish'),
     condition: col('condition'),
     language: col('language'),
+    paid: col('paid'),
+    currency: col('currency'),
   }
-  if (idx.name === -1 && (idx.set === -1 || idx.number === -1)) {
+  if (idx.name === -1 && idx.scryfallId === -1 && (idx.set === -1 || idx.number === -1)) {
     throw new Error('Unrecognised CSV: needs a "Name" column, or "Edition" and "Collector Number" columns')
   }
 
@@ -158,8 +218,9 @@ function readRows(text: string) {
     const name = get(idx.name)
     const set = get(idx.set)
     const number = get(idx.number)
+    const scryfallId = get(idx.scryfallId)
     const quantity = idx.quantity === -1 ? 1 : parseInt(get(idx.quantity), 10)
-    if (!name && !(set && number)) {
+    if (!name && !scryfallId && !(set && number)) {
       failed.push({ line, name: '', reason: 'Missing card name' })
       return
     }
@@ -173,9 +234,11 @@ function readRows(text: string) {
       name,
       set,
       number,
+      scryfallId,
       finish: parseFinish(get(idx.finish)),
       condition: parseCondition(get(idx.condition)),
       language: parseLanguage(get(idx.language)),
+      paid: parsePaid(get(idx.paid), get(idx.currency)),
     })
   })
   return { rows, failed }
@@ -186,6 +249,14 @@ function parseFinish(value: string): Finish {
   if (v === 'etched') return 'etched'
   if (v === 'foil' || v === 'true' || v === 'yes' || v === '1') return 'foil'
   return 'nonfoil'
+}
+
+// What a copy cost, in euros (to the cent). Nothing, or 0, is no price.
+function parsePaid(value: string, currency: string) {
+  const amount = Number(value.replace(',', '.'))
+  if (!value || !Number.isFinite(amount) || amount <= 0) return null
+  const eur = toEurFrom(amount, currency)
+  return eur == null ? null : Math.round(eur * 100) / 100
 }
 
 function parseCondition(value: string): Condition {

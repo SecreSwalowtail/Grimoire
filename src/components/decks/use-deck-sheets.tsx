@@ -28,22 +28,28 @@ const useToast = () => useSyncExternalStore(toastChanges.subscribe, () => toast)
 // hand-offs between them (Deck options → Move, Move → New folder, Edit folder → Delete…).
 // Render `sheets` once at the end of the screen. `onUndoable`: takes the changes that can be undone
 // instead of the Undo toast (the Decks screen's edit mode, which has its own Undo).
+// `importInto`: a deck whose Import sheet opens at once, straight to the file picker (a deck just
+// made with "Import from…").
 export function useDeckSheets({
   toastBottom = 16,
   onFolderDeleted,
   onDeckDeleted,
   onUndoable,
+  importInto,
 }: {
   toastBottom?: number
   onFolderDeleted?: () => void
   onDeckDeleted?: () => void
   onUndoable?: (message: string, undo: Undo) => void
+  importInto?: string
 } = {}) {
   const [newSheet, setNewSheet] = useState<NewState | null>(null)
   const [editFolderId, setEditFolderId] = useState<string | null>(null)
   const [optionsDeckId, setOptionsDeckId] = useState<string | null>(null)
   const [moveDeckIds, setMoveDeckIds] = useState<string[] | null>(null)
-  const [importDeckId, setImportDeckId] = useState<string | null>(null)
+  const [importing, setImporting] = useState<{ deckId: string; autoPick: boolean } | null>(() =>
+    importInto ? { deckId: importInto, autoPick: true } : null,
+  )
   const [deleteFolderIds, setDeleteFolderIds] = useState<string[] | null>(null)
   const [onMoved, setOnMoved] = useState<(() => void) | undefined>(undefined)
   const shownToast = useToast()
@@ -78,14 +84,18 @@ export function useDeckSheets({
         }}
         onImport={(deckId) => {
           setOptionsDeckId(null)
-          setImportDeckId(deckId)
+          setImporting({ deckId, autoPick: false })
         }}
         onDeleted={(name, undo) => {
           showUndo(`${name} deleted`, undo)
           onDeckDeleted?.()
         }}
       />
-      <ImportSheet deckId={importDeckId} onClose={() => setImportDeckId(null)} />
+      <ImportSheet
+        target={importing && { kind: 'deck', id: importing.deckId }}
+        autoPick={importing?.autoPick}
+        onClose={() => setImporting(null)}
+      />
       <MoveSheet
         deckIds={moveDeckIds}
         onClose={() => setMoveDeckIds(null)}

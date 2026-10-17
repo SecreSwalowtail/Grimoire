@@ -2,20 +2,21 @@ import { BlurView } from 'expo-blur'
 import { router } from 'expo-router'
 import { useSQLiteContext } from 'expo-sqlite'
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
+  Easing,
   Extrapolation,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet'
+import { EditCopiesForm } from '@/components/binder/edit-copies-sheet'
 import { FLAT, TiltSensor, type Tilt } from '@/components/card-effects/tilt'
 import { CardFace } from '@/components/card-tile'
 import { PathIcon } from '@/components/deck/parts'
@@ -37,23 +38,23 @@ import { tick, useAnimationsOff, useModalAnimation } from '@/utils/motion'
 
 // 1b · Card quick look: a card from a binder held up over the blurred binder, alive like in the
 // grid (it tilts with the phone, foils shine, expensive cards shimmer), with what a player wants at
-// a glance (price and its week, cost and type, the copies here and how they're kept, the decks it's
+// a glance (price and its change, cost and type, the copies here and how they're kept, the decks it's
 // in) and the way on: Edit (condition, finish, trade) and Full details. Swipe the card left or right
 // (or use the arrows) for the next or previous card in the grid's order: the card follows the
 // finger, the neighbors peek in from the sides, and each change taps the phone.
 
-// Settles without bouncing back and forth.
-const SETTLE = { damping: 32, stiffness: 260 }
-// How far the neighbors lean, per card away.
-const LEAN_DEG = 1.5
+// Glides into place without overshooting (no wobble as a card reaches the middle).
+const SETTLE = { duration: 220, easing: Easing.out(Easing.cubic) }
 // A drag this share of the way to a neighbor (or a flick) moves to it.
 const SWITCH_AT = 0.22
 const FLICK = 450
+// Let go past this share of the way (or flicked), the info sheet opens into Edit card or closes back.
+const EXPAND_AT = 0.25
 const CARD_RATIO = 63 / 88
-// The info sheet's height at its tallest usual (a two-line name, two rows of chips), so the card
-// keeps one size from card to card: its fixed parts, and its text (which grows with the font size).
-const SHEET_FIXED = 305
-const SHEET_TEXT = 78
+// The info sheet's height (one line of name, one row of pills), so the card keeps one size from
+// card to card: its fixed parts, and its text (which grows with the font size).
+const SHEET_FIXED = 271
+const SHEET_TEXT = 67
 
 type OldPrice = { price_eur: number | null; price_eur_foil: number | null }
 
@@ -75,10 +76,11 @@ export function QuickLook({
   openId,
   title,
   binders,
-  weekAgo,
+  oldPrices,
   blurTarget,
   onClose,
   onChanged,
+  onDetails,
 }: {
   // The cards it goes through, in the grid's order.
   entries: CollectionEntry[]
@@ -87,12 +89,14 @@ export function QuickLook({
   // What the cards are: the binder's name, or the search.
   title: string
   binders: Binder[]
-  weekAgo: Map<string, OldPrice>
+  oldPrices: Map<string, OldPrice>
   // The screen behind, wrapped in a BlurTargetView: what Android blurs.
   blurTarget: RefObject<View | null>
   onClose: () => void
   // After a change to the collection (reload).
   onChanged: () => void
+  // Card detail is opening from this card (the screen brings the quick look back after it).
+  onDetails?: (entryId: number) => void
 }) {
   const money = useMoney()
   const modalAnimation = useModalAnimation()
@@ -107,7 +111,9 @@ export function QuickLook({
   // Copies just changed here, until the reload brings them.
   const [patches, setPatches] = useState<Map<number, Partial<CollectionEntry>>>(() => new Map())
   const [saved, setSaved] = useState<Map<string, ScryfallCard | null>>(() => new Map())
-  const [editOpen, setEditOpen] = useState(false)
+  // The info sheet opened up into Edit card (it slides up over the cards).
+  const [expanded, setExpanded] = useState(false)
+  const expand = useSharedValue(0)
   // The tallest the info sheet has been since opening (it only counts when taller than the usual).
   const [sheetH, setSheetH] = useState(0)
   // Phone tilt for the card on show, as in the grid (the sensor runs only while open).
@@ -123,6 +129,7 @@ export function QuickLook({
       setAt({ id: openId, index: Math.max(0, entries.findIndex((e) => e.id === openId)) })
       setPatches(new Map())
       setSheetH(0)
+      setExpanded(false)
     }
   }
 
@@ -143,6 +150,7 @@ export function QuickLook({
   }, [index, pos, expected])
   useLayoutEffect(() => {
     if (openId != null) pos.set(Math.max(0, entries.findIndex((e) => e.id === openId)))
+    expand.set(0)
     // Only on opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId, pos])
@@ -182,7 +190,7 @@ export function QuickLook({
   const go = (by: number) => {
     const target = Math.max(0, Math.min(last, index + by))
     if (target === index) return
-    pos.set(withSpring(target, SETTLE))
+    pos.set(withTiming(target, SETTLE))
     select(target)
   }
 
@@ -204,12 +212,54 @@ export function QuickLook({
       if (e.translationX < -spacing * SWITCH_AT || e.velocityX < -FLICK) target = from + 1
       else if (e.translationX > spacing * SWITCH_AT || e.velocityX > FLICK) target = from - 1
       target = Math.max(0, Math.min(last, target))
-      pos.set(withSpring(target, SETTLE))
+      pos.set(withTiming(target, SETTLE))
       if (target !== from) scheduleOnRN(select, target)
     })
 
+  // The info sheet opens up into Edit card: drag it up (or tap the pencil) and it slides up over the
+  // cards, the info fading into the editor; drag its handle down (or ×, Save, back) to close it. It's
+  // as tall as open, mostly below the screen while closed, so only a transform moves.
+  const openH = screenH - insets.top - 12
+  const travel = Math.max(1, openH - sheetRoom)
+  const setOpen = (open: boolean) => {
+    expand.set(withTiming(open ? 1 : 0, SETTLE))
+    setExpanded(open)
+  }
+  // Only vertical drags: the pills still scroll sideways and the buttons still take taps.
+  const openPan = Gesture.Pan()
+    .enabled(!expanded)
+    .activeOffsetY([-10, 10])
+    .failOffsetX([-12, 12])
+    .onUpdate((e) => {
+      expand.set(Math.min(1, Math.max(0, -e.translationY / travel)))
+    })
+    .onEnd((e) => {
+      const open = expand.get() > EXPAND_AT || e.velocityY < -FLICK
+      expand.set(withTiming(open ? 1 : 0, SETTLE))
+      if (open) scheduleOnRN(setExpanded, true)
+    })
+  // Open, the whole sheet closes it: a drag down from anywhere on it. Only downward drags, so taps
+  // still reach the buttons and an upward drag still scrolls the editor if it's ever too long.
+  const closePan = Gesture.Pan()
+    .enabled(expanded)
+    .activeOffsetY(10)
+    .failOffsetY(-10)
+    .failOffsetX([-15, 15])
+    .onUpdate((e) => {
+      expand.set(Math.min(1, Math.max(0, 1 - e.translationY / travel)))
+    })
+    .onEnd((e) => {
+      const close = expand.get() < 1 - EXPAND_AT || e.velocityY > FLICK
+      expand.set(withTiming(close ? 0 : 1, SETTLE))
+      if (close) scheduleOnRN(setExpanded, false)
+    })
+  const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -travel * expand.get() }] }))
+  const infoStyle = useAnimatedStyle(() => ({ opacity: interpolate(expand.get(), [0, 0.4], [1, 0], Extrapolation.CLAMP) }))
+  const formStyle = useAnimatedStyle(() => ({ opacity: interpolate(expand.get(), [0.3, 0.8], [0, 1], Extrapolation.CLAMP) }))
+
   const openDetails = () => {
     if (!entry) return
+    onDetails?.(entry.id)
     onClose()
     router.push({ pathname: '/card/[id]', params: { id: entry.card_id } })
   }
@@ -224,7 +274,7 @@ export function QuickLook({
   const now = { ...entry, ...patches.get(entry.id) }
   const qty = now.quantity
   const price = entryPrice(entry)
-  const before = weekAgo.get(entry.card_id)
+  const before = oldPrices.get(entry.card_id)
   const then = before ? entryPrice({ finish: entry.finish, ...before }) : null
   const change = price != null && then != null && then > 0 ? ((price - then) / then) * 100 : null
   const decks = [...cardUse(entry.name, store).values()].filter((c) => c.main + c.side > 0).length
@@ -246,11 +296,13 @@ export function QuickLook({
   const dotCount = entries.length <= 7 ? entries.length : 5
   const activeDot = entries.length <= 7 ? index : index < 2 ? index : index > last - 2 ? 4 - (last - index) : 2
 
-  // The cards around this one, this one drawn last (on top).
-  const around = [-2, -1, 1, 2, 0].map((d) => index + d).filter((i) => i >= 0 && i <= last)
+  // The cards around this one, always in the grid's order: this one is lifted on top with zIndex
+  // instead of being drawn last, since moving it to the end on every swipe re-attached the cards'
+  // views on Android, which flickered.
+  const around = [-2, -1, 0, 1, 2].map((d) => index + d).filter((i) => i >= 0 && i <= last)
 
   return (
-    <Modal visible={visible} transparent animationType={modalAnimation} statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={modalAnimation} statusBarTranslucent navigationBarTranslucent onRequestClose={expanded ? () => setOpen(false) : onClose}>
       <GestureHandlerRootView style={styles.root}>
         {visible && !reducedMotion && <TiltSensor tilt={tilt} />}
         {/* The binder underneath, blurred (only dimmed on Android before 12). */}
@@ -284,11 +336,13 @@ export function QuickLook({
                 key={entries[i].id}
                 entry={entries[i]}
                 i={i}
+                z={2 - Math.abs(i - index)}
                 pos={pos}
                 spacing={spacing}
                 left={(screenW - cardW) / 2}
                 width={cardW}
                 height={cardH}
+                // Only the card in the middle gets the sharper picture.
                 image={i === index && card ? faceImage(card) : null}
                 glow={i === index ? glow : null}
                 // Only the card on show moves; the neighbors lie still.
@@ -329,106 +383,124 @@ export function QuickLook({
         )}
 
         {/* What a player wants to know, and the way on. */}
-        <View
-          style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
-          onLayout={(e) => {
-            const h = Math.ceil(e.nativeEvent.layout.height)
-            setSheetH((was) => Math.max(was, h))
-          }}
-        >
-          <View style={styles.handle} />
-
-          <View style={styles.headRow}>
-            <Text style={[styles.headText, styles.name]} numberOfLines={2} accessibilityRole="header">{entry.name}</Text>
-            <View style={styles.priceBox}>
-              <Text style={styles.price}>{price != null ? money.eur(price) : '—'}</Text>
-              {change != null && (
-                <Text style={[styles.change, { color: change > 0 ? Colors.positive : change < 0 ? Colors.negative : Colors.textSecondary }]}>
-                  {change > 0 ? '▲' : change < 0 ? '▼' : '—'} {Math.abs(change).toFixed(1)}% · 7 days
-                </Text>
-              )}
-            </View>
-          </View>
-          {/* The whole width, not just beside the price: set names run long. */}
-          <View style={styles.setRow}>
-            {/* The set's symbol in the rarity's color, as printed on the card. */}
-            <SetIcon code={entry.set_code} size={16} color={RarityColors[entry.rarity] ?? Colors.textMuted} />
-            <Text style={styles.setText} numberOfLines={1}>
-              {entry.set_name} · {entry.set_code.toUpperCase()} #{entry.collector_number}
-            </Text>
-          </View>
-
-          {(typeLine !== '' || cost !== '' || stats) && (
-            <View style={styles.typeRow}>
-              <CostRow cost={cost} size={15} />
-              <Text style={styles.typeText} numberOfLines={1}>{typeLine}</Text>
-              {stats && <Text style={styles.stats}>{stats}</Text>}
-            </View>
-          )}
-
-          <View style={styles.copies}>
-            <View style={styles.stepper}>
-              <TouchableOpacity
-                style={styles.step}
-                onPress={() => changeQty(qty - 1)}
-                disabled={qty <= 1}
-                accessibilityRole="button"
-                accessibilityLabel="Remove one copy"
-              >
-                <Text style={[styles.stepLabel, qty <= 1 && styles.stepOff]}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.qty} accessibilityLabel={plural(qty, 'copy', 'copies')} accessibilityLiveRegion="polite">{qty}</Text>
-              <TouchableOpacity style={styles.step} onPress={() => changeQty(qty + 1)} accessibilityRole="button" accessibilityLabel="Add one copy">
-                <Text style={styles.stepLabel}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.chips}>
-            <Chip label={FINISH_NAME[entry.finish]} />
-            <Chip label={conditionName(entry.condition)} />
-            <Chip label={LANGUAGE_NAMES[entry.language] ?? entry.language.toUpperCase()} />
-            {entry.traded === 1 && <Chip label="Traded" />}
-            {entry.purchase_price != null && <Chip label={`Paid ${money.eur(entry.purchase_price)}`} />}
-            {entry.for_trade === 1 && <Chip label="For trade" gold />}
-            <Chip label={decks ? `In ${plural(decks, 'deck')}` : 'In no deck'} gold={decks > 0} />
-          </View>
-
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.iconAction}
-              onPress={() => setEditOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Edit card: condition, finish, trade"
+        {/* The same height for every card: the name on one line, the pills in one row, right above the
+            buttons. */}
+        <GestureDetector gesture={expanded ? closePan : openPan}>
+          <Animated.View style={[styles.sheet, { height: openH, bottom: -travel }, panelStyle]}>
+            <Animated.View
+              style={[styles.info, { paddingBottom: insets.bottom + 16 }, infoStyle]}
+              pointerEvents={expanded ? 'none' : 'auto'}
+              onLayout={(e) => {
+                const h = Math.ceil(e.nativeEvent.layout.height)
+                setSheetH((was) => Math.max(was, h))
+              }}
+              accessibilityHint="Drag up to edit the card"
             >
-              <PathIcon d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" color={Colors.text} size={20} weight={1.75} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.details} onPress={openDetails} accessibilityRole="button">
-              <Text style={styles.detailsLabel}>Full details</Text>
-              <Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.onGold} weight="bold" />
-            </TouchableOpacity>
-          </View>
-        </View>
+              {/* Room for the handle, which sits over both the info and the editor. */}
+              <View style={styles.handleRoom} />
 
-        <EditCopiesSheet
-          visible={editOpen}
-          entries={[now]}
-          onClose={() => setEditOpen(false)}
-          onSaved={() => {
-            setPatches(new Map())
-            onChanged()
-          }}
-        />
+              <View style={styles.headRow}>
+                <Text style={[styles.headText, styles.name]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} accessibilityRole="header">{entry.name}</Text>
+                <View style={styles.priceBox}>
+                  <Text style={styles.price}>{price != null ? money.eur(price) : '—'}</Text>
+                  {change != null && (
+                    <Text style={[styles.change, { color: change > 0 ? Colors.positive : change < 0 ? Colors.negative : Colors.textSecondary }]}>
+                      {change > 0 ? '▲' : change < 0 ? '▼' : '—'} {Math.abs(change).toFixed(1)}% · 7 days
+                    </Text>
+                  )}
+                </View>
+              </View>
+              {/* The whole width, not just beside the price: set names run long. */}
+              <View style={styles.setRow}>
+                {/* The set's symbol in the rarity's color, as printed on the card. */}
+                <SetIcon code={entry.set_code} size={16} color={RarityColors[entry.rarity] ?? Colors.textMuted} />
+                <Text style={styles.setText} numberOfLines={1}>
+                  {entry.set_name} · {entry.set_code.toUpperCase()} #{entry.collector_number}
+                </Text>
+              </View>
+
+              {/* Always there, so the sheet doesn't grow once the card's data is in. */}
+              <View style={styles.typeRow}>
+                <CostRow cost={cost} size={15} />
+                <Text style={styles.typeText} numberOfLines={1}>{typeLine}</Text>
+                {stats && <Text style={styles.stats}>{stats}</Text>}
+              </View>
+
+              <View style={styles.copies}>
+                <View style={styles.stepper}>
+                  <TouchableOpacity
+                    style={styles.step}
+                    onPress={() => changeQty(qty - 1)}
+                    disabled={qty <= 1}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove one copy"
+                  >
+                    <Text style={[styles.stepLabel, qty <= 1 && styles.stepOff]}>−</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.qty} accessibilityLabel={plural(qty, 'copy', 'copies')} accessibilityLiveRegion="polite">{qty}</Text>
+                  <TouchableOpacity style={styles.step} onPress={() => changeQty(qty + 1)} accessibilityRole="button" accessibilityLabel="Add one copy">
+                    <Text style={styles.stepLabel}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow} contentContainerStyle={styles.chips}>
+                <Chip label={FINISH_NAME[entry.finish]} />
+                <Chip label={conditionName(entry.condition)} />
+                <Chip label={LANGUAGE_NAMES[entry.language] ?? entry.language.toUpperCase()} />
+                {entry.traded === 1 && <Chip label="Traded" />}
+                {entry.purchase_price != null && <Chip label={`Paid ${money.eur(entry.purchase_price)}`} />}
+                {entry.for_trade === 1 && <Chip label="For trade" gold />}
+                <Chip label={decks ? `In ${plural(decks, 'deck')}` : 'In no deck'} gold={decks > 0} />
+              </ScrollView>
+
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={styles.iconAction}
+                  onPress={() => setOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit card: condition, finish, trade"
+                >
+                  <PathIcon d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" color={Colors.text} size={20} weight={1.75} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.details} onPress={openDetails} accessibilityRole="button">
+                  <Text style={styles.detailsLabel}>Full details</Text>
+                  <Icon name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={Colors.onGold} weight="bold" />
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+
+            <Animated.View
+              style={[styles.editor, { paddingBottom: insets.bottom + 12 }, formStyle]}
+              pointerEvents={expanded ? 'auto' : 'none'}
+            >
+              <EditCopiesForm
+                active={expanded}
+                entries={[now]}
+                onClose={() => setOpen(false)}
+                onSaved={() => {
+                  setPatches(new Map())
+                  onChanged()
+                }}
+              />
+            </Animated.View>
+
+            <View pointerEvents="none" style={styles.handleArea}>
+              <View style={styles.handle} />
+            </View>
+          </Animated.View>
+        </GestureDetector>
       </GestureHandlerRootView>
     </Modal>
   )
 }
 
-// One card in the band: in the middle when it's the one on show, peeking in smaller, tilted and
+// One card in the band: in the middle when it's the one on show, peeking in smaller and
 // faded at the sides otherwise; in between while dragged.
 function Slot({
   entry,
   i,
+  z,
   pos,
   spacing,
   left,
@@ -441,6 +513,8 @@ function Slot({
 }: {
   entry: CollectionEntry
   i: number
+  // Stacking: the card on show on top, then its neighbors.
+  z: number
   pos: SharedValue<number>
   spacing: number
   left: number
@@ -460,14 +534,13 @@ function Slot({
       opacity: interpolate(away, [0, 1, 2], [1, 0.45, 0], Extrapolation.CLAMP),
       transform: [
         { translateX: rel * spacing },
-        { rotate: `${Math.max(-1.5, Math.min(1.5, rel)) * LEAN_DEG}deg` },
         { scale: interpolate(away, [0, 1], [1, 0.72], Extrapolation.CLAMP) },
       ],
     }
   })
   const radius = width * 0.045
   return (
-    <Animated.View style={[styles.slot, { left, width, height }, style]}>
+    <Animated.View style={[styles.slot, { left, width, height, zIndex: z }, style]}>
       <Pressable
         style={styles.slotPress}
         onPress={onPress}
@@ -609,15 +682,39 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
-    paddingTop: 10,
-    paddingHorizontal: 20,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: 1,
     borderColor: 'rgba(237,230,214,0.12)',
     backgroundColor: 'rgba(23,21,15,0.97)',
     boxShadow: '0 -20px 50px rgba(0,0,0,0.5)',
+  },
+  // The info, at the top of the sheet (all that shows while it's closed).
+  info: {
+    paddingTop: 10,
+    paddingHorizontal: 20,
+  },
+  // The editor, filling the opened sheet below the handle.
+  editor: {
+    position: 'absolute',
+    top: 22,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 20,
+  },
+  // The handle, over both the info and the editor.
+  handleArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 26,
+    paddingTop: 10,
+    alignItems: 'center',
+  },
+  handleRoom: {
+    height: 5,
   },
   handle: {
     alignSelf: 'center',
@@ -672,6 +769,8 @@ const styles = StyleSheet.create({
   },
   typeRow: {
     marginTop: 10,
+    // As tall as the power / toughness pill, with or without it.
+    minHeight: 22,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -693,15 +792,14 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.extraBold,
     color: Colors.text,
   },
+  // Just around the − and +, on the sheet itself (no dark fill).
   copies: {
     marginTop: 14,
-    height: 64,
-    borderRadius: 16,
+    alignSelf: 'center',
+    padding: 6,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(237,230,214,0.10)',
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: 'rgba(237,230,214,0.12)',
   },
   stepper: {
     flexDirection: 'row',
@@ -725,17 +823,22 @@ const styles = StyleSheet.create({
     color: '#5A5446',
   },
   qty: {
-    minWidth: 26,
+    minWidth: 48,
     textAlign: 'center',
     fontSize: 17,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
     fontVariant: ['tabular-nums'],
   },
-  chips: {
+  // Across the sheet's whole width, so pills scroll in from its edges.
+  chipsRow: {
     marginTop: 10,
+    marginHorizontal: -20,
+    flexGrow: 0,
+  },
+  chips: {
+    paddingHorizontal: 20,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
   chip: {
@@ -757,7 +860,7 @@ const styles = StyleSheet.create({
     color: Colors.goldLight,
   },
   actions: {
-    marginTop: 16,
+    marginTop: 28,
     flexDirection: 'row',
     gap: 8,
   },
