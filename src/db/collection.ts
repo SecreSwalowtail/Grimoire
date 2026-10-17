@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite'
 
-import { FIRST_BINDER_SQL } from '@/db/binders'
+import { ensureBinder, FIRST_BINDER_SQL } from '@/db/binders'
 import { upsertCard } from '@/db/cards'
 import type { ScryfallCard } from '@/db/scryfall'
 import { collectionChanged } from '@/db/version'
@@ -9,7 +9,8 @@ export type Finish = 'nonfoil' | 'foil' | 'etched'
 export type Condition = 'NM' | 'LP' | 'MP' | 'HP' | 'DMG'
 
 type CopyOptions = {
-  // Binder the copies go in; the first binder (in the user's order) when not given.
+  // Binder the copies go in; the first binder (in the user's order) when not given, a new one when
+  // there are none.
   binderId?: string
   quantity?: number
   finish?: Finish
@@ -55,6 +56,7 @@ export type CollectionEntry = {
 // Not wrapped in a transaction: call it inside db.withTransactionAsync() when adding many.
 export async function addToCollection(db: SQLiteDatabase, card: ScryfallCard, options: CopyOptions = {}) {
   await upsertCard(db, card)
+  if (!options.binderId) await ensureBinder(db)
   const result = await db.runAsync(
     `INSERT INTO collection (binder_id, card_id, quantity, finish, condition, language, purchase_price, for_trade, added_at)
      VALUES (COALESCE(?, ${FIRST_BINDER_SQL}), ?, ?, ?, ?, ?, ?, ?, ?)
@@ -229,6 +231,7 @@ export async function removeEntries(db: SQLiteDatabase, ids: number[]) {
 // since (same printing, finish, condition and language in that binder) adds up with it.
 // Call inside a transaction.
 async function insertRow(db: SQLiteDatabase, r: EntryRow) {
+  await ensureBinder(db)
   await db.runAsync(
     `INSERT INTO collection (id, binder_id, card_id, quantity, finish, condition, language, added_at, purchase_price, for_trade, traded)
      VALUES (?, COALESCE((SELECT id FROM binders WHERE id = ?), ${FIRST_BINDER_SQL}), ?, ?, ?, ?, ?, ?, ?, ?, ?)

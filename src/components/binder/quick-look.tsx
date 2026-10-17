@@ -21,6 +21,7 @@ import { CardFace } from '@/components/card-tile'
 import { PathIcon } from '@/components/deck/parts'
 import { Icon } from '@/components/icon'
 import { CostRow } from '@/components/mana-symbol'
+import { SetIcon } from '@/components/set-icon'
 import { Colors, Fonts, RarityColors } from '@/constants/theme'
 import type { Binder } from '@/db/binders'
 import { getSavedCard } from '@/db/cards'
@@ -30,7 +31,7 @@ import { conditionName, FINISH_NAME, LANGUAGE_NAMES } from '@/rules/collection'
 import { COLOR_HEX, parseColors } from '@/rules/deck-stats'
 import { withAlpha } from '@/utils/color'
 import { cardUse, useDeckStore } from '@/utils/deck-store'
-import { capitalize, plural } from '@/utils/format'
+import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 import { tick, useAnimationsOff, useModalAnimation } from '@/utils/motion'
 
@@ -49,6 +50,10 @@ const LEAN_DEG = 1.5
 const SWITCH_AT = 0.22
 const FLICK = 450
 const CARD_RATIO = 63 / 88
+// The info sheet's height at its tallest usual (a two-line name, two rows of chips), so the card
+// keeps one size from card to card: its fixed parts, and its text (which grows with the font size).
+const SHEET_FIXED = 305
+const SHEET_TEXT = 78
 
 type OldPrice = { price_eur: number | null; price_eur_foil: number | null }
 
@@ -70,7 +75,6 @@ export function QuickLook({
   openId,
   title,
   binders,
-  collection,
   weekAgo,
   blurTarget,
   onClose,
@@ -83,8 +87,6 @@ export function QuickLook({
   // What the cards are: the binder's name, or the search.
   title: string
   binders: Binder[]
-  // Everything owned, for copies in other binders.
-  collection: CollectionEntry[]
   weekAgo: Map<string, OldPrice>
   // The screen behind, wrapped in a BlurTargetView: what Android blurs.
   blurTarget: RefObject<View | null>
@@ -97,7 +99,7 @@ export function QuickLook({
   const db = useSQLiteContext()
   const store = useDeckStore()
   const insets = useSafeAreaInsets()
-  const { width: screenW, height: screenH } = useWindowDimensions()
+  const { width: screenW, height: screenH, fontScale } = useWindowDimensions()
   const visible = openId != null
 
   // The card on show: by id, so a reload doesn't lose it; by place, for when it's gone.
@@ -106,7 +108,8 @@ export function QuickLook({
   const [patches, setPatches] = useState<Map<number, Partial<CollectionEntry>>>(() => new Map())
   const [saved, setSaved] = useState<Map<string, ScryfallCard | null>>(() => new Map())
   const [editOpen, setEditOpen] = useState(false)
-  const [sheetH, setSheetH] = useState(360)
+  // The tallest the info sheet has been since opening (it only counts when taller than the usual).
+  const [sheetH, setSheetH] = useState(0)
   // Phone tilt for the card on show, as in the grid (the sensor runs only while open).
   const reducedMotion = useAnimationsOff()
   const tiltX = useSharedValue(0)
@@ -119,6 +122,7 @@ export function QuickLook({
     if (openId != null) {
       setAt({ id: openId, index: Math.max(0, entries.findIndex((e) => e.id === openId)) })
       setPatches(new Map())
+      setSheetH(0)
     }
   }
 
@@ -156,11 +160,12 @@ export function QuickLook({
     }
   }, [visible, cardId, saved, db])
 
-  // Sizes: the card as big as fits between the top bar and the info sheet, clear of the arrows at
-  // the sides, with the dots and a margin under it.
+  // Sizes: the card as big as fits between the top bar and the tallest info sheet, clear of the
+  // arrows at the sides, with the dots and a margin under it; the same for every card.
   const barTop = insets.top + 8
   const bandTop = barTop + 44 + 14
-  const maxH = screenH - bandTop - sheetH - 44
+  const sheetRoom = Math.max(SHEET_FIXED + SHEET_TEXT * fontScale + insets.bottom, sheetH)
+  const maxH = screenH - bandTop - sheetRoom - 44
   const cardH = Math.max(160, Math.min((screenW - 112) / CARD_RATIO, maxH))
   const cardW = cardH * CARD_RATIO
   // A neighbor's middle sits this far from the card's: a gap between them, and they peek in at the
@@ -222,7 +227,6 @@ export function QuickLook({
   const before = weekAgo.get(entry.card_id)
   const then = before ? entryPrice({ finish: entry.finish, ...before }) : null
   const change = price != null && then != null && then > 0 ? ((price - then) / then) * 100 : null
-  const elsewhere = collection.reduce((n, e) => n + (e.name === entry.name && e.id !== entry.id ? e.quantity : 0), 0)
   const decks = [...cardUse(entry.name, store).values()].filter((c) => c.main + c.side > 0).length
   const typeLine = card?.type_line ?? card?.card_faces?.[0]?.type_line ?? entry.type_line ?? ''
   const stats = statsOf(card)
@@ -327,20 +331,15 @@ export function QuickLook({
         {/* What a player wants to know, and the way on. */}
         <View
           style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
-          onLayout={(e) => setSheetH(Math.ceil(e.nativeEvent.layout.height))}
+          onLayout={(e) => {
+            const h = Math.ceil(e.nativeEvent.layout.height)
+            setSheetH((was) => Math.max(was, h))
+          }}
         >
           <View style={styles.handle} />
 
           <View style={styles.headRow}>
-            <View style={styles.headText}>
-              <Text style={styles.name} numberOfLines={2} accessibilityRole="header">{entry.name}</Text>
-              <View style={styles.setRow}>
-                <View style={[styles.rarityDot, { backgroundColor: RarityColors[entry.rarity] ?? Colors.textMuted }]} />
-                <Text style={styles.setText} numberOfLines={1}>
-                  {capitalize(entry.rarity)} · {entry.set_name} · {entry.set_code.toUpperCase()} #{entry.collector_number}
-                </Text>
-              </View>
-            </View>
+            <Text style={[styles.headText, styles.name]} numberOfLines={2} accessibilityRole="header">{entry.name}</Text>
             <View style={styles.priceBox}>
               <Text style={styles.price}>{price != null ? money.eur(price) : '—'}</Text>
               {change != null && (
@@ -349,6 +348,14 @@ export function QuickLook({
                 </Text>
               )}
             </View>
+          </View>
+          {/* The whole width, not just beside the price: set names run long. */}
+          <View style={styles.setRow}>
+            {/* The set's symbol in the rarity's color, as printed on the card. */}
+            <SetIcon code={entry.set_code} size={16} color={RarityColors[entry.rarity] ?? Colors.textMuted} />
+            <Text style={styles.setText} numberOfLines={1}>
+              {entry.set_name} · {entry.set_code.toUpperCase()} #{entry.collector_number}
+            </Text>
           </View>
 
           {(typeLine !== '' || cost !== '' || stats) && (
@@ -360,16 +367,6 @@ export function QuickLook({
           )}
 
           <View style={styles.copies}>
-            <View style={styles.copiesText}>
-              <Text style={styles.copiesLabel} numberOfLines={1}>
-                In {binder?.name ?? 'your binder'}
-                {elsewhere > 0 ? ` · ${elsewhere} more elsewhere` : ''}
-              </Text>
-              <Text style={styles.copiesValue} numberOfLines={1}>
-                {plural(qty, 'copy', 'copies')}
-                {price != null ? ` · ${money.eur(price * qty)}` : ''}
-              </Text>
-            </View>
             <View style={styles.stepper}>
               <TouchableOpacity
                 style={styles.step}
@@ -380,7 +377,7 @@ export function QuickLook({
               >
                 <Text style={[styles.stepLabel, qty <= 1 && styles.stepOff]}>−</Text>
               </TouchableOpacity>
-              <Text style={styles.qty} accessibilityLiveRegion="polite">{qty}</Text>
+              <Text style={styles.qty} accessibilityLabel={plural(qty, 'copy', 'copies')} accessibilityLiveRegion="polite">{qty}</Text>
               <TouchableOpacity style={styles.step} onPress={() => changeQty(qty + 1)} accessibilityRole="button" accessibilityLabel="Add one copy">
                 <Text style={styles.stepLabel}>+</Text>
               </TouchableOpacity>
@@ -652,11 +649,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  rarityDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
   setText: {
     flexShrink: 1,
     fontSize: 13,
@@ -704,30 +696,12 @@ const styles = StyleSheet.create({
   copies: {
     marginTop: 14,
     height: 64,
-    paddingLeft: 14,
-    paddingRight: 6,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(237,230,214,0.10)',
     backgroundColor: Colors.background,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  copiesText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  copiesLabel: {
-    fontSize: 12,
-    fontFamily: Fonts.regular,
-    color: Colors.textSecondary,
-  },
-  copiesValue: {
-    marginTop: 2,
-    fontSize: 14,
-    fontFamily: Fonts.extraBold,
-    color: Colors.text,
+    justifyContent: 'center',
   },
   stepper: {
     flexDirection: 'row',

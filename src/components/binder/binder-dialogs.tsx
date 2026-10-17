@@ -55,7 +55,7 @@ function Dialog({
 }
 
 // "Remove binder?" for one or more binders: when they hold cards, move them to another binder
-// (the first one picked) or delete them too.
+// (the first one picked) or delete them too (the only way when no other binder is left).
 export function RemoveBinderDialog({
   binders,
   cards,
@@ -94,13 +94,15 @@ export function RemoveBinderDialog({
       body={
         cards === 0
           ? one ? 'This binder is empty.' : 'These binders are empty.'
-          : `${one ? 'It holds' : 'They hold'} ${plural(cards, 'card')}. What should happen to them?`
+          : others.length === 0
+            ? `${one ? 'It holds' : 'They hold'} ${plural(cards, 'card')}, and there's no other binder to move them to: they're removed too.`
+            : `${one ? 'It holds' : 'They hold'} ${plural(cards, 'card')}. What should happen to them?`
       }
       action={`Remove ${one ? 'binder' : `${binders.length} binders`}${deleting ? ` & ${plural(cards, 'card')}` : ''}`}
       onAction={() => onRemove(cards > 0 ? moveTo : null)}
       onClose={onClose}
     >
-      {cards > 0 && (
+      {cards > 0 && others.length > 0 && (
         <ScrollView showsVerticalScrollIndicator={false} style={styles.choicesBox} bounces={false}>
           <View accessibilityRole="radiogroup" style={styles.choices}>
             {choices.map((c) => {

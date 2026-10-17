@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite'
 
-import { BINDER_PRESETS, FIRST_BINDER_SQL } from '@/db/binders'
+import { BINDER_PRESETS, ensureBinder, FIRST_BINDER_SQL } from '@/db/binders'
 import { upsertCard } from '@/db/cards'
 import { cardImage, searchCards, type ScryfallCard } from '@/db/scryfall'
 import { collectionChanged } from '@/db/version'
@@ -65,6 +65,7 @@ export async function seedTestData(db: SQLiteDatabase, progress: SeedProgress) {
 
   // 2. Into the binder. ON CONFLICT DO NOTHING: a copy you already own is left alone (and not
   // recorded, so removing test data never touches it).
+  await ensureBinder(db)
   const first = await db.getFirstAsync<{ id: string }>(`SELECT ${FIRST_BINDER_SQL} AS id`)
   const binderIds = [first?.id ?? 'default', ...BINDERS.map((_, i) => `${PREFIX}binder-${i}`)]
   await db.withTransactionAsync(async () => {

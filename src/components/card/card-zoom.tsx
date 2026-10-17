@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import { useEffect, useState, type RefObject } from 'react'
-import { StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
   Extrapolation,
@@ -21,8 +21,8 @@ import { useAnimationsOff } from '@/utils/motion'
 
 // Tap the hero card on Card detail: it lifts out of the header to almost the whole screen, over
 // the blurred page. It tilts much further than anywhere else, with the phone and under your finger
-// (drag across it), and its edges darken as they turn away. Going back puts it down again: the
-// screen turns that into `closing` (there is no close button on purpose).
+// (drag across it), and its edges darken as they turn away. Going back or tapping beside the card
+// puts it down again: the screen turns that into `closing` (there is no close button on purpose).
 
 // Where the hero card was on screen, in window coordinates.
 export type ZoomFrom = { x: number; y: number; width: number; height: number }
@@ -58,7 +58,7 @@ export function CardZoom({
   tilt: Tilt
   // The page behind, for Android's blur (iOS blurs whatever is underneath).
   blurTarget: RefObject<View | null>
-  // Screen reader "escape" gesture: the same as going back.
+  // A tap beside the card, or the screen reader "escape" gesture: the same as going back.
   onClose: () => void
   // The card is back in the hero: unmount this.
   onClosed: () => void
@@ -175,6 +175,13 @@ export function CardZoom({
         />
         <View style={[StyleSheet.absoluteFill, styles.scrim]} />
       </Animated.View>
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={onClose}
+        disabled={closing}
+        accessibilityRole="button"
+        accessibilityLabel="Close full screen"
+      />
 
       <Animated.View
         style={[styles.slot, { left: (screenW - width) / 2, top: (screenH - height) / 2, width, height }, liftStyle]}
@@ -186,7 +193,7 @@ export function CardZoom({
             style={[styles.card, { borderRadius: radius }, tiltStyle]}
             accessible
             accessibilityRole="image"
-            accessibilityLabel={`${card.name}, full screen. Go back to close.`}
+            accessibilityLabel={`${card.name}, full screen. Go back or tap beside it to close.`}
           >
             {foil && image ? (
               <HoloFoil uri={image} tilt={lean} />

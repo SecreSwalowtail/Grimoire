@@ -304,7 +304,6 @@ export default function BinderScreen() {
         openId={look?.openId ?? null}
         title={binder?.name ?? 'Binder'}
         binders={binders}
-        collection={entries}
         weekAgo={weekAgo}
         blurTarget={page}
         onClose={() => setLook(null)}

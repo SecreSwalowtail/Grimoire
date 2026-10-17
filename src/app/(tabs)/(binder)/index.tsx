@@ -135,6 +135,8 @@ export default function BindersScreen() {
     const ids = selected.map((b) => b.id)
     setRemoving(false)
     setSelectedIds([])
+    // Nothing left to edit.
+    if (ids.length === binders.length) setEditing(false)
     ids.forEach(forgetScanBinder)
     run(
       (async () => {
@@ -181,8 +183,7 @@ export default function BindersScreen() {
     )
   }
 
-  // At least one binder stays: copies always need somewhere to go.
-  const canRemove = selected.length > 0 && selected.length < binders.length
+  const canRemove = selected.length > 0
   const selectionLabel = selected.length === 1 ? selected[0].name : `${selected.length} binders`
 
   return (
@@ -293,8 +294,12 @@ export default function BindersScreen() {
 
           {loaded && entries.length === 0 && !editing && (
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>Your binders are empty</Text>
-              <Text style={styles.emptyText}>Scan your cards or import a collection to start.</Text>
+              <Text style={styles.emptyTitle}>{binders.length ? 'Your binders are empty' : 'No binders yet'}</Text>
+              <Text style={styles.emptyText}>
+                {binders.length
+                  ? 'Scan your cards or import a collection to start.'
+                  : 'Make one with +, or scan your cards or import a collection and they go into a new “My binder”.'}
+              </Text>
               <Link href="/scan" asChild>
                 <Pressable style={styles.primaryBtn} accessibilityRole="button">
                   <Text style={styles.primaryBtnLabel}>Scan cards</Text>
@@ -318,7 +323,6 @@ export default function BindersScreen() {
         openId={look?.openId ?? null}
         title="Search"
         binders={binders}
-        collection={entries}
         weekAgo={weekAgo}
         blurTarget={page}
         onClose={() => setLook(null)}

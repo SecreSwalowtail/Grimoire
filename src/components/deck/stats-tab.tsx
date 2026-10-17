@@ -239,8 +239,9 @@ function ManaCost({ lines }: { lines: DeckLine[] }) {
     <View style={styles.section}>
       <Card style={styles.donutCard}>
         <Donut parts={used.map((c) => ({ color: COLOR_HEX[c], n: s.colored[c] }))}>
-          <Text style={styles.donutValue}>{total}</Text>
-          <Text style={styles.donutLabel}>colored pips</Text>
+          {/* The hole is small: the text grows only a little with the font size. */}
+          <Text style={styles.donutValue} maxFontSizeMultiplier={1.2}>{total}</Text>
+          <Text style={styles.donutLabel} maxFontSizeMultiplier={1.2}>colored pips</Text>
         </Donut>
         <View style={styles.donutLegend}>
           {used.length === 0 && <Text style={styles.calloutText}>No colored mana in the costs.</Text>}
@@ -696,15 +697,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   donutValue: {
-    fontSize: 26,
-    lineHeight: 30,
+    fontSize: 22,
+    lineHeight: 26,
     fontFamily: Fonts.extraBold,
     color: Colors.text,
   },
+  // Kept inside the ring's hole: wraps to two lines rather than running over the ring.
   donutLabel: {
-    fontSize: 12,
+    maxWidth: RING - 2 * STROKE - 16,
+    fontSize: 11,
+    lineHeight: 13,
     fontFamily: Fonts.regular,
     color: Colors.textSecondary,
+    textAlign: 'center',
   },
   donutLegend: {
     flex: 1,

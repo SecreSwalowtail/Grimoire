@@ -193,6 +193,8 @@ export default function ScanScreen() {
       const into = getScanTarget()
       const condition = getSettings().scanCondition
       if (into.binder) await addToCollection(db, found, { language: line.language, binderId: into.binderId ?? undefined, condition })
+      // With no binders, that made "My binder": show it as where scans go.
+      if (into.binder && binders.length === 0) setBinders(await getBinders(db))
       const deckUndo =
         into.decks && into.deckIds.length > 0
           ? addCardsToDecks(into.deckIds, [{ cardId: found.id, info: cardInfoOf(found), quantity: 1 }], into.board)
@@ -215,7 +217,7 @@ export default function ScanScreen() {
       if (again) setTimeout(() => captureRef.current(lastRect.current ?? rect, attempt + 1), 0)
       else setProcessing(false)
     }
-  }, [photoOutput, db])
+  }, [photoOutput, db, binders.length])
   const captureRef = useRef(capture)
   useEffect(() => {
     captureRef.current = capture

@@ -4,7 +4,7 @@ import { collectionChanged } from '@/db/version'
 import { isHex, shade } from '@/utils/color'
 
 // The binder copies go in when none is picked: the first one in the user's order. In SQL, so it
-// still works after that binder is deleted (there is always at least one).
+// still works after that binder is deleted. Run ensureBinder first: every binder can be removed.
 export const FIRST_BINDER_SQL = '(SELECT id FROM binders ORDER BY position LIMIT 1)'
 
 // Quick picks in the color picker. Early binders were saved with these names instead of a hex.
@@ -55,9 +55,21 @@ export async function getBinders(db: SQLiteDatabase) {
   return rows.map((r): Binder => ({ ...r, color: toHex(r.color) }))
 }
 
+const newBinderId = () => `binder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+
+// With every binder removed, copies added go into a new "My binder" (like the one the app starts
+// with). Call before adding to FIRST_BINDER_SQL.
+export async function ensureBinder(db: SQLiteDatabase) {
+  await db.runAsync(
+    "INSERT INTO binders (id, name, color, position) SELECT ?, 'My binder', ?, 0 WHERE NOT EXISTS (SELECT 1 FROM binders)",
+    newBinderId(),
+    BINDER_PRESETS.gold.hex,
+  )
+}
+
 // A new, empty binder after the others. Returns its id.
 export async function createBinder(db: SQLiteDatabase, binder: { name: string; color: string }) {
-  const id = `binder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  const id = newBinderId()
   await db.runAsync(
     'INSERT INTO binders (id, name, color, position) VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM binders))',
     id,
@@ -125,11 +137,9 @@ export async function deleteEmptyBinder(db: SQLiteDatabase, id: string) {
 }
 
 // Removes a binder. Its cards move to `moveTo`, or are deleted with it when that's null.
-// The last binder can't be removed: copies always need somewhere to go.
+// The last one can go too: the next copy added makes a new one (ensureBinder).
 export async function deleteBinder(db: SQLiteDatabase, id: string, moveTo: string | null) {
   await db.withTransactionAsync(async () => {
-    const count = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM binders')
-    if ((count?.n ?? 0) <= 1) throw new Error('The last binder cannot be removed')
     if (moveTo) await moveCards(db, id, moveTo)
     else await db.runAsync('DELETE FROM collection WHERE binder_id = ?', id)
     await db.runAsync('DELETE FROM binders WHERE id = ?', id)

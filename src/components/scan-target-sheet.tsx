@@ -68,6 +68,7 @@ export function ScanTargetSheet({ visible, binders, onClose }: { visible: boolea
         />
 
         {target.binder && <SectionLabel style={styles.gap}>Binder</SectionLabel>}
+        {target.binder && binders.length === 0 && <Text style={styles.note}>No binders yet. Scans go into a new “My binder”.</Text>}
         {target.binder &&
           binders.map((b) => (
             <Option
