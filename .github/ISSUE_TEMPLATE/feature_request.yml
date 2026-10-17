@@ -1,0 +1,22 @@
+name: Feature idea
+description: Something you'd like Grimoire to do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe what you want to do in the app, and why.
+      placeholder: When I open a deck, I'd like to…
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: How do you do it now?
+      description: Another app, a spreadsheet, a workaround?
+  - type: textarea
+    id: media
+    attributes:
+      label: Sketches or examples
+      description: Optional. Screenshots from other apps or a quick sketch.
