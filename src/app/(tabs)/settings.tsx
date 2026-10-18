@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { Chip, SectionLabel, Segmented, Toggle } from '@/components/controls'
+import { Chip, ProgressBar, SectionLabel, Segmented, Toggle } from '@/components/controls'
 import { Icon, type IconName } from '@/components/icon'
 import { CurrencySheet } from '@/components/settings/currency-sheet'
 import { Colors, Fonts } from '@/constants/theme'
@@ -28,6 +28,8 @@ export default function SettingsScreen() {
   const [currencyOpen, setCurrencyOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
+  // Cards looked up so far while importing (null: not importing, or the file isn't read yet).
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
 
   const phone = phoneCurrency()
   const currency = settings.currency ?? phone
@@ -43,6 +45,7 @@ export default function SettingsScreen() {
       setStatus(`Failed: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(false)
+      setProgress(null)
     }
   }
   const exportCsv = () =>
@@ -52,7 +55,7 @@ export default function SettingsScreen() {
     })
   const importCsv = () =>
     run(async () => {
-      const result = await importCollection(db)
+      const result = await importCollection(db, undefined, (done, total) => setProgress({ done, total }))
       if (result.canceled) return null
       const failed = result.failed.length ? ` ${result.failed.length} not found (${result.failed.slice(0, 3).map((f) => f.name).join(', ')}${result.failed.length > 3 ? '…' : ''}).` : ''
       return `Imported ${plural(result.imported, 'card')}.${failed}`
@@ -176,7 +179,14 @@ export default function SettingsScreen() {
               <Row title="Export collection" subtitle="Every card in your binders, as a CSV file." onPress={exportCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} />} />
               <Row rule title="Import collection" subtitle="Add cards from a text or CSV file." onPress={importCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.down', android: 'download' }} />} />
             </View>
-            {(busy || status) && <Text style={styles.status}>{busy ? 'Working…' : status}</Text>}
+            {busy && progress ? (
+              <View style={styles.progress}>
+                <ProgressBar value={progress.total ? progress.done / progress.total : 1} label="Looking the cards up on Scryfall" />
+                <Text style={styles.status}>Looking the cards up… {progress.done} of {progress.total}</Text>
+              </View>
+            ) : (
+              (busy || status) && <Text style={styles.status}>{busy ? 'Working…' : status}</Text>
+            )}
 
             <SectionLabel style={styles.label}>About</SectionLabel>
             <View style={styles.group}>
@@ -324,6 +334,10 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontFamily: Fonts.regular,
     color: Colors.textMuted,
+  },
+  progress: {
+    marginTop: 10,
+    marginHorizontal: 4,
   },
   status: {
     marginTop: 8,

@@ -2,7 +2,7 @@ import { useSQLiteContext } from 'expo-sqlite'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { PrimaryButton, SectionLabel, Sheet, SheetHeader } from '@/components/controls'
+import { PrimaryButton, ProgressBar, SectionLabel, Sheet, SheetHeader } from '@/components/controls'
 import { RadioDot } from '@/components/decks/parts'
 import { Icon } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
@@ -49,6 +49,8 @@ export function ImportSheet({
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Cards looked up on Scryfall so far (null: the file isn't read yet).
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
 
   // Fresh each time it opens (state adjusted during render).
   const key = target ? `${target.kind}:${target.id}` : null
@@ -58,18 +60,21 @@ export function ImportSheet({
     setResult(null)
     setError(null)
     setBusy(false)
+    setProgress(null)
   }
 
   const pick = async () => {
     if (!target || busy) return
     setBusy(true)
     setError(null)
+    setProgress(null)
+    const onProgress = (done: number, total: number) => setProgress({ done, total })
     try {
       if (target.kind === 'deck') {
-        const r = await importDeckList(db, target.id)
+        const r = await importDeckList(db, target.id, onProgress)
         if (!r.canceled) setResult(r)
       } else {
-        const r = await importCollection(db, target.id)
+        const r = await importCollection(db, target.id, onProgress)
         if (!r.canceled) {
           setResult({ fileName: r.fileName, cards: r.imported, copies: r.copies, failed: r.failed })
           onImported?.()
@@ -164,12 +169,19 @@ export function ImportSheet({
                 )
               })}
             </View>
-            {busy && (
+            {busy && progress ? (
+              <View style={styles.progress}>
+                <ProgressBar value={progress.total ? progress.done / progress.total : 1} label="Looking the cards up on Scryfall" />
+                <Text style={styles.hint}>
+                  Looking the cards up on Scryfall… {progress.done} of {progress.total}
+                </Text>
+              </View>
+            ) : busy ? (
               <View style={styles.busy}>
                 <ActivityIndicator color={Colors.goldLight} />
-                <Text style={styles.hint}>Looking the cards up on Scryfall…</Text>
+                <Text style={styles.hint}>Reading the file…</Text>
               </View>
-            )}
+            ) : null}
             {error && <Text style={styles.error}>{error}</Text>}
           </View>
         )}
@@ -240,6 +252,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  progress: {
+    marginTop: 18,
+    gap: 8,
   },
   error: {
     marginTop: 14,

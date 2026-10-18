@@ -315,7 +315,38 @@ export function PrimaryButton({ label, onPress }: { label: string; onPress: () =
   )
 }
 
+// A thin gold bar filled to `value` (0 to 1).
+export function ProgressBar({ value, label, style }: { value: number; label: string; style?: StyleProp<ViewStyle> }) {
+  const clamped = Math.min(Math.max(value, 0), 1)
+  const fill = useSharedValue(clamped)
+  useEffect(() => {
+    fill.set(withTiming(clamped, { duration: 250 }))
+  }, [fill, clamped])
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get() * 100}%` }))
+  return (
+    <View
+      style={[styles.progress, style]}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}
+    >
+      <Animated.View style={[styles.progressFill, fillStyle]} />
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  progress: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(237,230,214,0.10)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: Colors.gold,
+  },
   sheetRoot: {
     position: 'absolute',
     top: 0,

@@ -88,8 +88,12 @@ export type DeckImportResult = {
 }
 
 // Lets the user pick a decklist file, looks its cards up on Scryfall, saves them on the phone and
-// adds them to the deck (on top of what it holds).
-export async function importDeckList(db: SQLiteDatabase, deckId: string): Promise<DeckImportResult> {
+// adds them to the deck (on top of what it holds). `onProgress`: cards looked up so far, of how many.
+export async function importDeckList(
+  db: SQLiteDatabase,
+  deckId: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<DeckImportResult> {
   const picked = await DocumentPicker.getDocumentAsync({ type: ['text/plain', '*/*'], copyToCacheDirectory: true })
   if (picked.canceled) return { canceled: true, fileName: null, cards: 0, copies: 0, failed: [] }
   const asset = picked.assets[0]
@@ -104,7 +108,7 @@ export async function importDeckList(db: SQLiteDatabase, deckId: string): Promis
     const id: CardIdentifier = r.set && r.number ? { set: r.set, collector_number: r.number } : { name: r.name }
     identifiers.set(JSON.stringify(id), id)
   }
-  const { found } = await getCardsByIdentifiers([...identifiers.values()])
+  const { found } = await getCardsByIdentifiers([...identifiers.values()], onProgress)
 
   const matches: { row: DeckListRow; card: ScryfallCard }[] = []
   for (const row of rows) {

@@ -117,9 +117,11 @@ export async function getCardBySetNumber(set: string, collectorNumber: string, l
 }
 
 // Many cards at once (75 per request). Returns found cards and the identifiers that matched nothing.
-export async function getCardsByIdentifiers(identifiers: CardIdentifier[]) {
+// `onProgress`: how many identifiers have been looked up so far, after each request.
+export async function getCardsByIdentifiers(identifiers: CardIdentifier[], onProgress?: (done: number, total: number) => void) {
   const found: ScryfallCard[] = []
   const notFound: CardIdentifier[] = []
+  onProgress?.(0, identifiers.length)
   for (let i = 0; i < identifiers.length; i += 75) {
     const batch = identifiers.slice(i, i + 75)
     const res = await throttled('collection', () =>
@@ -131,6 +133,7 @@ export async function getCardsByIdentifiers(identifiers: CardIdentifier[]) {
     )
     found.push(...res.data)
     notFound.push(...res.not_found)
+    onProgress?.(Math.min(i + 75, identifiers.length), identifiers.length)
   }
   return { found, notFound }
 }

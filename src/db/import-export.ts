@@ -82,8 +82,12 @@ export type ImportResult = {
 
 // Lets the user pick a collection file (a CSV, or a text list: "N Card Name (SET) 123 *F*", as
 // Manabox exports both), looks every row up on Scryfall, then adds all matches in one transaction,
-// to `binderId` (the first binder when left out).
-export async function importCollection(db: SQLiteDatabase, binderId?: string): Promise<ImportResult> {
+// to `binderId` (the first binder when left out). `onProgress`: cards looked up so far, of how many.
+export async function importCollection(
+  db: SQLiteDatabase,
+  binderId?: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<ImportResult> {
   const picked = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true })
   if (picked.canceled) return { canceled: true, fileName: null, imported: 0, copies: 0, failed: [] }
   const asset = picked.assets[0]
@@ -101,7 +105,7 @@ export async function importCollection(db: SQLiteDatabase, binderId?: string): P
         : { name: r.name }
     identifiers.set(JSON.stringify(id), id)
   }
-  const { found } = await getCardsByIdentifiers([...identifiers.values()])
+  const { found } = await getCardsByIdentifiers([...identifiers.values()], onProgress)
 
   const matches: { row: ImportRow; card: ScryfallCard }[] = []
   for (const row of rows) {
