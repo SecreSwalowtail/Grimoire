@@ -1,3 +1,4 @@
+import { useSQLiteContext } from 'expo-sqlite'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
@@ -6,6 +7,7 @@ import { Option } from '@/components/decks/new-sheet'
 import { DeckThumb, NameField } from '@/components/decks/parts'
 import { Icon, type IconName } from '@/components/icon'
 import { Colors, Fonts } from '@/constants/theme'
+import { exportDeck } from '@/db/import-export'
 import {
   deckCardCount,
   deckValue,
@@ -21,7 +23,7 @@ import { plural } from '@/utils/format'
 import { useMoney } from '@/utils/money'
 
 // "Deck options" sheet: rename, change format, move to a folder, duplicate, import a decklist,
-// delete (asks first, then the screen shows an Undo toast). Export is UI only for now.
+// export it as a decklist (the share sheet), delete (asks first, then the screen shows an Undo toast).
 export function DeckOptionsSheet({
   deckId,
   onClose,
@@ -35,6 +37,7 @@ export function DeckOptionsSheet({
   onImport: (deckId: string) => void
   onDeleted: (name: string, undo: Undo) => void
 }) {
+  const db = useSQLiteContext()
   const money = useMoney()
   const store = useDeckStore()
   const { folders, decks } = store
@@ -42,6 +45,8 @@ export function DeckOptionsSheet({
   const [name, setName] = useState('')
   const [format, setFormat] = useState<DeckFormat>('Modern')
   const [confirming, setConfirming] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   // Load the deck each time the sheet opens for one (state adjusted during render).
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
@@ -50,6 +55,7 @@ export function DeckOptionsSheet({
     setName(deck.name)
     setFormat(deck.format)
     setConfirming(false)
+    setExportError(null)
   } else if (!deckId && loadedFor != null) {
     setLoadedFor(null)
   }
@@ -115,8 +121,27 @@ export function DeckOptionsSheet({
             chevron
             onPress={() => deck && onImport(deck.id)}
           />
-          <Row icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} label="Export decklist" value="Arena, MTGO, text" small />
+          <Row
+            icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }}
+            label="Export decklist"
+            value={exporting ? 'Exporting…' : 'Manabox, Arena, text'}
+            small
+            onPress={async () => {
+              if (!deck || exporting) return
+              setExporting(true)
+              setExportError(null)
+              try {
+                await exportDeck(db, deck.id)
+              } catch (e) {
+                console.warn('Export failed', e)
+                setExportError(e instanceof Error ? e.message : 'Something went wrong.')
+              } finally {
+                setExporting(false)
+              }
+            }}
+          />
         </View>
+        {exportError && <Text style={styles.error}>{exportError}</Text>}
 
         {confirming ? (
           <View style={styles.confirm} accessibilityRole="alert">
@@ -292,6 +317,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  error: {
+    marginTop: 10,
+    fontSize: 13,
+    fontFamily: Fonts.bold,
+    color: Colors.danger,
   },
   deleteLabel: {
     fontSize: 15,

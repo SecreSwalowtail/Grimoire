@@ -84,6 +84,15 @@ export function SortButton({ label, onPress }: { label: string; onPress: () => v
   )
 }
 
+// The share button: exports what the screen shows as a file.
+export function ExportButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.iconBtn} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Icon name={{ ios: 'square.and.arrow.up', android: 'ios_share' }} size={20} tintColor={Colors.text} />
+    </TouchableOpacity>
+  )
+}
+
 // A quiet line at the top of a list saying what holding something in it does.
 export function HoldHint({ label }: { label: string }) {
   return (

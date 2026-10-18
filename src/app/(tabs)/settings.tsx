@@ -8,7 +8,7 @@ import { Chip, ProgressBar, SectionLabel, Segmented, Toggle } from '@/components
 import { Icon, type IconName } from '@/components/icon'
 import { CurrencySheet } from '@/components/settings/currency-sheet'
 import { Colors, Fonts } from '@/constants/theme'
-import { exportCollection, importCollection } from '@/db/import-export'
+import { exportCollection, exportEverything, importCollection } from '@/db/import-export'
 import { CONDITIONS, conditionName } from '@/rules/collection'
 import { plural } from '@/utils/format'
 import { currencyName, phoneCurrency, useMoney } from '@/utils/money'
@@ -48,6 +48,12 @@ export default function SettingsScreen() {
       setProgress(null)
     }
   }
+  const exportAll = () =>
+    run(async () => {
+      const result = await exportEverything(db)
+      if (!result) return null
+      return `Saved ${plural(result.cards, 'card')}, ${plural(result.binders, 'binder')} and ${plural(result.decks, 'deck')} to “${result.folder}”.`
+    })
   const exportCsv = () =>
     run(async () => {
       const { exported } = await exportCollection(db)
@@ -176,7 +182,8 @@ export default function SettingsScreen() {
 
             <SectionLabel style={styles.label}>Collection</SectionLabel>
             <View style={styles.group}>
-              <Row title="Export collection" subtitle="Every card in your binders, as a CSV file." onPress={exportCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} />} />
+              <Row title="Export everything" subtitle="Your collection, each binder (CSV) and each deck (text), into a folder you pick." onPress={exportAll} disabled={busy} trailing={<Action icon={{ ios: 'folder.badge.plus', android: 'create_new_folder' }} />} />
+              <Row rule title="Export collection" subtitle="Every card in your binders, as one CSV file." onPress={exportCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.up', android: 'ios_share' }} />} />
               <Row rule title="Import collection" subtitle="Add cards from a text or CSV file." onPress={importCsv} disabled={busy} trailing={<Action icon={{ ios: 'square.and.arrow.down', android: 'download' }} />} />
             </View>
             {busy && progress ? (

@@ -1,16 +1,19 @@
 import * as DocumentPicker from 'expo-document-picker'
-import { File, Paths } from 'expo-file-system'
+import { Directory, File, Paths } from 'expo-file-system'
 import * as Sharing from 'expo-sharing'
 import type { SQLiteDatabase } from 'expo-sqlite'
 
-import { addToCollection, getCollection, type Condition, type Finish } from '@/db/collection'
+import { getBinders, type Binder } from '@/db/binders'
+import { addToCollection, getCollection, type CollectionEntry, type Condition, type Finish } from '@/db/collection'
 import { parseCsv, toCsv } from '@/db/csv'
 import { parseDeckList } from '@/db/deck-import'
 import { getCardsByIdentifiers, type CardIdentifier, type ScryfallCard } from '@/db/scryfall'
+import { getDeckStore, type Board, type Deck } from '@/utils/deck-store'
 import { toEurFrom } from '@/utils/money'
 
-// CSV columns follow Moxfield's collection export, so files move between apps.
-const HEADER = ['Count', 'Name', 'Edition', 'Collector Number', 'Foil', 'Condition', 'Language']
+// CSV columns follow Moxfield's collection export, plus the Scryfall id (the exact printing, which
+// Manabox reads), the price paid and the binder, so files move between apps.
+const HEADER = ['Count', 'Name', 'Edition', 'Collector Number', 'Foil', 'Condition', 'Language', 'Purchase Price', 'Purchase Price Currency', 'Scryfall ID']
 
 const CONDITION_NAMES: Record<Condition, string> = {
   NM: 'Near Mint',
@@ -27,32 +30,145 @@ const LANGUAGE_NAMES: Record<string, string> = {
 
 // ---------- Export ----------
 
-// Writes the whole collection to a CSV in the cache folder and opens the share sheet.
-export async function exportCollection(db: SQLiteDatabase) {
-  const entries = await getCollection(db)
-  const rows = entries.map((e) => [
-    e.quantity,
-    e.name,
-    e.set_code,
-    e.collector_number,
-    e.finish === 'nonfoil' ? '' : e.finish,
-    CONDITION_NAMES[e.condition],
-    LANGUAGE_NAMES[e.language] ?? e.language,
-  ])
-
-  const file = new File(Paths.cache, `binder-${new Date().toISOString().slice(0, 10)}.csv`)
-  file.create({ overwrite: true })
-  file.write(toCsv([HEADER, ...rows]))
-
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error('Sharing is not available on this device')
-  }
-  await Sharing.shareAsync(file.uri, {
-    mimeType: 'text/csv',
-    UTI: 'public.comma-separated-values-text',
-    dialogTitle: 'Export binder',
+// Copies as CSV. `binders`: adds a "Binder Name" column (Manabox's name for it), for files holding
+// several binders.
+function collectionCsv(entries: CollectionEntry[], binders?: Binder[]) {
+  const binderName = new Map(binders?.map((b) => [b.id, b.name]))
+  const rows = entries.map((e) => {
+    const row: (string | number)[] = [
+      e.quantity,
+      e.name,
+      e.set_code,
+      e.collector_number,
+      e.finish === 'nonfoil' ? '' : e.finish,
+      CONDITION_NAMES[e.condition],
+      LANGUAGE_NAMES[e.language] ?? e.language,
+      e.purchase_price ?? '',
+      e.purchase_price == null ? '' : 'EUR',
+      e.card_id,
+    ]
+    return binders ? [binderName.get(e.binder_id) ?? '', ...row] : row
   })
+  return toCsv([binders ? ['Binder Name', ...HEADER] : HEADER, ...rows])
+}
+
+const BOARD_SECTIONS: [Board, string][] = [['main', 'Deck'], ['side', 'Sideboard'], ['maybe', 'Maybeboard']]
+
+// A deck as text, in Arena's layout ("Commander", "Deck", "Sideboard" sections; one
+// "N Card Name (SET) 123" line per printing), which Manabox, Moxfield, Archidekt and Arena read.
+async function deckText(db: SQLiteDatabase, deck: Deck) {
+  const { cards, info } = getDeckStore()
+  const lines = cards.filter((c) => c.deckId === deck.id && c.quantity > 0)
+  const ids = [...new Set(lines.map((c) => c.cardId))]
+  const printings = new Map<string, { set_code: string; collector_number: string }>()
+  for (let i = 0; i < ids.length; i += 500) {
+    const batch = ids.slice(i, i + 500)
+    const rows = await db.getAllAsync<{ id: string; set_code: string; collector_number: string }>(
+      `SELECT id, set_code, collector_number FROM cards WHERE id IN (${batch.map(() => '?').join(',')})`,
+      batch,
+    )
+    for (const r of rows) printings.set(r.id, r)
+  }
+  const line = (cardId: string, quantity: number) => {
+    const name = info[cardId]?.name ?? 'Unknown card'
+    const p = printings.get(cardId)
+    return p ? `${quantity} ${name} (${p.set_code.toUpperCase()}) ${p.collector_number}` : `${quantity} ${name}`
+  }
+
+  const sections: string[] = []
+  const commanders = lines.filter((c) => c.commander)
+  if (commanders.length) sections.push(['Commander', ...commanders.map((c) => line(c.cardId, c.quantity))].join('\n'))
+  for (const [board, title] of BOARD_SECTIONS) {
+    const part = lines.filter((c) => c.board === board && !c.commander)
+    if (part.length) sections.push([title, ...part.map((c) => line(c.cardId, c.quantity))].join('\n'))
+  }
+  return sections.join('\n\n') + '\n'
+}
+
+// A name that's safe as a file name on any phone or computer.
+const fileName = (name: string) => name.replace(/[\\/:*?"<>|]/g, '-').trim() || 'Untitled'
+const today = () => new Date().toISOString().slice(0, 10)
+
+// Writes `text` to a file in the cache folder and opens the share sheet for it.
+async function share(name: string, text: string, kind: 'csv' | 'txt', title: string) {
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device')
+  const file = new File(Paths.cache, `${fileName(name)}.${kind}`)
+  file.create({ overwrite: true })
+  file.write(text)
+  await Sharing.shareAsync(
+    file.uri,
+    kind === 'csv'
+      ? { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text', dialogTitle: title }
+      : { mimeType: 'text/plain', UTI: 'public.plain-text', dialogTitle: title },
+  )
+}
+
+// Every card in every binder, as one CSV (with the binder of each), through the share sheet.
+export async function exportCollection(db: SQLiteDatabase) {
+  const [entries, binders] = await Promise.all([getCollection(db), getBinders(db)])
+  await share(`Collection ${today()}`, collectionCsv(entries, binders), 'csv', 'Export collection')
   return { exported: entries.length }
+}
+
+// One binder's cards as a CSV, through the share sheet.
+export async function exportBinder(db: SQLiteDatabase, binder: Binder) {
+  const entries = (await getCollection(db)).filter((e) => e.binder_id === binder.id)
+  await share(binder.name, collectionCsv(entries), 'csv', `Export ${binder.name}`)
+}
+
+// One deck as a text decklist, through the share sheet.
+export async function exportDeck(db: SQLiteDatabase, deckId: string) {
+  const deck = getDeckStore().decks.find((d) => d.id === deckId)
+  if (!deck) throw new Error('Deck not found')
+  await share(deck.name, await deckText(db, deck), 'txt', `Export ${deck.name}`)
+}
+
+export const isPickerCanceled = (e: unknown) => e instanceof Error && /cancel/i.test(e.message)
+
+// Everything, into a folder the user picks: "Grimoire <date>" holding Collection.csv (all binders),
+// a CSV per binder in "Binders" and a decklist per deck in "Decks". Null when the picker was
+// closed.
+export async function exportEverything(db: SQLiteDatabase) {
+  let parent: Directory
+  try {
+    parent = await Directory.pickDirectoryAsync()
+  } catch (e) {
+    if (isPickerCanceled(e)) return null
+    throw e
+  }
+  const [entries, binders] = await Promise.all([getCollection(db), getBinders(db)])
+  const { decks } = getDeckStore()
+
+  const taken = new Set(parent.list().map((item) => item.name))
+  let folderName = `Grimoire ${today()}`
+  for (let n = 2; taken.has(folderName); n++) folderName = `Grimoire ${today()} (${n})`
+  const root = parent.createDirectory(folderName)
+
+  // Same-named binders or decks get " (2)", " (3)"… rather than overwriting each other.
+  const writeAll = (dir: Directory, files: { name: string; text: string }[], kind: 'csv' | 'txt') => {
+    const used = new Set<string>()
+    for (const { name, text } of files) {
+      let base = fileName(name)
+      for (let n = 2; used.has(base.toLowerCase()); n++) base = `${fileName(name)} (${n})`
+      used.add(base.toLowerCase())
+      dir.createFile(`${base}.${kind}`, kind === 'csv' ? 'text/csv' : 'text/plain').write(text)
+    }
+  }
+
+  writeAll(root, [{ name: 'Collection', text: collectionCsv(entries, binders) }], 'csv')
+  if (binders.length) {
+    writeAll(
+      root.createDirectory('Binders'),
+      binders.map((b) => ({ name: b.name, text: collectionCsv(entries.filter((e) => e.binder_id === b.id)) })),
+      'csv',
+    )
+  }
+  if (decks.length) {
+    const texts = []
+    for (const deck of decks) texts.push({ name: deck.name, text: await deckText(db, deck) })
+    writeAll(root.createDirectory('Decks'), texts, 'txt')
+  }
+  return { folder: folderName, cards: entries.length, binders: binders.length, decks: decks.length }
 }
 
 // ---------- Import ----------

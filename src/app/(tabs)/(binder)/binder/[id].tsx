@@ -2,13 +2,13 @@ import { BlurTargetView } from 'expo-blur'
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useSQLiteContext } from 'expo-sqlite'
 import { useCallback, useRef, useState } from 'react'
-import { BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Alert, BackHandler, Keyboard, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BinderSheet } from '@/components/binder/binder-sheet'
 import { CardGrid, searchAndSort } from '@/components/binder/card-grid'
 import { EditCopiesSheet } from '@/components/binder/edit-copies-sheet'
-import { HoldHint, SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts'
+import { ExportButton, HoldHint, SearchField, SearchTool, SortButton, ValueSummary } from '@/components/binder/parts'
 import { QuickLook } from '@/components/binder/quick-look'
 import { addEntriesToDecks, BinderToDeckSheet, type Copies } from '@/components/binder/to-deck-sheet'
 import { summarize, useCollection } from '@/components/binder/use-collection'
@@ -31,6 +31,7 @@ import { CARD_SORTS, SortMenu, type CardSort } from '@/components/sort-menu'
 import { Colors, Fonts } from '@/constants/theme'
 import { binderSpine, deleteEmptyBinder } from '@/db/binders'
 import { moveEntries, removeEntries, restoreEntries, type CollectionEntry } from '@/db/collection'
+import { exportBinder } from '@/db/import-export'
 import { GROUP_OPTIONS } from '@/rules/deck-stats'
 import type { Board } from '@/utils/deck-store'
 import { plural } from '@/utils/format'
@@ -211,6 +212,16 @@ export default function BinderScreen() {
           </TouchableOpacity>
           {!editing && (
             <View style={styles.topActions}>
+              <ExportButton
+                label="Export binder"
+                onPress={() =>
+                  binder &&
+                  exportBinder(db, binder).catch((e) => {
+                    console.warn('Export failed', e)
+                    Alert.alert('Export failed', e instanceof Error ? e.message : String(e))
+                  })
+                }
+              />
               <SortButton label="Sort cards" onPress={() => setSortOpen(true)} />
               <TouchableOpacity
                 style={styles.add}
