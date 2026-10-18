@@ -1,4 +1,4 @@
-import Constants from 'expo-constants'
+import Constants from 'expo-constants';
 
 // Scryfall API: https://scryfall.com/docs/api
 // Rules: send User-Agent + Accept on every request, and respect rate limits
@@ -86,7 +86,7 @@ export type CardIdentifier = { id: string } | { set: string; collector_number: s
 // once, so order is kept.
 const nextStart: Record<string, number> = {}
 function throttled<T>(group: 'collection' | 'search' | 'default', fn: () => Promise<T>): Promise<T> {
-  const gap = group === 'default' ? 100 : 500
+  const gap = group === 'default' ? 300 : 700
   const start = Math.max(Date.now(), nextStart[group] ?? 0)
   nextStart[group] = start + gap
   const wait = start - Date.now()
